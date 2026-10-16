@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy.exc import DataError, OperationalError, SQLAlchemyError
+from sqlalchemy.exc import DataError, DBAPIError, OperationalError, SQLAlchemyError
 
 from src.database.errors import translate_db_error
 from src.exception import (
@@ -16,6 +16,8 @@ class FakeContext:
 
     def __init__(self, original_exception: Exception) -> None:
         self.original_exception = original_exception
+        self.sqlalchemy_exception = DBAPIError("stmt", {}, original_exception)
+        self.is_pre_ping = False
 
 
 class FakeDriverError(Exception):

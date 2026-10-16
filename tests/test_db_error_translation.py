@@ -3,14 +3,17 @@
 The seam is the Unit of Work against a real Postgres: a read, a write and a commit.
 """
 
+from types import SimpleNamespace
+
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
 from src.database.dto.photo import NewReceiptPhotoDTO
-from src.database.engine import install_error_translation
+from src.database.engine import create_engine, install_error_translation
+from src.database.errors import translate_db_error
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
 from src.exception import DatabaseException, UniqueViolationError
 from tests.conftest import scratch_url
@@ -61,5 +64,14 @@ async def test_a_deferred_constraint_failing_at_commit_is_an_app_exception():
             with pytest.raises(UniqueViolationError) as caught:
                 await uow.commit()
         assert not isinstance(caught.value, SQLAlchemyError)
+    finally:
+        await engine.dispose()
+
+
+async def test_the_app_engine_translates_errors():
+    settings = SimpleNamespace(database=SimpleNamespace(url=scratch_url()))
+    engine = create_engine(settings)  # type: ignore[arg-type]
+    try:
+        assert event.contains(engine.sync_engine, "handle_error", translate_db_error)
     finally:
         await engine.dispose()

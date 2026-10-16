@@ -1,4 +1,5 @@
 from sqlalchemy.engine import ExceptionContext
+from sqlalchemy.exc import DBAPIError
 
 from src.exception import (
     CheckViolationError,
@@ -26,6 +27,10 @@ def translate_db_error(ctx: ExceptionContext) -> None:
     SQLAlchemy calls it for every DBAPI error on the engine, whichever way it surfaced
     (read, write, flush, commit), so repositories and the Unit of Work need no wrappers.
     """
+    # Leave programming errors alone, and the pool's pre-ping, which relies on SQLAlchemy's
+    # own disconnect handling.
+    if ctx.is_pre_ping or not isinstance(ctx.sqlalchemy_exception, DBAPIError):
+        return
     driver_error = ctx.original_exception
     sqlstate = getattr(driver_error, "sqlstate", None)
     exc_type = _BY_SQLSTATE.get(sqlstate)
