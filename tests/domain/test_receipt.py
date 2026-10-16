@@ -3,7 +3,13 @@ from decimal import Decimal
 
 import pytest
 
-from src.domain.enums import EditTarget, IssueResolution, IssueSource, ReceiptStatus
+from src.domain.enums import (
+    EditTarget,
+    IssueResolution,
+    IssueSeverity,
+    IssueSource,
+    ReceiptStatus,
+)
 from src.domain.receipt import Edit, Issue, ParsedIssue, Photo, Receipt
 from src.exception import (
     InvalidEdit,
@@ -415,3 +421,49 @@ def test_the_parse_carries_usage_and_duration():
         20,
         1500,
     )
+
+
+# --- duplicate decided by the aggregate ---------------------------------------------------
+
+
+def test_apply_parse_with_the_key_of_another_parsed_receipt_makes_a_duplicate():
+    receipt = started()
+    receipt.mark_parsing()
+    receipt.apply_parse(parse(), same_key_as=7)
+    assert (receipt.status, receipt.duplicate_of_id) == (ReceiptStatus.DUPLICATE, 7)
+    assert receipt.parse is not None
+
+
+def test_apply_parse_without_a_same_key_receipt_stays_parsed():
+    receipt = started()
+    receipt.apply_parse(parse(), same_key_as=None)
+    assert (receipt.status, receipt.duplicate_of_id) == (ReceiptStatus.PARSED, None)
+
+
+def test_a_same_key_receipt_does_not_matter_for_a_non_receipt():
+    receipt = started()
+    receipt.apply_parse(parse(is_receipt=False, receipt_key=None, items=()), same_key_as=7)
+    assert (receipt.status, receipt.duplicate_of_id) == (ReceiptStatus.NOT_RECEIPT, None)
+
+
+def test_a_receipt_is_never_a_duplicate_of_itself():
+    receipt = started()
+    receipt.id = 5
+    receipt.apply_parse(parse(), same_key_as=5)
+    assert (receipt.status, receipt.duplicate_of_id) == (ReceiptStatus.PARSED, None)
+
+
+def test_top_issues_are_the_most_severe_first_in_parse_order():
+    severities = ["low", "medium", "high", "low", "high", "medium", "low"]
+    issues = tuple(
+        ParsedIssue(severity=IssueSeverity(s), message=f"{s}-{n}") for n, s in enumerate(severities)
+    )
+    receipt = started()
+    receipt.apply_parse(parse(issues=issues))
+    assert [i.message for i in receipt.top_issues(5)] == [
+        "high-2",
+        "high-4",
+        "medium-1",
+        "medium-5",
+        "low-0",
+    ]

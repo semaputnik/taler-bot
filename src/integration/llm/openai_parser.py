@@ -9,7 +9,6 @@ import time
 from pathlib import Path
 
 from pydantic_ai import Agent, BinaryContent
-from pydantic_ai.exceptions import AgentRunError, UserError
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
@@ -33,9 +32,9 @@ class OpenAIReceiptParser:
             provider_name, name = "openai", config.model
         if provider_name != "openai":
             raise LLMError(f"unsupported LLM provider {provider_name!r}; use openai:<model>")
-        model = OpenAIResponsesModel(
-            name, provider=OpenAIProvider(api_key=config.api_key.get_secret_value())
-        )
+        provider = OpenAIProvider(api_key=config.api_key.get_secret_value())
+        self._client = provider.client
+        model = OpenAIResponsesModel(name, provider=provider)
         self._model_name = name
         self._secret = config.api_key.get_secret_value()
         self._agent = Agent(
@@ -46,18 +45,20 @@ class OpenAIReceiptParser:
             retries=_RETRIES,
         )
 
+    async def close(self) -> None:
+        """Close the provider's HTTP client."""
+        await self._client.close()
+
     async def parse(self, image: bytes, media_type: str) -> ParserOutput:
         started = time.perf_counter()
         try:
             result = await self._agent.run(
                 [USER_PROMPT, BinaryContent(data=image, media_type=media_type)]
             )
-        except (AgentRunError, UserError, OSError, TimeoutError) as error:
+        except Exception as error:
+            # Only the model call is in the try block, so anything escaping it (pydantic-ai,
+            # openai, httpx, timeouts or an unforeseen SDK error) is a model/provider failure.
             raise LLMError(self._one_line(error)) from error
-        except Exception as error:  # provider SDK errors (openai, httpx) must not leak out
-            if type(error).__module__.split(".")[0] in ("openai", "httpx", "httpcore"):
-                raise LLMError(self._one_line(error)) from error
-            raise
         usage = result.usage()
         return ParserOutput(
             raw=result.output,

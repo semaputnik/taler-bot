@@ -59,3 +59,18 @@ async def test_lifespan_closes_storage_and_engine_even_if_the_bot_session_fails(
         pass
 
     assert closed == ["storage", "engine"]
+
+
+async def test_lifespan_closes_the_receipt_parser():
+    settings = Settings(
+        _env_file=None,
+        bot=BotConfig(token="123456:TEST"),
+        database=DatabaseConfig(url="postgresql+asyncpg://u:p@localhost:1/db"),
+        llm=LLMConfig(api_key="x"),
+    )
+    app = App(settings, bot_session=RecordingSession())
+
+    async with app.lifespan():
+        assert not app.receipt_parser._client.is_closed()
+
+    assert app.receipt_parser._client.is_closed()

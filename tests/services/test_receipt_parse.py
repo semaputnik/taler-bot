@@ -245,3 +245,25 @@ async def test_a_missing_photo_file_marks_the_receipt_failed_without_calling_the
 
     assert (result.outcome, result.card.status) == ("failed", "failed")
     assert parser.events == []
+
+
+async def test_a_reading_that_cannot_be_normalized_fails_the_receipt_without_raising(
+    service, parser, make_uow
+):
+    data = fixture(PAID_WITH_CARD)
+    data["raw"]["totals"]["total"] = "1E+500"
+    receipt_id = await intake(service, parser, PAID_WITH_CARD, unique="z1")
+    parser.outputs[b"z1"] = output_of(data["raw"])
+
+    result = await service.parse(1, receipt_id)
+
+    assert (result.outcome, result.card.status) == ("failed", "failed")
+    assert (await load(make_uow, receipt_id)).error_message
+
+
+def test_every_final_status_has_one_outcome():
+    from src.domain.enums import ReceiptStatus
+    from src.services.receipt import _OUTCOMES
+
+    in_flight = {ReceiptStatus.PENDING, ReceiptStatus.PARSING, ReceiptStatus.FAILED}
+    assert set(_OUTCOMES) | in_flight == set(ReceiptStatus)

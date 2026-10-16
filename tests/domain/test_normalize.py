@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -423,3 +423,24 @@ def test_money_is_decimal_and_purchased_at_is_aware_in_the_zone():
 def test_naive_received_at_is_refused():
     with pytest.raises(InvalidReceiptData):
         normalize(raw_receipt(), **{**CONTEXT, "received_at": datetime(2026, 10, 12, 16, 0)})
+
+
+def test_a_reading_that_cannot_be_normalized_raises_invalid_receipt_data():
+    import copy
+
+    data = json.loads(
+        next(Path(__file__).parents[1].joinpath("fixtures/receipts").glob("03-*.json")).read_text()
+    )
+    raw = copy.deepcopy(data["raw"])
+    raw["totals"]["total"] = "1E+500"  # a Decimal the arithmetic cannot handle
+
+    with pytest.raises(InvalidReceiptData):
+        normalize(
+            raw,
+            received_at=datetime(2026, 10, 12, tzinfo=UTC),
+            timezone="Europe/Madrid",
+            known_product_keys=[],
+            known_card_last4=[],
+            parser_version="v",
+            model="m",
+        )

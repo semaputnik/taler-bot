@@ -58,3 +58,6 @@ class StubReceiptParser:
             return output
         finally:
             self.events.append(("end", image))
+
+    async def close(self) -> None:
+        pass

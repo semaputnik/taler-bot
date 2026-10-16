@@ -1,20 +1,19 @@
 """OpenAIReceiptParser: error mapping offline, and one live call marked `llm`.
 
 The live test is deselected by default (`uv run pytest -m llm` runs it). It needs
-`LLM__API_KEY` (environment or the repo-root `.env`) and a photo `tests/fixtures/images/receipt.*`.
+`LLM__API_KEY` in the environment (tests never read `.env`) and a photo
+`tests/fixtures/images/receipt.*`.
 """
 
 import os
 from pathlib import Path
 
 import pytest
-from dotenv import dotenv_values
 from pydantic import SecretStr
 from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
 from pydantic_ai.models.function import FunctionModel
 
 from src.config.llm import LLMConfig
-from src.config.settings import ENV_FILE
 from src.integration.llm import SYSTEM_PROMPT, LLMError, OpenAIReceiptParser
 from src.integration.llm.schema import RawParse
 
@@ -42,6 +41,7 @@ def test_the_system_prompt_is_the_n8n_file_verbatim():
     [
         ModelHTTPError(401, "gpt", {"error": f"bad key {SECRET}"}),
         UnexpectedModelBehavior("Exceeded maximum retries for output validation"),
+        RuntimeError(f"an SDK bug with {SECRET}"),
         TimeoutError(f"timed out using {SECRET}"),
     ],
 )
@@ -61,7 +61,7 @@ def test_an_unsupported_provider_is_refused():
 
 
 def live_key() -> str | None:
-    return os.environ.get("LLM__API_KEY") or dotenv_values(ENV_FILE).get("LLM__API_KEY") or None
+    return os.environ.get("LLM__API_KEY") or None
 
 
 @pytest.mark.llm
@@ -73,7 +73,7 @@ async def test_the_real_model_reads_a_receipt_photo():
     if not photos:
         pytest.skip("no tests/fixtures/images/receipt.* photo")
     media_type = {".png": "image/png", ".webp": "image/webp"}.get(photos[0].suffix, "image/jpeg")
-    model = os.environ.get("LLM__MODEL") or dotenv_values(ENV_FILE).get("LLM__MODEL")
+    model = os.environ.get("LLM__MODEL")
     config = LLMConfig(api_key=SecretStr(key), **({"model": model} if model else {}))
 
     output = await OpenAIReceiptParser(config).parse(photos[0].read_bytes(), media_type)
@@ -82,3 +82,11 @@ async def test_the_real_model_reads_a_receipt_photo():
     assert output.raw.is_receipt is True
     assert len(output.raw.items) > 0
     assert output.duration_ms > 0
+
+
+async def test_close_closes_the_providers_http_client():
+    parser = OpenAIReceiptParser(LLMConfig(api_key=SecretStr(SECRET)))
+
+    await parser.close()
+
+    assert parser._client.is_closed()

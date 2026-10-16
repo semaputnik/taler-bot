@@ -56,6 +56,7 @@ class App:
             # Each resource is closed even if an earlier close fails.
             for name, close in (
                 ("bot session", self.bot.session.close),
+                ("receipt parser", self.receipt_parser.close),
                 ("storage", self.storage.close),
                 ("engine", self.engine.dispose),
             ):

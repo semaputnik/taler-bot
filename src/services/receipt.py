@@ -11,6 +11,7 @@ time.
 
 import asyncio
 import logging
+import weakref
 from dataclasses import replace
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
@@ -18,7 +19,7 @@ from zoneinfo import ZoneInfo
 from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
 from src.domain.catalog import Catalog
 from src.domain.edits import Edit
-from src.domain.enums import EditTarget, IssueResolution, IssueSeverity, ReceiptStatus
+from src.domain.enums import EditTarget, IssueResolution, ReceiptStatus
 from src.domain.normalize import PARSER_VERSION, normalize
 from src.domain.parse import Parse, ParseOutcome
 from src.domain.receipt import Photo, Receipt
@@ -46,7 +47,10 @@ class ReceiptService:
         self._uow_factory = uow_factory
         self._storage = storage
         self._parser = parser
-        self._parse_locks: dict[int, asyncio.Lock] = {}
+        # A lock lives while a parse holds or awaits it, so the registry does not grow.
+        self._parse_locks: weakref.WeakValueDictionary[int, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
 
     # --- photos ------------------------------------------------------------------------
 
@@ -91,7 +95,9 @@ class ReceiptService:
         3. Unit of Work: load again, `apply_parse`, mark a duplicate, save with the catalog.
 
         A model, storage or normalization failure marks the receipt `failed` (outcome
-        `failed`); any other error marks it failed and is re-raised.
+        `failed`); any other error marks it failed and is re-raised. A cancelled task (shutdown)
+        awaits no database work, so its receipt stays `parsing`: recovering those at start-up is
+        a follow-up.
         """
         lock = self._parse_locks.setdefault(user_id, asyncio.Lock())
         async with lock:
@@ -132,7 +138,7 @@ class ReceiptService:
             except (IntegrationException, InvalidReceiptData) as error:
                 return await self._fail(user_id, receipt_id, str(error))
             return await self._store_parse(user_id, receipt_id, parse)
-        except BaseException as error:  # not an expected failure: leave no receipt `parsing`
+        except Exception as error:  # not an expected failure: leave no receipt `parsing`
             try:
                 await self._fail(user_id, receipt_id, f"unexpected error: {type(error).__name__}")
             except Exception:
@@ -142,19 +148,22 @@ class ReceiptService:
     async def _store_parse(self, user_id: int, receipt_id: int, parse: Parse) -> ParseResult:
         async with self._uow_factory() as uow:
             receipt = await _load(uow, user_id, receipt_id)
-            outcome = receipt.apply_parse(parse)
-            duplicate_of = None
-            if parse.is_receipt and parse.receipt_key is not None:
-                duplicate_of = await uow.receipts.find_by_key(user_id, parse.receipt_key)
-                if duplicate_of is not None and duplicate_of.id != receipt.id:
-                    receipt.mark_duplicate(duplicate_of.id)
+            earlier = None
+            if parse.receipt_key is not None:
+                earlier = await uow.receipts.find_by_key(user_id, parse.receipt_key)
+            outcome = receipt.apply_parse(parse, same_key_as=earlier.id if earlier else None)
             await _save_with_catalog(uow, receipt, outcome)
             await uow.commit()
             return ParseResult(
                 card=await _card(uow, receipt),
                 outcome=_OUTCOMES[receipt.status],
-                duplicate_of=await _card(uow, duplicate_of) if receipt.duplicate_of_id else None,
-                issues=_top_issues(receipt),
+                duplicate_of=await _card(uow, earlier)
+                if receipt.duplicate_of_id and earlier
+                else None,
+                issues=[
+                    IssueLine(item_name=i.item_name, message=i.message)
+                    for i in receipt.top_issues()
+                ],
             )
 
     async def _fail(self, user_id: int, receipt_id: int, message: str) -> ParseResult:
@@ -224,8 +233,6 @@ _OUTCOMES: dict[ReceiptStatus, Literal["parsed", "not_receipt", "duplicate"]] = 
     ReceiptStatus.NOT_RECEIPT: "not_receipt",
     ReceiptStatus.DUPLICATE: "duplicate",
 }
-_SEVERITY_ORDER = {IssueSeverity.HIGH: 0, IssueSeverity.MEDIUM: 1, IssueSeverity.LOW: 2}
-_SUMMARY_ISSUES = 5
 
 
 def _stamped(parse: Parse, output: ParserOutput) -> Parse:
@@ -235,12 +242,6 @@ def _stamped(parse: Parse, output: ParserOutput) -> Parse:
         output_tokens=output.output_tokens,
         duration_ms=output.duration_ms,
     )
-
-
-def _top_issues(receipt: Receipt) -> list[IssueLine]:
-    """The most severe issues, high first, in parse order within a severity."""
-    ranked = sorted(receipt.issues, key=lambda i: _SEVERITY_ORDER[i.severity])
-    return [IssueLine(item_name=i.item_name, message=i.message) for i in ranked[:_SUMMARY_ISSUES]]
 
 
 def _photo_path(photo: NewPhoto, timezone: str) -> str:

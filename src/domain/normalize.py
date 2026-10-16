@@ -179,7 +179,34 @@ def normalize(
     `received_at` is the Telegram message time (aware); `known_product_keys` are the user's
     existing catalog keys and `known_card_last4` the card endings of their earlier parsed
     receipts. Money and quantities are `Decimal`; `purchased_at` is aware, in `timezone`.
+
+    Raises `InvalidReceiptData` when the reading cannot be normalized (a number out of range,
+    a malformed structure), so a caller has one error to expect.
     """
+    try:
+        return _normalize(
+            raw,
+            received_at=received_at,
+            timezone=timezone,
+            known_product_keys=known_product_keys,
+            known_card_last4=known_card_last4,
+            parser_version=parser_version,
+            model=model,
+        )
+    except (ArithmeticError, LookupError, TypeError, ValueError, AttributeError) as error:
+        raise InvalidReceiptData(f"cannot normalize the reading: {type(error).__name__}") from error
+
+
+def _normalize(
+    raw: Mapping[str, Any],
+    *,
+    received_at: datetime,
+    timezone: str,
+    known_product_keys: Collection[str],
+    known_card_last4: Collection[str],
+    parser_version: str,
+    model: str | None,
+) -> Parse:
     ai = raw
     raw_output = jsonable(dict(raw))
     if ai.get("is_receipt") is False:

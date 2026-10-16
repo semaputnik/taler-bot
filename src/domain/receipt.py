@@ -54,6 +54,7 @@ __all__ = [
 
 MONEY_TOLERANCE = Decimal("0.02")
 S = ReceiptStatus
+_SEVERITY_ORDER = {IssueSeverity.HIGH: 0, IssueSeverity.MEDIUM: 1, IssueSeverity.LOW: 2}
 # Statuses that may receive a parse (a first one, or a re-parse).
 _PARSEABLE = {S.PENDING, S.PARSING, S.PARSED, S.FAILED, S.NOT_RECEIPT}
 
@@ -148,8 +149,13 @@ class Receipt:
 
     # --- parse -------------------------------------------------------------------------
 
-    def apply_parse(self, parse: Parse) -> ParseOutcome:
-        """Set or replace the parse and rebuild header, items and issues from it."""
+    def apply_parse(self, parse: Parse, same_key_as: int | None = None) -> ParseOutcome:
+        """Set or replace the parse and rebuild header, items and issues from it.
+
+        `same_key_as` is the id of another parsed receipt of the user with this parse's receipt
+        key (the service looks it up). A parse that is a receipt then makes this one a
+        `duplicate` of it: it keeps its parse but never collides with the parsed key.
+        """
         self._ensure_open()
         if self.status not in _PARSEABLE:
             raise InvalidReceiptTransition(f"cannot parse a {self.status} receipt")
@@ -160,12 +166,18 @@ class Receipt:
         if parse.is_receipt:
             self.issues += self._conflicts(parse)
             self.status = S.PARSED
+            if same_key_as is not None and same_key_as != self.id:
+                self.mark_duplicate(same_key_as)
         else:
             self.status = S.NOT_RECEIPT
         self.error_message = None
         self.parse_changed = True
         used = _used_keys(parse)
         return ParseOutcome(product_keys_used=used, product_keys_released=previous - used)
+
+    def top_issues(self, limit: int = 5) -> list[Issue]:
+        """The most severe issues, high first, in parse order within a severity."""
+        return sorted(self.issues, key=lambda i: _SEVERITY_ORDER[i.severity])[:limit]
 
     # --- edits and issues --------------------------------------------------------------
 
