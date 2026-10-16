@@ -2,7 +2,6 @@ from sqlalchemy import delete, insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.dto.store import NewStoreDTO, NewStoreProductDTO, StoreDTO, StoreProductDTO
-from src.database.errors import translate_db_errors
 from src.database.models import Store, StoreProduct
 
 
@@ -12,8 +11,7 @@ class SqlAlchemyStoreRepository:
 
     async def add(self, data: NewStoreDTO) -> StoreDTO:
         stmt = insert(Store).values(**data.model_dump()).returning(Store)
-        with translate_db_errors():
-            store = (await self._session.execute(stmt)).scalar_one()
+        store = (await self._session.execute(stmt)).scalar_one()
         return StoreDTO.model_validate(store)
 
     async def get(self, store_id: int) -> StoreDTO | None:
@@ -27,8 +25,7 @@ class SqlAlchemyStoreProductRepository:
 
     async def add(self, data: NewStoreProductDTO) -> StoreProductDTO:
         stmt = insert(StoreProduct).values(**data.model_dump()).returning(StoreProduct)
-        with translate_db_errors():
-            product = (await self._session.execute(stmt)).scalar_one()
+        product = (await self._session.execute(stmt)).scalar_one()
         return StoreProductDTO.model_validate(product)
 
     async def get(self, product_id: int) -> StoreProductDTO | None:
@@ -36,5 +33,4 @@ class SqlAlchemyStoreProductRepository:
         return StoreProductDTO.model_validate(product) if product else None
 
     async def delete(self, product_id: int) -> None:
-        with translate_db_errors():
-            await self._session.execute(delete(StoreProduct).where(StoreProduct.id == product_id))
+        await self._session.execute(delete(StoreProduct).where(StoreProduct.id == product_id))

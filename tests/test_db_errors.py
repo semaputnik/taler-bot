@@ -1,7 +1,7 @@
 import pytest
-from sqlalchemy.exc import DataError, IntegrityError, OperationalError
+from sqlalchemy.exc import DataError, OperationalError, SQLAlchemyError
 
-from src.database.errors import translate_db_errors
+from src.database.errors import translate_db_error
 from src.exception import (
     CheckViolationError,
     DatabaseException,
@@ -9,6 +9,13 @@ from src.exception import (
     ForeignKeyViolationError,
     UniqueViolationError,
 )
+
+
+class FakeContext:
+    """Stands in for SQLAlchemy's ExceptionContext, which only carries the driver error."""
+
+    def __init__(self, original_exception: Exception) -> None:
+        self.original_exception = original_exception
 
 
 class FakeDriverError(Exception):
@@ -26,8 +33,7 @@ class FakeDriverError(Exception):
 )
 def test_other_database_errors_become_app_exceptions(error, expected):
     with pytest.raises(expected) as caught:
-        with translate_db_errors():
-            raise error
+        translate_db_error(FakeContext(error.orig))
     assert type(caught.value) is expected
 
 
@@ -42,7 +48,6 @@ def test_other_database_errors_become_app_exceptions(error, expected):
 )
 def test_integrity_errors_become_app_exceptions(sqlstate, expected):
     with pytest.raises(expected) as caught:
-        with translate_db_errors():
-            raise IntegrityError("stmt", {}, FakeDriverError(sqlstate))
+        translate_db_error(FakeContext(FakeDriverError(sqlstate)))
     assert isinstance(caught.value, DatabaseException)
-    assert not isinstance(caught.value, IntegrityError)
+    assert not isinstance(caught.value, SQLAlchemyError)

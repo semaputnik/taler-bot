@@ -2,7 +2,6 @@ from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.dto.photo import NewReceiptPhotoDTO, ReceiptPhotoDTO
-from src.database.errors import translate_db_errors
 from src.database.models import ReceiptPhoto
 
 
@@ -12,8 +11,7 @@ class SqlAlchemyReceiptPhotoRepository:
 
     async def add(self, data: NewReceiptPhotoDTO) -> ReceiptPhotoDTO:
         stmt = insert(ReceiptPhoto).values(**data.model_dump()).returning(ReceiptPhoto)
-        with translate_db_errors():
-            row = (await self._session.execute(stmt)).scalar_one()
+        row = (await self._session.execute(stmt)).scalar_one()
         return ReceiptPhotoDTO.model_validate(row)
 
     async def get(self, photo_id: int) -> ReceiptPhotoDTO | None:

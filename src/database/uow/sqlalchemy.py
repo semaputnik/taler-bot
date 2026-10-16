@@ -4,7 +4,6 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.errors import translate_db_errors
 from src.database.repositories.edit import SqlAlchemyReceiptEditRepository
 from src.database.repositories.issue import SqlAlchemyReceiptIssueRepository
 from src.database.repositories.message import SqlAlchemyReceiptMessageRepository
@@ -60,5 +59,4 @@ class SqlAlchemyUnitOfWork:
 
     async def commit(self) -> None:
         assert self._session is not None
-        with translate_db_errors():
-            await self._session.commit()
+        await self._session.commit()

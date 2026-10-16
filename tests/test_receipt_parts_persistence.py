@@ -7,9 +7,8 @@ from src.database.dto.issue import NewReceiptIssueDTO
 from src.database.dto.message import NewReceiptMessageDTO
 from src.database.dto.parse import NewReceiptParseDTO
 from src.database.dto.photo import NewReceiptPhotoDTO
-from src.domain.enums import ReceiptStatus
 from src.exception import CheckViolationError, UniqueViolationError
-from tests.helpers import NOW, MakeUow, add_receipt, add_user
+from tests.helpers import NOW, add_parsed_receipt, add_receipt, add_user
 
 
 def photo(receipt_id: int, user_id: int = 1, **fields) -> NewReceiptPhotoDTO:
@@ -19,19 +18,6 @@ def photo(receipt_id: int, user_id: int = 1, **fields) -> NewReceiptPhotoDTO:
         received_at=NOW,
         **({"path": "2026/10/a.jpg"} | fields),
     )
-
-
-async def seed_parse(make_uow: MakeUow):
-    await add_user(make_uow)
-    receipt = await add_receipt(make_uow, status=ReceiptStatus.PARSED)
-    async with make_uow() as uow:
-        parse = await uow.parses.add(
-            NewReceiptParseDTO(
-                receipt_id=receipt.id, status="ok", parser_version="test", photo_ids=[]
-            )
-        )
-        await uow.commit()
-    return receipt, parse
 
 
 async def test_photos_round_trip_as_dtos(make_uow):
@@ -93,14 +79,14 @@ async def test_photo_needs_a_stored_path_or_a_drive_file(make_uow):
 
 
 async def test_parses_round_trip_as_dtos(make_uow):
-    _, parse = await seed_parse(make_uow)
+    _, parse = await add_parsed_receipt(make_uow)
     async with make_uow() as uow:
         assert await uow.parses.get(parse.id) == parse
     assert (parse.status, parse.photo_ids, parse.raw_output) == ("ok", [], None)
 
 
 async def test_deleting_the_current_parse_clears_the_pointer_and_keeps_the_receipt(make_uow):
-    receipt, parse = await seed_parse(make_uow)
+    receipt, parse = await add_parsed_receipt(make_uow)
     async with make_uow() as uow:
         await uow.receipts.set_current_parse(receipt.id, parse.id)
         await uow.commit()
@@ -146,7 +132,7 @@ def issue(parse_id: int, **fields) -> NewReceiptIssueDTO:
 
 
 async def test_issues_round_trip_as_dtos(make_uow):
-    _, parse = await seed_parse(make_uow)
+    _, parse = await add_parsed_receipt(make_uow)
     async with make_uow() as uow:
         added = await uow.issues.add(issue(parse.id, field="totals.total"))
         await uow.commit()
@@ -162,14 +148,14 @@ async def test_issues_round_trip_as_dtos(make_uow):
     ids=["source", "severity", "resolution"],
 )
 async def test_unknown_issue_values_are_rejected(make_uow, fields):
-    _, parse = await seed_parse(make_uow)
+    _, parse = await add_parsed_receipt(make_uow)
     async with make_uow() as uow:
         with pytest.raises(CheckViolationError):
             await uow.issues.add(issue(parse.id, **fields))
 
 
 async def test_edits_round_trip_as_dtos(make_uow):
-    receipt, _ = await seed_parse(make_uow)
+    receipt, _ = await add_parsed_receipt(make_uow)
     async with make_uow() as uow:
         on_receipt = await uow.edits.add(
             NewReceiptEditDTO(receipt_id=receipt.id, target="receipt", field="total", value="9.50")
@@ -192,7 +178,7 @@ async def test_edits_round_trip_as_dtos(make_uow):
 
 
 async def test_unknown_edit_target_is_rejected(make_uow):
-    receipt, _ = await seed_parse(make_uow)
+    receipt, _ = await add_parsed_receipt(make_uow)
     async with make_uow() as uow:
         with pytest.raises(CheckViolationError):
             await uow.edits.add(
@@ -206,7 +192,7 @@ async def test_unknown_edit_target_is_rejected(make_uow):
     ids=["item-without-ref", "receipt-with-ref"],
 )
 async def test_item_ref_goes_with_item_edits_only(make_uow, target, item_ref):
-    receipt, _ = await seed_parse(make_uow)
+    receipt, _ = await add_parsed_receipt(make_uow)
     async with make_uow() as uow:
         with pytest.raises(CheckViolationError):
             await uow.edits.add(
@@ -221,7 +207,7 @@ async def test_item_ref_goes_with_item_edits_only(make_uow, target, item_ref):
 
 
 async def test_messages_round_trip_and_are_unique_per_user_and_message_id(make_uow):
-    receipt, _ = await seed_parse(make_uow)
+    receipt, _ = await add_parsed_receipt(make_uow)
     async with make_uow() as uow:
         added = await uow.messages.add(
             NewReceiptMessageDTO(user_id=1, message_id=77, receipt_id=receipt.id)

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from src.database.engine import install_error_translation
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
 from tests.helpers import MakeUow
 
@@ -61,6 +62,7 @@ async def engine() -> AsyncIterator[AsyncEngine]:
     await asyncio.to_thread(command.upgrade, config, "head")
 
     engine = create_async_engine(url)
+    install_error_translation(engine)
     yield engine
     await engine.dispose()
 

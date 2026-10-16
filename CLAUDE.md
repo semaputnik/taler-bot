@@ -238,9 +238,12 @@ rationale is in `docs/features.md` (multi-photo).
   Add a constraint test for every new constraint.
 - By-id lookups (`get(id)`) return soft-deleted receipts too, because undo and restore need
   them. Only list, stats and uniqueness queries filter `deleted_at IS NULL`.
-- Database errors never leave `src/database` as SQLAlchemy errors: `translate_db_errors` maps
-  them to `UniqueViolationError`, `ForeignKeyViolationError` (also RESTRICT),
-  `CheckViolationError`, `DataViolationError` (SQLSTATE class 22) or `DatabaseException`.
+- Database errors never leave `src/database` as SQLAlchemy errors: one engine-level
+  `handle_error` listener (`translate_db_error`, installed by `install_error_translation`)
+  maps reads, writes and commit failures to `UniqueViolationError`,
+  `ForeignKeyViolationError` (also RESTRICT), `CheckViolationError`, `DataViolationError`
+  (SQLSTATE class 22) or `DatabaseException`. Repositories carry no wrappers. A test engine
+  must call `install_error_translation` too.
 
 ### Photo storage
 

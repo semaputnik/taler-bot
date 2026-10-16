@@ -2,7 +2,6 @@ from sqlalchemy import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.dto.message import NewReceiptMessageDTO, ReceiptMessageDTO
-from src.database.errors import translate_db_errors
 from src.database.models import ReceiptMessage
 
 
@@ -12,8 +11,7 @@ class SqlAlchemyReceiptMessageRepository:
 
     async def add(self, data: NewReceiptMessageDTO) -> ReceiptMessageDTO:
         stmt = insert(ReceiptMessage).values(**data.model_dump()).returning(ReceiptMessage)
-        with translate_db_errors():
-            row = (await self._session.execute(stmt)).scalar_one()
+        row = (await self._session.execute(stmt)).scalar_one()
         return ReceiptMessageDTO.model_validate(row)
 
     async def get(self, user_id: int, message_id: int) -> ReceiptMessageDTO | None:

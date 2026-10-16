@@ -1,6 +1,6 @@
 """Dispatcher-level harness: real Dispatcher, stubbed Telegram HTTP session, in-memory FSM."""
 
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,13 +10,11 @@ from aiogram.client.session.base import BaseSession
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.methods import GetMe, SendMessage, TelegramMethod
 from aiogram.types import Chat, Message, MessageEntity, Update, User
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.dispatcher import create_dispatcher
 from src.bot.i18n import create_translator_hub
-from src.database.dto.user import NewUserDTO
-from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
 from src.usecases.container import UseCases
+from tests.helpers import add_allowed_user
 
 
 class RecordingSession(BaseSession):
@@ -80,11 +78,6 @@ class BotHarness:
 
 
 @pytest.fixture
-def make_uow(session_factory: Callable[[], AsyncSession]) -> Callable[[], SqlAlchemyUnitOfWork]:
-    return lambda: SqlAlchemyUnitOfWork(session_factory)
-
-
-@pytest.fixture
 async def harness(make_uow) -> AsyncIterator[BotHarness]:
     recording = RecordingSession()
     bot = Bot("123456:TEST", session=recording)
@@ -100,9 +93,6 @@ async def harness(make_uow) -> AsyncIterator[BotHarness]:
 @pytest.fixture
 def allow_user(make_uow):
     async def allow(user_id: int, *, first_name: str = "Ann", username: str | None = "ann"):
-        async with make_uow() as uow:
-            await uow.users.upsert(NewUserDTO(id=user_id, username=username, first_name=first_name))
-            await uow.users.set_allowed(user_id, True)
-            await uow.commit()
+        await add_allowed_user(make_uow, user_id, first_name=first_name, username=username)
 
     return allow
