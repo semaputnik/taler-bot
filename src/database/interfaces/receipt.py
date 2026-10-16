@@ -1,4 +1,3 @@
-from datetime import date
 from typing import Protocol
 
 from src.domain.receipt import Receipt
@@ -12,7 +11,7 @@ class ReceiptRepository(Protocol):
         ...
 
     async def add(self, receipt: Receipt) -> Receipt:
-        """Insert a new receipt with its parts and set their ids."""
+        """Insert a new receipt with its photo, parse and other parts and set their ids."""
         ...
 
     async def save(self, receipt: Receipt) -> None:
@@ -22,14 +21,6 @@ class ReceiptRepository(Protocol):
     async def find_by_key(self, user_id: int, receipt_key: str) -> Receipt | None:
         """The user's parsed, not deleted receipt with this key."""
         ...
-
-    async def find_near(self, user_id: int, store_key: str, day: date) -> list[Receipt]:
-        """Same store, same day (user's timezone); not deleted, not merged."""
-        ...
-
-    async def find_by_message(self, user_id: int, message_id: int) -> Receipt | None: ...
-
-    async def link_message(self, receipt_id: int, user_id: int, message_id: int) -> None: ...
 
     async def product_keys_in_items_elsewhere(
         self, user_id: int, product_keys: set[str], excluding_receipt_id: int

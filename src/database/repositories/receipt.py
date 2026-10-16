@@ -1,6 +1,7 @@
-from datetime import date
+from dataclasses import replace
 
-from sqlalchemy import Date, cast, delete, exists, func, insert, select, update
+from sqlalchemy import delete, exists, insert, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.mapping import receipt as mapping
@@ -15,7 +16,6 @@ from src.database.models import (
     ReceiptPhoto,
     Store,
     StoreProduct,
-    User,
 )
 from src.domain.enums import ReceiptStatus
 from src.domain.receipt import Receipt
@@ -23,11 +23,11 @@ from src.exception import ForeignKeyViolationError
 
 
 class SqlAlchemyReceiptRepository:
-    """Loads and saves the whole `Receipt` aggregate (ADR-0001).
+    """Loads and saves the whole `Receipt` aggregate (ADR-0001, ADR-0002).
 
-    Photos, parses and edits are append-only: `save` inserts the ones without an id. The
-    aggregate says what else changed (`current_parse_changed`, `items_changed`), so the
-    repository never diffs rows.
+    The photo and edits are append-only: `save` inserts the ones without an id. The aggregate
+    says what else changed (`parse_changed`, `items_changed`), so the repository never diffs
+    rows.
     """
 
     def __init__(self, session: AsyncSession) -> None:
@@ -36,7 +36,7 @@ class SqlAlchemyReceiptRepository:
     # --- aggregate -----------------------------------------------------------------------
 
     async def get(self, receipt_id: int) -> Receipt | None:
-        """The whole aggregate, soft-deleted included: one query per table."""
+        """The whole aggregate, soft-deleted included: one query per table, 6 at most."""
         found = (
             await self._session.execute(
                 select(ReceiptRow, Store.store_key)
@@ -49,16 +49,15 @@ class SqlAlchemyReceiptRepository:
             return None
         row, store_key = found
         fresh = {"populate_existing": True}
-        photos = await self._session.scalars(
+        photo = await self._session.scalar(
             select(ReceiptPhoto)
             .where(ReceiptPhoto.receipt_id == receipt_id)
-            .order_by(ReceiptPhoto.position, ReceiptPhoto.id)
             .execution_options(**fresh)
         )
-        parses = await self._session.scalars(
+        assert photo is not None, f"receipt {receipt_id} has no photo"
+        parse = await self._session.scalar(
             select(ReceiptParse)
             .where(ReceiptParse.receipt_id == receipt_id)
-            .order_by(ReceiptParse.id)
             .execution_options(**fresh)
         )
         items = await self._session.execute(
@@ -70,7 +69,7 @@ class SqlAlchemyReceiptRepository:
         )
         issues = await self._session.scalars(
             select(ReceiptIssue)
-            .where(ReceiptIssue.parse_id == row.current_parse_id)
+            .where(ReceiptIssue.parse_id == (parse.id if parse is not None else None))
             .order_by(ReceiptIssue.id)
             .execution_options(**fresh)
         )
@@ -83,8 +82,8 @@ class SqlAlchemyReceiptRepository:
         return mapping.receipt_from_rows(
             row,
             store_key,
-            photos.all(),
-            parses.all(),
+            photo,
+            parse,
             [(item, product) for item, product in items.all()],
             issues.all(),
             edits.all(),
@@ -93,34 +92,38 @@ class SqlAlchemyReceiptRepository:
     async def add(self, receipt: Receipt) -> Receipt:
         """Insert a new receipt with all its parts; sets the ids on it and its parts."""
         values = mapping.receipt_values(receipt, store_id=await self._store_id(receipt))
-        # The pointer needs the parse row, which needs this row: `_write` sets it.
-        values["current_parse_id"] = None
         receipt.id = (
             await self._session.execute(
                 insert(ReceiptRow).values(**values).returning(ReceiptRow.id)
             )
         ).scalar_one()
-        await self._write(receipt, new=True)
+        await self._write_parts(receipt, new=True)
         return receipt
 
     async def save(self, receipt: Receipt) -> None:
-        """Write what changed since the receipt was loaded (see the class docstring)."""
-        await self._write(receipt, new=False)
+        """Write what changed since the receipt was loaded.
 
-    async def _write(self, receipt: Receipt, *, new: bool) -> None:
+        The header row is always updated. On `parse_changed` the parse row is upserted (kept
+        in place when the receipt has one) and the items and issues are replaced; on
+        `items_changed` only the items are; otherwise only issue resolutions are updated.
+        New edits are appended.
+        """
         assert receipt.id is not None
-        rebuild_issues = receipt.current_parse_changed or new
-        rebuild_items = rebuild_issues or receipt.items_changed
+        store_id = await self._store_id(receipt)
+        await self._session.execute(
+            update(ReceiptRow)
+            .where(ReceiptRow.id == receipt.id)
+            .values(**mapping.receipt_values(receipt, store_id=store_id))
+        )
+        await self._write_parts(receipt, new=False)
 
-        await self._insert_photos(receipt)
-        await self._insert_parses(receipt)
-        if not new or receipt.current_parse is not None:
-            store_id = await self._store_id(receipt)
-            await self._session.execute(
-                update(ReceiptRow)
-                .where(ReceiptRow.id == receipt.id)
-                .values(**mapping.receipt_values(receipt, store_id=store_id))
-            )
+    async def _write_parts(self, receipt: Receipt, *, new: bool) -> None:
+        rebuild_issues = receipt.parse_changed or (new and receipt.parse is not None)
+        rebuild_items = rebuild_issues or receipt.items_changed or (new and bool(receipt.items))
+
+        await self._insert_photo(receipt)
+        if rebuild_issues:
+            await self._upsert_parse(receipt)
         if rebuild_items:
             await self._replace_items(receipt, new=new)
         if rebuild_issues:
@@ -139,26 +142,32 @@ class SqlAlchemyReceiptRepository:
             select(Store.id).where(Store.user_id == receipt.user_id, Store.store_key == key)
         )
 
-    async def _insert_photos(self, receipt: Receipt) -> None:
-        for position, photo in enumerate(receipt.photos):
-            if photo.id is None:
-                values = mapping.photo_values(photo, receipt=receipt, position=position)
-                photo.id = (
-                    await self._session.execute(
-                        insert(ReceiptPhoto).values(**values).returning(ReceiptPhoto.id)
-                    )
-                ).scalar_one()
+    async def _insert_photo(self, receipt: Receipt) -> None:
+        photo = receipt.photo
+        if photo.id is None:
+            values = mapping.photo_values(photo, receipt=receipt)
+            photo.id = (
+                await self._session.execute(
+                    insert(ReceiptPhoto).values(**values).returning(ReceiptPhoto.id)
+                )
+            ).scalar_one()
 
-    async def _insert_parses(self, receipt: Receipt) -> None:
-        for parse in list(receipt.parses):
-            if parse.id is None:
-                values = mapping.parse_values(parse, receipt_id=receipt.id)
-                parse_id = (
-                    await self._session.execute(
-                        insert(ReceiptParse).values(**values).returning(ReceiptParse.id)
-                    )
-                ).scalar_one()
-                receipt.assign_parse_id(parse, parse_id)
+    async def _upsert_parse(self, receipt: Receipt) -> None:
+        """Insert the receipt's parse row, or overwrite the one it has, keeping its id."""
+        parse = receipt.parse
+        if parse is None:  # nothing to store
+            return
+        values = mapping.parse_values(parse, receipt_id=receipt.id)
+        statement = pg_insert(ReceiptParse).values(**values)
+        parse_id = (
+            await self._session.execute(
+                statement.on_conflict_do_update(
+                    index_elements=[ReceiptParse.receipt_id],
+                    set_={k: v for k, v in values.items() if k != "receipt_id"},
+                ).returning(ReceiptParse.id)
+            )
+        ).scalar_one()
+        receipt.parse = replace(parse, id=parse_id)
 
     async def _replace_items(self, receipt: Receipt, *, new: bool) -> None:
         if not new:
@@ -193,7 +202,6 @@ class SqlAlchemyReceiptRepository:
 
     async def _replace_issues(self, receipt: Receipt, *, new: bool) -> None:
         if not new:
-            # Only the current parse's issues are active; the rest were replaced earlier.
             await self._session.execute(
                 delete(ReceiptIssue).where(
                     ReceiptIssue.parse_id.in_(
@@ -204,7 +212,7 @@ class SqlAlchemyReceiptRepository:
         # The database cleared `issue_id` on the edits that pointed at the deleted issues.
         for edit in receipt.edits:
             edit.issue_id = None
-        parse = receipt.current_parse
+        parse = receipt.parse
         for issue in receipt.issues:
             assert parse is not None
             issue.id = (
@@ -248,27 +256,6 @@ class SqlAlchemyReceiptRepository:
             )
         )
         return await self._get_or_none(receipt_id)
-
-    async def find_near(self, user_id: int, store_key: str, day: date) -> list[Receipt]:
-        """Receipts of the same store on the same day (in the user's timezone), oldest first.
-
-        Soft-deleted receipts and receipts merged into another one are not candidates.
-        """
-        ids = await self._session.scalars(
-            select(ReceiptRow.id)
-            .join(Store, Store.id == ReceiptRow.store_id)
-            .join(User, User.id == ReceiptRow.user_id)
-            .where(
-                ReceiptRow.user_id == user_id,
-                Store.store_key == store_key,
-                ReceiptRow.deleted_at.is_(None),
-                ReceiptRow.status != ReceiptStatus.MERGED.value,
-                cast(func.timezone(User.timezone, ReceiptRow.purchased_at), Date) == day,
-            )
-            .order_by(ReceiptRow.purchased_at, ReceiptRow.id)
-        )
-        receipts = [await self._get_or_none(receipt_id) for receipt_id in ids.all()]
-        return [r for r in receipts if r is not None]
 
     async def product_keys_in_items_elsewhere(
         self, user_id: int, product_keys: set[str], excluding_receipt_id: int

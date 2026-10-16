@@ -52,12 +52,10 @@ _HEADER_COLUMNS = (
 
 def receipt_values(receipt: Receipt, *, store_id: int | None) -> dict[str, Any]:
     """The `receipts` row of the aggregate (everything but its own id and timestamps)."""
-    current = receipt.current_parse
     return {
         "user_id": receipt.user_id,
         "status": receipt.status.value,
-        "current_parse_id": current.id if current is not None else None,
-        "merged_into_id": receipt.merged_into_id,
+        "duplicate_of_id": receipt.duplicate_of_id,
         "store_id": store_id,
         "error_message": receipt.error_message,
         "deleted_at": receipt.deleted_at,
@@ -68,30 +66,28 @@ def receipt_values(receipt: Receipt, *, store_id: int | None) -> dict[str, Any]:
 def receipt_from_rows(
     row: ReceiptRow,
     store_key: str | None,
-    photos: Sequence[ReceiptPhoto],
-    parses: Sequence[ReceiptParse],
+    photo_row: ReceiptPhoto,
+    parse_row: ReceiptParse | None,
     items: Sequence[tuple[ReceiptItem, StoreProduct]],
     issues: Sequence[ReceiptIssue],
     edits: Sequence[ReceiptEdit],
 ) -> Receipt:
-    domain_parses = [parse_from_row(p) for p in parses]
-    current = next((p for p in domain_parses if p.id == row.current_parse_id), None)
+    parse = parse_from_row(parse_row) if parse_row is not None else None
     return Receipt(
         id=row.id,
         user_id=row.user_id,
         status=ReceiptStatus(row.status),
-        # No store row yet (the catalog adds it later): the current parse still names it.
+        # No store row yet (the catalog adds it later): the parse still names it.
         header=Header(
-            store_key=store_key or (current.store_key if current is not None else None),
+            store_key=store_key or (parse.store_key if parse is not None else None),
             **{column: getattr(row, column) for column in _HEADER_COLUMNS},
         ),
-        photos=[photo_from_row(p) for p in photos],
-        parses=domain_parses,
-        current_parse=current,
+        photo=photo_from_row(photo_row),
+        parse=parse,
         items=_items_from_rows(items),
         issues=[issue_from_row(i) for i in issues],
         edits=[edit_from_row(e) for e in edits],
-        merged_into_id=row.merged_into_id,
+        duplicate_of_id=row.duplicate_of_id,
         deleted_at=row.deleted_at,
         error_message=row.error_message,
     )
@@ -100,11 +96,10 @@ def receipt_from_rows(
 # --- photos ------------------------------------------------------------------------------
 
 
-def photo_values(photo: Photo, *, receipt: Receipt, position: int) -> dict[str, Any]:
+def photo_values(photo: Photo, *, receipt: Receipt) -> dict[str, Any]:
     return {
         "receipt_id": receipt.id,
         "user_id": receipt.user_id,
-        "position": position,
         "path": photo.path,
         "mime_type": photo.mime_type,
         "size_bytes": photo.size_bytes,
@@ -132,7 +127,7 @@ def photo_from_row(row: ReceiptPhoto) -> Photo:
 # `normalized` holds the Parse minus the fields that have their own columns. Decimal is
 # written as str and datetime as ISO text, so nothing is lost to JSON floats.
 
-_PARSE_COLUMNS = {"id", "raw_output", "model", "parser_version", "photo_ids"}
+_PARSE_COLUMNS = {"id", "raw_output", "model", "parser_version"}
 _PARSE_MONEY = (
     "subtotal",
     "discount_total",
@@ -155,7 +150,6 @@ def parse_values(parse: Parse, *, receipt_id: int | None) -> dict[str, Any]:
         "status": ParseStatus.OK.value,
         "parser_version": parse.parser_version,
         "model": parse.model,
-        "photo_ids": list(parse.photo_ids),
         "raw_output": parse.raw_output,
         "normalized": normalized_of(parse),
     }
@@ -184,7 +178,6 @@ def parse_from_row(row: ReceiptParse) -> Parse:
         "raw_output": row.raw_output,
         "model": row.model,
         "parser_version": row.parser_version,
-        "photo_ids": tuple(row.photo_ids),
     }
     data = row.normalized
     if data is None:  # a reading that produced nothing usable: only what the columns say
