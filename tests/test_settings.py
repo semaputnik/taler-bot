@@ -81,8 +81,18 @@ def test_missing_bot_token_names_the_field(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(ValidationError) as exc:
         Settings(_env_file=None)
 
-    assert [e["loc"] for e in exc.value.errors()] == [("bot",)]
-    assert "bot" in str(exc.value)
+    assert [e["loc"] for e in exc.value.errors()] == [("bot", "token")]
+
+
+def test_missing_sections_name_their_required_fields() -> None:
+    with pytest.raises(ValidationError) as exc:
+        Settings(_env_file=None)
+
+    assert sorted(e["loc"] for e in exc.value.errors()) == [
+        ("bot", "token"),
+        ("database", "url"),
+        ("llm", "api_key"),
+    ]
 
 
 @pytest.mark.usefixtures("full_env")

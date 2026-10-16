@@ -15,7 +15,8 @@ def main() -> int:
     try:
         settings = Settings()  # pyright: ignore[reportCallIssue]
     except ValidationError as error:
-        missing = ", ".join(".".join(map(str, e["loc"])).upper() for e in error.errors())
+        # Report env var names (BOT__TOKEN), which is what the user has to set.
+        missing = ", ".join("__".join(map(str, e["loc"])).upper() for e in error.errors())
         logger.error("Invalid configuration, check these settings: %s", missing)
         return 1
     if not settings.bot.token.get_secret_value():

@@ -1,6 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
+from pydantic import BaseModel, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.config.bot import BotConfig
@@ -22,6 +24,18 @@ class _BaseSettings(BaseSettings):
         # Models named `model_*` are fine: `llm.model` is a plain field.
         protected_namespaces=(),
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _validate_absent_sections(cls, data: Any) -> Any:
+        # Without any of its env vars a section is absent and pydantic would only report the
+        # section ("bot"). Validating it as empty names the missing field ("bot", "token").
+        if isinstance(data, dict):
+            for name, field in cls.model_fields.items():
+                annotation = field.annotation
+                if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                    data.setdefault(name, {})
+        return data
 
 
 class DatabaseSettings(_BaseSettings):
