@@ -76,7 +76,7 @@ def receipt_from_rows(
 ) -> Receipt:
     domain_parses = [parse_from_row(p) for p in parses]
     current = next((p for p in domain_parses if p.id == row.current_parse_id), None)
-    receipt = Receipt(
+    return Receipt(
         id=row.id,
         user_id=row.user_id,
         status=ReceiptStatus(row.status),
@@ -95,7 +95,6 @@ def receipt_from_rows(
         deleted_at=row.deleted_at,
         error_message=row.error_message,
     )
-    return receipt
 
 
 # --- photos ------------------------------------------------------------------------------
