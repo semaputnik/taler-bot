@@ -45,9 +45,16 @@ class App:
             yield
         finally:
             logger.info("Shutting down")
-            await self.bot.session.close()
-            await self.storage.close()
-            await self.engine.dispose()
+            # Each resource is closed even if an earlier close fails.
+            for name, close in (
+                ("bot session", self.bot.session.close),
+                ("storage", self.storage.close),
+                ("engine", self.engine.dispose),
+            ):
+                try:
+                    await close()
+                except Exception:
+                    logger.exception("Failed to close %s", name)
 
     async def run(self) -> None:
         """Long polling until Ctrl+C / SIGTERM (aiogram handles the signals)."""

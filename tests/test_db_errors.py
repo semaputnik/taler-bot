@@ -31,3 +31,12 @@ def test_integrity_errors_become_app_exceptions(sqlstate, expected):
             raise IntegrityError("stmt", {}, FakeDriverError(sqlstate))
     assert isinstance(caught.value, DatabaseException)
     assert not isinstance(caught.value, IntegrityError)
+
+
+async def test_real_unique_violation_is_translated(session):
+    from src.database.models import User
+
+    session.add_all([User(id=1), User(id=1)])
+    with pytest.raises(UniqueViolationError):
+        with translate_db_errors():
+            await session.flush()
