@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -49,3 +50,28 @@ class ReceiptCard(BaseModel):
     card_last4: str | None
     item_count: int
     open_issue_count: int
+
+
+class IssueLine(BaseModel):
+    """One doubt for the summary: which item it is about (if any) and what it says."""
+
+    model_config = ConfigDict(frozen=True)
+
+    item_name: str | None
+    message: str
+
+
+class ParseResult(BaseModel):
+    """How a parse ended, with what the reply needs.
+
+    `issues` are the most severe ones (at most five, high first, then in parse order);
+    `duplicate_of` is set for `duplicate`, `error` for `failed`.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    card: ReceiptCard
+    outcome: Literal["parsed", "not_receipt", "duplicate", "failed"]
+    duplicate_of: ReceiptCard | None = None
+    issues: list[IssueLine] = []
+    error: str | None = None

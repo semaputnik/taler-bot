@@ -13,6 +13,7 @@ from src.services.receipt import ReceiptService, _apply_parse
 from src.services.results import NewPhoto
 from tests.domain.builders import WHEN, parse, photo, product
 from tests.helpers import MakeUow, add_allowed_user, add_receipt, seed_catalog
+from tests.stubs import StubReceiptParser
 
 MILK = product("mercadona::leche", total="1.20")
 BREAD = product("mercadona::pan", total="2.00")
@@ -59,7 +60,7 @@ async def product_keys(make_uow: MakeUow) -> set[str]:
 @pytest.fixture
 async def service(make_uow: MakeUow, tmp_storage) -> ReceiptService:
     await add_allowed_user(make_uow, 1)
-    return ReceiptService(make_uow, tmp_storage)
+    return ReceiptService(make_uow, tmp_storage, StubReceiptParser())
 
 
 async def test_save_photo_starts_a_pending_receipt(service):
@@ -129,7 +130,7 @@ async def test_a_database_failure_after_the_write_leaves_the_file_and_logs_a_war
             uow.commit = commit  # type: ignore[method-assign]
         return uow
 
-    service = ReceiptService(failing_commit_uow, tmp_storage)
+    service = ReceiptService(failing_commit_uow, tmp_storage, StubReceiptParser())
 
     with pytest.raises(DatabaseException), caplog.at_level("WARNING"):
         await service.save_photo(1, b"x", new_photo(telegram_message_id=5))

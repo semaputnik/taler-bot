@@ -40,7 +40,8 @@ docker compose up -d --wait     # postgres on localhost:5447, redis on localhost
 uv sync
 uv run alembic upgrade head
 uv run python -m src
-uv run pytest                   # needs only the dev Postgres; no env file (see Tests)
+uv run pytest                   # needs only the dev Postgres; no env file (see Tests); skips the `llm` test
+uv run pytest -m llm            # the live model test: needs LLM__API_KEY and tests/fixtures/images/receipt.jpg
 uv run ruff check . && uv run ruff format .
 uv run alembic revision --autogenerate -m "..."   # then review it, see Database
 uv run alembic check
@@ -84,9 +85,10 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService: save_photo, edit_item, edit_header, resolve_issue, soft_delete, card
-    results.py             # CurrentUser, NewPhoto, ReceiptCard: the services' own pydantic types
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, soft_delete, card
+    results.py             # CurrentUser, NewPhoto, ReceiptCard, ParseResult: the services' own pydantic types
   integration/
+    llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
@@ -99,10 +101,8 @@ alembic/                   # migrations (alembic.ini at the repo root)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```
 
-Not built yet (each arrives with its feature): `domain/normalize.py` and `domain/matching.py`
-(domain services), `integration/llm` (`ReceiptParser`), `ReceiptService.parse` (its design is in the `services/receipt.py`
-docstring; `_apply_parse` and `_save_with_catalog` are its private path), photo intake and
-the dialogs.
+Not built yet (each arrives with its feature): `domain/matching.py` (a domain service), the
+bot's photo intake (handler and background task) and the dialogs.
 
 ### Layers and dependencies
 
@@ -202,12 +202,13 @@ no string literals in windows.
   `tests/conftest.py` has `make_uow`; `tests/helpers.py` seeds users, catalogs and receipts;
   `tests/domain/builders.py` builds `Parse` and `Photo` values.
 - Repositories and services are tested against a real Postgres (a separate `<db>_test`
-  database, each test rolled back). Tests never read the app's env file: the server is
+  database, each test rolled back). Tests never read the app's env file (except the `llm` test, below): the server is
   the dev Postgres by default, or `TEST_DATABASE_URL` (its database name is only a prefix
   for the scratch databases). There is no fake UoW: it would double the code and
   could not check SQL constraints.
-- Once it exists, the LLM is stubbed behind the `ReceiptParser` interface. `domain` is tested with JSON
-  fixtures.
+- The LLM is stubbed behind the `ReceiptParser` interface (`StubReceiptParser` in `tests/stubs.py`).
+  `domain` is tested with JSON fixtures. The one `llm`-marked test calls the real model; it is the
+  only test that reads the repo-root `.env` (for `LLM__API_KEY`) and skips without a key or photo.
 
 ### Database
 

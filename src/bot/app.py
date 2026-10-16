@@ -13,6 +13,7 @@ from src.bot.i18n import create_translator_hub
 from src.config.settings import Settings
 from src.database.engine import create_engine, create_sessionmaker
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
+from src.integration.llm import OpenAIReceiptParser
 from src.integration.storage import LocalPhotoStorage
 from src.services.container import Services
 
@@ -36,8 +37,11 @@ class App:
         )
         self.translator_hub = create_translator_hub()
         self.photo_storage = LocalPhotoStorage(settings.storage.receipts_dir)
+        self.receipt_parser = OpenAIReceiptParser(settings.llm)
         self.services = Services.build(
-            lambda: SqlAlchemyUnitOfWork(session_factory), storage=self.photo_storage
+            lambda: SqlAlchemyUnitOfWork(session_factory),
+            storage=self.photo_storage,
+            parser=self.receipt_parser,
         )
         self.dispatcher = create_dispatcher(
             storage=self.storage, services=self.services, translator_hub=self.translator_hub

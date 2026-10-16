@@ -15,6 +15,7 @@ from src.bot.dispatcher import create_dispatcher
 from src.bot.i18n import create_translator_hub
 from src.services.container import Services
 from tests.helpers import add_allowed_user
+from tests.stubs import StubReceiptParser
 
 
 class RecordingSession(BaseSession):
@@ -83,7 +84,7 @@ async def harness(make_uow, tmp_storage) -> AsyncIterator[BotHarness]:
     bot = Bot("123456:TEST", session=recording)
     dispatcher = create_dispatcher(
         storage=MemoryStorage(),
-        services=Services.build(make_uow, storage=tmp_storage),
+        services=Services.build(make_uow, storage=tmp_storage, parser=StubReceiptParser()),
         translator_hub=create_translator_hub(),
     )
     yield BotHarness(bot, dispatcher, recording)
