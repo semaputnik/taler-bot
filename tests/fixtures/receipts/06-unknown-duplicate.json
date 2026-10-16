@@ -1,0 +1,147 @@
+{
+  "source": {
+    "n8n_payment_id": 6,
+    "parser_version": "2026-10-12.4",
+    "model": "gpt-6-luna"
+  },
+  "context": {
+    "received_at": "2026-10-12T16:43:01.000Z",
+    "timezone": "Europe/Madrid",
+    "known_product_keys": [],
+    "known_card_last4": [
+      "0848"
+    ]
+  },
+  "raw": {
+    "is_receipt": true,
+    "store": {
+      "name": "Consum",
+      "legal_name": "Consum, S.Coop.V.",
+      "address": "Avd. Alginet, nº 1",
+      "city": "Silla",
+      "country": "ES",
+      "tax_id": "F46078986",
+      "phone": "934904629"
+    },
+    "receipt": {
+      "number": "02/000009",
+      "purchased_at": "2026-10-10T20:06:00",
+      "cashier": "FRANCO",
+      "register": "C:0294"
+    },
+    "currency": "EUR",
+    "items": [
+      {
+        "name_raw": "AIGUA C/G PELEGRINO",
+        "name_normalized": "Aigua amb gas Pelegrino",
+        "category": "drinks",
+        "quantity": 2,
+        "unit": "pcs",
+        "unit_price": 1.39,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 2.78,
+        "vat_rate": 10,
+        "barcode": null
+      },
+      {
+        "name_raw": "CERV FREE LIMO.",
+        "name_normalized": "Cervesa sense alcohol amb llimona",
+        "category": "drinks",
+        "quantity": 6,
+        "unit": "pcs",
+        "unit_price": 0.8,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 4.8,
+        "vat_rate": 21,
+        "barcode": null
+      }
+    ],
+    "totals": {
+      "subtotal": 7.58,
+      "discount_total": 0,
+      "tax_total": 1.1,
+      "total": 7.58,
+      "taxes": [
+        {
+          "rate": 10,
+          "base": 2.52,
+          "amount": 0.26
+        },
+        {
+          "rate": 21,
+          "base": 3.96,
+          "amount": 0.84
+        }
+      ]
+    },
+    "payment": {
+      "method": "card",
+      "card_brand": "VISA",
+      "card_last4": "0848",
+      "amount_paid": 7.58,
+      "change": 0,
+      "auth_code": "IYJ8XU",
+      "terminal": null
+    },
+    "loyalty": {
+      "program": "MonConsum",
+      "card_number_masked": null,
+      "points_earned": null,
+      "savings": 0.06
+    },
+    "issues": [
+      {
+        "type": "unknown_abbreviation",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "CERV FREE LIMO.",
+        "message": "The printed product text is abbreviated. Interpreted “CERV” as cervesa and “LIMO.” as llimona, giving “Cervesa sense alcohol amb llimona.”"
+      },
+      {
+        "type": "ambiguous",
+        "severity": "low",
+        "field": "receipt.number",
+        "item_name_raw": null,
+        "message": "The header also shows 828748 after the time. Used 02/000009 as the receipt number and treated 828748 as an additional reference."
+      },
+      {
+        "type": "ambiguous",
+        "severity": "low",
+        "field": "receipt.purchased_at",
+        "item_name_raw": null,
+        "message": "The receipt prints the time only to the minute; seconds are set to 00."
+      },
+      {
+        "type": "ambiguous",
+        "severity": "low",
+        "field": "loyalty.savings",
+        "item_name_raw": null,
+        "message": "The receipt says the purchase accumulates 0.06 € toward a gift voucher; recorded this as loyalty savings."
+      }
+    ]
+  },
+  "expected_n8n": {
+    "receiptKey": "consum|02/000009|2026-10-10|7.58",
+    "purchasedAt": null,
+    "storeKey": null,
+    "storeName": null,
+    "storeLegalName": null,
+    "storeAddress": null,
+    "storeTaxId": null,
+    "receiptNumber": null,
+    "currency": null,
+    "subtotal": null,
+    "discountTotal": null,
+    "taxTotal": null,
+    "total": null,
+    "paymentMethod": null,
+    "cardBrand": null,
+    "cardLast4": null,
+    "itemsCount": null,
+    "status": "duplicate"
+  }
+}

@@ -1,0 +1,132 @@
+{
+  "source": {
+    "n8n_payment_id": 11,
+    "parser_version": "2026-10-12.4",
+    "model": "gpt-6-luna"
+  },
+  "context": {
+    "received_at": "2026-10-14T18:35:18.000Z",
+    "timezone": "Europe/Madrid",
+    "known_product_keys": [
+      "consum::aigua-c-g-pelegrino",
+      "consum::cerv-free-limo",
+      "consum::ou-pages-1-2-dotz"
+    ],
+    "known_card_last4": [
+      "0848"
+    ]
+  },
+  "raw": {
+    "is_receipt": true,
+    "store": {
+      "name": "Ametller Origen",
+      "legal_name": "Casa Ametller, SL",
+      "address": "C/Nicaragua 47-53 - C/Berlin 39-53",
+      "city": "Barcelona",
+      "country": "ES",
+      "tax_id": "B52591359",
+      "phone": null
+    },
+    "receipt": {
+      "number": "2026/2391/00109923",
+      "purchased_at": "2025-10-14T19:46:07",
+      "cashier": null,
+      "register": null
+    },
+    "currency": "EUR",
+    "items": [
+      {
+        "name_raw": "Tomàquet Rosa safata granel",
+        "name_normalized": "Tomàquet rosa a granel",
+        "category": "produce",
+        "quantity": 1.828,
+        "unit": "kg",
+        "unit_price": 2.99,
+        "reference_price": 2.99,
+        "reference_unit": "kg",
+        "discount": 0.09,
+        "line_total": 5.38,
+        "vat_rate": 4,
+        "barcode": null
+      }
+    ],
+    "totals": {
+      "subtotal": 5.47,
+      "discount_total": 0,
+      "tax_total": 0.21,
+      "total": 5.38,
+      "taxes": [
+        {
+          "rate": 4,
+          "base": 5.17,
+          "amount": 0.21
+        }
+      ]
+    },
+    "payment": {
+      "method": "card",
+      "card_brand": "VISA",
+      "card_last4": "0048",
+      "amount_paid": 5.38,
+      "change": 0,
+      "auth_code": null,
+      "terminal": "00000005"
+    },
+    "loyalty": {
+      "program": "Llavors",
+      "card_number_masked": null,
+      "points_earned": 25,
+      "savings": null
+    },
+    "issues": [
+      {
+        "type": "ambiguous",
+        "severity": "low",
+        "field": "items.reference_price",
+        "item_name_raw": "Tomàquet Rosa safata granel",
+        "message": "The printed price is 2.99 for 1.828 kg; assumed this is the price per kg and used it as both unit_price and reference_price."
+      },
+      {
+        "type": "unknown_abbreviation",
+        "severity": "low",
+        "field": "items.discount",
+        "item_name_raw": "Tomàquet Rosa safata granel",
+        "message": "The line discount is abbreviated as “Dto. tara”; interpreted it as a tare discount of 0.09."
+      },
+      {
+        "type": "layout",
+        "severity": "low",
+        "field": "totals.discount_total",
+        "item_name_raw": null,
+        "message": "The receipt prints a separate “ESTALVI” amount of 0.09 matching the tare discount. Counted the discount once on the item and did not treat it as a receipt-wide discount."
+      },
+      {
+        "type": "ambiguous",
+        "severity": "low",
+        "field": "store.address",
+        "item_name_raw": null,
+        "message": "The address text ends with a partially readable “Barce...”; recorded the visible street information and inferred Barcelona from the city text."
+      }
+    ]
+  },
+  "expected_n8n": {
+    "receiptKey": "ametller-origen|2026/2391/00109923|2026-10-14|5.38",
+    "purchasedAt": "2026-10-14T17:46:07.000Z",
+    "storeKey": "ametller-origen",
+    "storeName": "Ametller Origen",
+    "storeLegalName": "Casa Ametller, SL",
+    "storeAddress": "C/Nicaragua 47-53 - C/Berlin 39-53, Barcelona",
+    "storeTaxId": "B52591359",
+    "receiptNumber": "2026/2391/00109923",
+    "currency": "EUR",
+    "subtotal": 5.47,
+    "discountTotal": 0.09,
+    "taxTotal": 0.21,
+    "total": 5.38,
+    "paymentMethod": "card",
+    "cardBrand": "VISA",
+    "cardLast4": "0848",
+    "itemsCount": 1,
+    "status": "parsed"
+  }
+}

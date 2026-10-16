@@ -1,0 +1,167 @@
+{
+  "source": {
+    "n8n_payment_id": 15,
+    "parser_version": "2026-10-15.1",
+    "model": "gpt-6-luna"
+  },
+  "context": {
+    "received_at": "2026-10-16T17:55:18.000Z",
+    "timezone": "Europe/Madrid",
+    "known_product_keys": [
+      "ametller-origen::infusio-de-menta-eco-18g-amet",
+      "ametller-origen::maionesa-trufada-can-bech-110-g",
+      "ametller-origen::nigiri-salmo-flamejat-ao-sh-185g",
+      "ametller-origen::ous-formatge-curat-sot",
+      "ametller-origen::pastrami-de-vedella-80g-amet",
+      "ametller-origen::salsa-brava-230g-ametller-ori",
+      "ametller-origen::sushi-caixa-22-ao-sh-364g-160-ml",
+      "ametller-origen::tomaquet-cor-de-bou-extra",
+      "consum::aigua-c-g-pelegrino",
+      "consum::cerv-free-limo",
+      "consum::farina-blat-consum",
+      "consum::hig-resit-consum-8r",
+      "consum::llet-senc-clas-1-5l",
+      "consum::ou-pages-1-2-dotz",
+      "consum::paper-forn-consum30",
+      "consum::sucre-blanc-acor1k",
+      "mercadona::llevat-forner",
+      "mercadona::protector-llit",
+      "mercadona::raim-blanc-sese-pep"
+    ],
+    "known_card_last4": [
+      "0848"
+    ]
+  },
+  "raw": {
+    "is_receipt": true,
+    "store": {
+      "name": "Ametller Origen",
+      "legal_name": "Casaametller, SL",
+      "address": "C/Numància 47-53 - C/Berlín 39-53",
+      "city": "Barcelona",
+      "country": "ES",
+      "tax_id": "B62591359",
+      "phone": null
+    },
+    "receipt": {
+      "number": "2026/2392/00067861",
+      "purchased_at": "2026-10-16T19:32:49",
+      "cashier": "ANDREA",
+      "register": null
+    },
+    "currency": "EUR",
+    "items": [
+      {
+        "name_raw": "Assortiment panellets coco 90 22",
+        "name_normalized": "Coconut panellets assortment",
+        "category": "bakery",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 4.99,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 4.99,
+        "vat_rate": 10,
+        "barcode": null
+      },
+      {
+        "name_raw": "Anet 30g",
+        "name_normalized": "Dill 30 g",
+        "category": "produce",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 1.49,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 1.49,
+        "vat_rate": 10,
+        "barcode": null
+      },
+      {
+        "name_raw": "Tomàquet madur safata granel",
+        "name_normalized": "Ripe tomato, loose tray",
+        "category": "produce",
+        "quantity": 1.135,
+        "unit": "kg",
+        "unit_price": 2.99,
+        "reference_price": 2.99,
+        "reference_unit": "kg",
+        "discount": 0.06,
+        "line_total": 3.33,
+        "vat_rate": 4,
+        "barcode": null
+      }
+    ],
+    "totals": {
+      "subtotal": 9.87,
+      "discount_total": 0.06,
+      "tax_total": 0.72,
+      "total": 9.81,
+      "taxes": [
+        {
+          "rate": 4,
+          "base": 3.2,
+          "amount": 0.13
+        },
+        {
+          "rate": 10,
+          "base": 5.89,
+          "amount": 0.59
+        }
+      ]
+    },
+    "payment": {
+      "method": "card",
+      "card_brand": "VISA",
+      "card_last4": "0848",
+      "amount_paid": 9.81,
+      "change": null,
+      "auth_code": "22FUSH",
+      "terminal": "00000004"
+    },
+    "loyalty": {
+      "program": null,
+      "card_number_masked": null,
+      "points_earned": null,
+      "savings": null
+    },
+    "issues": [
+      {
+        "type": "ambiguous",
+        "severity": "medium",
+        "field": "items.name_raw",
+        "item_name_raw": "Assortiment panellets coco 90 22",
+        "message": "The printed product text ends in “90 22”; its meaning is unclear. Preserved it in name_raw and omitted it from the normalized name rather than treating it as a pack size or code."
+      },
+      {
+        "type": "ambiguous",
+        "severity": "low",
+        "field": "store.address",
+        "item_name_raw": null,
+        "message": "The printed address ends with the truncated text “Barce”; interpreted the city as Barcelona."
+      }
+    ]
+  },
+  "expected_n8n": {
+    "receiptKey": "ametller-origen|2026/2392/00067861|2026-10-16|9.81",
+    "purchasedAt": "2026-10-16T17:32:49.000Z",
+    "storeKey": "ametller-origen",
+    "storeName": "Ametller Origen",
+    "storeLegalName": "Casaametller, SL",
+    "storeAddress": "C/Numància 47-53 - C/Berlín 39-53, Barcelona",
+    "storeTaxId": "B62591359",
+    "receiptNumber": "2026/2392/00067861",
+    "currency": "EUR",
+    "subtotal": 9.87,
+    "discountTotal": 0.06,
+    "taxTotal": 0.72,
+    "total": 9.81,
+    "paymentMethod": "card",
+    "cardBrand": "VISA",
+    "cardLast4": "0848",
+    "itemsCount": 3,
+    "status": "parsed"
+  }
+}

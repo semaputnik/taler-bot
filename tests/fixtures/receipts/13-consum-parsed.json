@@ -1,0 +1,300 @@
+{
+  "source": {
+    "n8n_payment_id": 13,
+    "parser_version": "2026-10-15.1",
+    "model": "gpt-6-luna"
+  },
+  "context": {
+    "received_at": "2026-10-16T17:52:17.000Z",
+    "timezone": "Europe/Madrid",
+    "known_product_keys": [
+      "ametller-origen::infusio-de-menta-eco-18g-amet",
+      "ametller-origen::maionesa-trufada-can-bech-110-g",
+      "ametller-origen::nigiri-salmo-flamejat-ao-sh-185g",
+      "ametller-origen::ous-formatge-curat-sot",
+      "ametller-origen::pastrami-de-vedella-80g-amet",
+      "ametller-origen::salsa-brava-230g-ametller-ori",
+      "ametller-origen::sushi-caixa-22-ao-sh-364g-160-ml",
+      "ametller-origen::tomaquet-cor-de-bou-extra",
+      "consum::aigua-c-g-pelegrino",
+      "consum::cerv-free-limo",
+      "consum::ou-pages-1-2-dotz",
+      "mercadona::llevat-forner",
+      "mercadona::protector-llit",
+      "mercadona::raim-blanc-sese-pep"
+    ],
+    "known_card_last4": [
+      "0848"
+    ]
+  },
+  "raw": {
+    "is_receipt": true,
+    "store": {
+      "name": "Consum",
+      "legal_name": "Consum, S.Coop.V.",
+      "address": "Avd. Alginet, nº 1",
+      "city": "Silla",
+      "country": "ES",
+      "tax_id": "F46078986",
+      "phone": null
+    },
+    "receipt": {
+      "number": "01/000015",
+      "purchased_at": "2026-10-16T19:41:00",
+      "cashier": null,
+      "register": "0294"
+    },
+    "currency": "EUR",
+    "items": [
+      {
+        "name_raw": "B. ESPIGA DLT OLIVA",
+        "name_normalized": "Pa d'espiga d'oliva",
+        "category": "bakery",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 0.9,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 0.9,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "OU PAGES 1/2 DOTZ",
+        "name_normalized": "Ous Pages, mitja dotzena",
+        "category": "other",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 2.6,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 2.6,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "A. BASMA BRILLANT P2",
+        "name_normalized": "A. Basma Brillant P2",
+        "category": "other",
+        "quantity": 2,
+        "unit": "pcs",
+        "unit_price": 1.29,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 2.58,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "A. INT. BRILLANT2X125",
+        "name_normalized": "A. Int. Brillant 2 x 125",
+        "category": "other",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 1.2,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 1.2,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "QUINOA VERME-BLANCA",
+        "name_normalized": "Quinoa vermella i blanca",
+        "category": "pantry",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 1.55,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 1.55,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "PENNE RIGATI CAL.500",
+        "name_normalized": "Penne rigate 500 g",
+        "category": "pantry",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 1.25,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 1.25,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "LLET SENC. CLAS .5L",
+        "name_normalized": "Llet sencera clàssica 0,5 l",
+        "category": "dairy",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 1.97,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 1.97,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "AIGUA C/G PELEGRINO",
+        "name_normalized": "Aigua amb gas San Pellegrino",
+        "category": "drinks",
+        "quantity": 6,
+        "unit": "pcs",
+        "unit_price": 1.39,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 8.34,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "CERV FREE LIM.0L. A",
+        "name_normalized": "Cervesa Free amb llimona, 0,0",
+        "category": "drinks",
+        "quantity": 10,
+        "unit": "pcs",
+        "unit_price": 0.8,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 8,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "B.CONGE CONSUM 400",
+        "name_normalized": "Producte congelat Consum 400 g",
+        "category": "frozen",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 0.95,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 0.95,
+        "vat_rate": null,
+        "barcode": null
+      }
+    ],
+    "totals": {
+      "subtotal": 29.34,
+      "discount_total": 0,
+      "tax_total": 3.15,
+      "total": 29.34,
+      "taxes": [
+        {
+          "rate": 10,
+          "base": 13.54,
+          "amount": 1.38
+        },
+        {
+          "rate": 21,
+          "base": 7.39,
+          "amount": 1.56
+        },
+        {
+          "rate": 4,
+          "base": 5.26,
+          "amount": 0.21
+        }
+      ]
+    },
+    "payment": {
+      "method": "card",
+      "card_brand": "VISA",
+      "card_last4": "0848",
+      "amount_paid": 29.34,
+      "change": 0,
+      "auth_code": "OHL4HC",
+      "terminal": null
+    },
+    "loyalty": {
+      "program": "MónConsum",
+      "card_number_masked": null,
+      "points_earned": null,
+      "savings": 0.22
+    },
+    "issues": [
+      {
+        "type": "unknown_abbreviation",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "B. ESPIGA DLT OLIVA",
+        "message": "The printed abbreviations are unclear. Interpreted this as olive espiga bread; the exact product wording is uncertain."
+      },
+      {
+        "type": "ambiguous",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "OU PAGES 1/2 DOTZ",
+        "message": "Read as Pages eggs, half a dozen; the product text is abbreviated."
+      },
+      {
+        "type": "unknown_abbreviation",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "A. BASMA BRILLANT P2",
+        "message": "The abbreviations and product identity are unclear; retained the legible wording rather than expanding it."
+      },
+      {
+        "type": "unknown_abbreviation",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "A. INT. BRILLANT2X125",
+        "message": "The product abbreviation is unclear. Read the pack notation as 2 x 125, but its unit and product type are not legible."
+      },
+      {
+        "type": "unknown_abbreviation",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "CERV FREE LIM.0L. A",
+        "message": "Expanded as lemon-flavoured alcohol-free beer from the visible abbreviation; the ending and exact printed volume are unclear."
+      },
+      {
+        "type": "unknown_abbreviation",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "B.CONGE CONSUM 400",
+        "message": "The product abbreviation is unclear; assumed it denotes a frozen Consum product and interpreted 400 as 400 g."
+      },
+      {
+        "type": "ambiguous",
+        "severity": "low",
+        "field": "loyalty.savings",
+        "item_name_raw": null,
+        "message": "The receipt says this purchase would accrue 0.22 EUR to the MónConsum Xec Regal; recorded this stated prospective amount as savings."
+      }
+    ]
+  },
+  "expected_n8n": {
+    "receiptKey": "consum|01/000015|2026-10-16|29.34",
+    "purchasedAt": "2026-10-16T17:41:00.000Z",
+    "storeKey": "consum",
+    "storeName": "Consum",
+    "storeLegalName": "Consum, S.Coop.V.",
+    "storeAddress": "Avd. Alginet, nº 1, Silla",
+    "storeTaxId": "F46078986",
+    "receiptNumber": "01/000015",
+    "currency": "EUR",
+    "subtotal": 29.34,
+    "discountTotal": 0,
+    "taxTotal": 3.15,
+    "total": 29.34,
+    "paymentMethod": "card",
+    "cardBrand": "VISA",
+    "cardLast4": "0848",
+    "itemsCount": 10,
+    "status": "parsed"
+  }
+}

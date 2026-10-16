@@ -1,0 +1,133 @@
+{
+  "source": {
+    "n8n_payment_id": 7,
+    "parser_version": "2026-10-12.4",
+    "model": "gpt-6-luna"
+  },
+  "context": {
+    "received_at": "2026-10-13T18:24:03.000Z",
+    "timezone": "Europe/Madrid",
+    "known_product_keys": [],
+    "known_card_last4": [
+      "0848"
+    ]
+  },
+  "raw": {
+    "is_receipt": true,
+    "store": {
+      "name": "Consum",
+      "legal_name": "CONSUM, S. COOP. V.",
+      "address": "Avd. Alginet, nº 1",
+      "city": "Silla",
+      "country": "ES",
+      "tax_id": "F46078986",
+      "phone": "934904629"
+    },
+    "receipt": {
+      "number": "713880",
+      "purchased_at": "2026-10-13T20:19:00",
+      "cashier": null,
+      "register": "01/000015"
+    },
+    "currency": "EUR",
+    "items": [
+      {
+        "name_raw": "OU PAGES 1/2 DOTZ",
+        "name_normalized": "Ous de pagès, mitja dotzena",
+        "category": "other",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 2.6,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 2.6,
+        "vat_rate": 4,
+        "barcode": null
+      },
+      {
+        "name_raw": "AIGUA C/G PELEGRINO",
+        "name_normalized": "Aigua amb gas Pelegrino",
+        "category": "drinks",
+        "quantity": 6,
+        "unit": "pcs",
+        "unit_price": 1.39,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 8.34,
+        "vat_rate": 10,
+        "barcode": null
+      }
+    ],
+    "totals": {
+      "subtotal": 10.94,
+      "discount_total": 0,
+      "tax_total": 0.88,
+      "total": 10.94,
+      "taxes": [
+        {
+          "rate": 10,
+          "base": 7.56,
+          "amount": 0.78
+        },
+        {
+          "rate": 4,
+          "base": 2.5,
+          "amount": 0.1
+        }
+      ]
+    },
+    "payment": {
+      "method": "card",
+      "card_brand": "VISA",
+      "card_last4": "0848",
+      "amount_paid": 10.94,
+      "change": 0,
+      "auth_code": "UJSYOK",
+      "terminal": null
+    },
+    "loyalty": {
+      "program": "MonConsum",
+      "card_number_masked": null,
+      "points_earned": null,
+      "savings": 0.08
+    },
+    "issues": [
+      {
+        "type": "unknown_abbreviation",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "OU PAGES 1/2 DOTZ",
+        "message": "The receipt prints “OU PAGES 1/2 DOTZ.” I interpreted this as a half-dozen of pagès (farm-style) eggs; the product wording is abbreviated."
+      },
+      {
+        "type": "unknown_abbreviation",
+        "severity": "medium",
+        "field": "items.name_normalized",
+        "item_name_raw": "AIGUA C/G PELEGRINO",
+        "message": "I interpreted “C/G” as “amb gas” (carbonated) and retained “Pelegrino” as printed; the brand spelling may be abbreviated or misspelled."
+      }
+    ]
+  },
+  "expected_n8n": {
+    "receiptKey": "consum|713880|2026-10-13|10.94",
+    "purchasedAt": "2026-10-13T18:19:00.000Z",
+    "storeKey": "consum",
+    "storeName": "Consum",
+    "storeLegalName": "CONSUM, S. COOP. V.",
+    "storeAddress": "Avd. Alginet, nº 1, Silla",
+    "storeTaxId": "F46078986",
+    "receiptNumber": "713880",
+    "currency": "EUR",
+    "subtotal": 10.94,
+    "discountTotal": 0,
+    "taxTotal": 0.88,
+    "total": 10.94,
+    "paymentMethod": "card",
+    "cardBrand": "VISA",
+    "cardLast4": "0848",
+    "itemsCount": 2,
+    "status": "parsed"
+  }
+}

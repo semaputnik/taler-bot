@@ -1,0 +1,292 @@
+{
+  "source": {
+    "n8n_payment_id": 12,
+    "parser_version": "2026-10-15.1",
+    "model": "gpt-6-luna"
+  },
+  "context": {
+    "received_at": "2026-10-16T17:52:01.000Z",
+    "timezone": "Europe/Madrid",
+    "known_product_keys": [
+      "ametller-origen::infusio-de-menta-eco-18g-amet",
+      "ametller-origen::maionesa-trufada-can-bech-110-g",
+      "ametller-origen::nigiri-salmo-flamejat-ao-sh-185g",
+      "ametller-origen::ous-formatge-curat-sot",
+      "ametller-origen::pastrami-de-vedella-80g-amet",
+      "ametller-origen::salsa-brava-230g-ametller-ori",
+      "ametller-origen::sushi-caixa-22-ao-sh-364g-160-ml",
+      "ametller-origen::tomaquet-cor-de-bou-extra",
+      "consum::aigua-c-g-pelegrino",
+      "consum::cerv-free-limo",
+      "consum::ou-pages-1-2-dotz"
+    ],
+    "known_card_last4": [
+      "0848"
+    ]
+  },
+  "raw": {
+    "is_receipt": true,
+    "store": {
+      "name": "Mercadona",
+      "legal_name": "Mercadona, S.A.",
+      "address": "Carrer Berlín, 48",
+      "city": "Barcelona",
+      "country": "ES",
+      "tax_id": "A-46103834",
+      "phone": "936346153"
+    },
+    "receipt": {
+      "number": "4132-013-251931",
+      "purchased_at": "2026-10-16T19:24:00",
+      "cashier": null,
+      "register": null
+    },
+    "currency": "EUR",
+    "items": [
+      {
+        "name_raw": "PINYA PELADA NATURAL",
+        "name_normalized": "Pinya pelada natural",
+        "category": "produce",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 3.96,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 3.96,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "PINYA PELADA NATURAL",
+        "name_normalized": "Pinya pelada natural",
+        "category": "produce",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 4,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 4,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "BURRATA",
+        "name_normalized": "Burrata",
+        "category": "dairy",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 2.2,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 2.2,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "HAMB. XAI AMB ROMANI",
+        "name_normalized": "Hamburguesa de xai amb romaní",
+        "category": "meat",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 3.5,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 3.5,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "BURGER AMERICANA",
+        "name_normalized": "Burger americana",
+        "category": "meat",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 3.2,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 3.2,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "SALSITXA GINDI POLL",
+        "name_normalized": "Salsitxa Gindi de pollastre",
+        "category": "meat",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 2,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 2,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "SALMO MARINAT",
+        "name_normalized": "Salmó marinat",
+        "category": "fish",
+        "quantity": 2,
+        "unit": "pcs",
+        "unit_price": 3.5,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 7,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "RUCA 50 G",
+        "name_normalized": "Rúcula 50 g",
+        "category": "produce",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 0.85,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 0.85,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "DUO CANONGES RUCA",
+        "name_normalized": "Duo de canonges i rúcula",
+        "category": "produce",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 1.45,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 1.45,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "FILET SALMÓ",
+        "name_normalized": "Filet de salmó",
+        "category": "fish",
+        "quantity": null,
+        "unit": null,
+        "unit_price": null,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 18.94,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "STICKS LLONGANISSA",
+        "name_normalized": "Sticks de llonganissa",
+        "category": "meat",
+        "quantity": 3,
+        "unit": "pcs",
+        "unit_price": 1.1,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 3.3,
+        "vat_rate": null,
+        "barcode": null
+      }
+    ],
+    "totals": {
+      "subtotal": 50.4,
+      "discount_total": null,
+      "tax_total": 3.93,
+      "total": 50.4,
+      "taxes": [
+        {
+          "rate": 4,
+          "base": 11.98,
+          "amount": 0.48
+        },
+        {
+          "rate": 10,
+          "base": 34.49,
+          "amount": 3.45
+        }
+      ]
+    },
+    "payment": {
+      "method": "card",
+      "card_brand": "VISA",
+      "card_last4": "0848",
+      "amount_paid": 50.4,
+      "change": 0,
+      "auth_code": null,
+      "terminal": null
+    },
+    "loyalty": {
+      "program": null,
+      "card_number_masked": null,
+      "points_earned": null,
+      "savings": null
+    },
+    "issues": [
+      {
+        "type": "missing_field",
+        "severity": "low",
+        "field": "receipt.cashier",
+        "item_name_raw": null,
+        "message": "No cashier is identified on the receipt; the printed OP number was not treated as a cashier."
+      },
+      {
+        "type": "missing_field",
+        "severity": "low",
+        "field": "receipt.register",
+        "item_name_raw": null,
+        "message": "No register number is clearly identified."
+      },
+      {
+        "type": "missing_field",
+        "severity": "medium",
+        "field": "items.quantity",
+        "item_name_raw": "FILET SALMÓ",
+        "message": "Only the line amount (18.94) is printed; weight and unit price are not shown, so quantity and unit are null."
+      },
+      {
+        "type": "unknown_abbreviation",
+        "severity": "low",
+        "field": "items.name_normalized",
+        "item_name_raw": "SALSITXA GINDI POLL",
+        "message": "Expanded POLL as pollastre (chicken); retained Gindi as printed because it may be a brand or product term."
+      },
+      {
+        "type": "ambiguous",
+        "severity": "medium",
+        "field": "payment.auth_code",
+        "item_name_raw": null,
+        "message": "The authorization-code text after AUT is unclear; left auth_code null rather than guessing."
+      }
+    ]
+  },
+  "expected_n8n": {
+    "receiptKey": "mercadona|4132-013-251931|2026-10-16|50.4",
+    "purchasedAt": "2026-10-16T17:24:00.000Z",
+    "storeKey": "mercadona",
+    "storeName": "Mercadona",
+    "storeLegalName": "Mercadona, S.A.",
+    "storeAddress": "Carrer Berlín, 48, Barcelona",
+    "storeTaxId": "A-46103834",
+    "receiptNumber": "4132-013-251931",
+    "currency": "EUR",
+    "subtotal": 50.4,
+    "discountTotal": 0,
+    "taxTotal": 3.93,
+    "total": 50.4,
+    "paymentMethod": "card",
+    "cardBrand": "VISA",
+    "cardLast4": "0848",
+    "itemsCount": 11,
+    "status": "parsed"
+  }
+}

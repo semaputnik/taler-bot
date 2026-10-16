@@ -1,0 +1,190 @@
+{
+  "source": {
+    "n8n_payment_id": 10,
+    "parser_version": "2026-10-12.4",
+    "model": "gpt-6-luna"
+  },
+  "context": {
+    "received_at": "2026-10-14T18:33:57.000Z",
+    "timezone": "Europe/Madrid",
+    "known_product_keys": [
+      "consum::aigua-c-g-pelegrino",
+      "consum::cerv-free-limo"
+    ],
+    "known_card_last4": [
+      "0848"
+    ]
+  },
+  "raw": {
+    "is_receipt": true,
+    "store": {
+      "name": "Consum",
+      "legal_name": "CONSUM, S. COOP. V.",
+      "address": "Avd. Alginet, nº 1",
+      "city": "Silla",
+      "country": "ES",
+      "tax_id": "F46078986",
+      "phone": null
+    },
+    "receipt": {
+      "number": "580967",
+      "purchased_at": "2026-10-14T19:53:00",
+      "cashier": "Miguel",
+      "register": "03"
+    },
+    "currency": "EUR",
+    "items": [
+      {
+        "name_raw": "FARINA BLAT CONSUM",
+        "name_normalized": "Farina de blat Consum",
+        "category": "pantry",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 0.72,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 0.72,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "SUCRE BLANC ACOR1K",
+        "name_normalized": "Sucre blanc Acor 1 kg",
+        "category": "pantry",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 0.9,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 0.9,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "LLET SENC.CLAS 1.5L",
+        "name_normalized": "Llet sencera clàssica 1,5 l",
+        "category": "dairy",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 1.97,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 1.97,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "PAPER FORN.CONSUM30",
+        "name_normalized": "Paper de forn Consum",
+        "category": "household",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 1.7,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 1.7,
+        "vat_rate": null,
+        "barcode": null
+      },
+      {
+        "name_raw": "HIG.RESIT.CONSUM 8R",
+        "name_normalized": "Paper higiènic resistent Consum, 8 rotlles",
+        "category": "household",
+        "quantity": 1,
+        "unit": "pcs",
+        "unit_price": 3.7,
+        "reference_price": null,
+        "reference_unit": null,
+        "discount": null,
+        "line_total": 3.7,
+        "vat_rate": null,
+        "barcode": null
+      }
+    ],
+    "totals": {
+      "subtotal": 8.99,
+      "discount_total": 0,
+      "tax_total": 1.13,
+      "total": 8.99,
+      "taxes": [
+        {
+          "rate": 10,
+          "base": 0.82,
+          "amount": 0.08
+        },
+        {
+          "rate": 21,
+          "base": 4.46,
+          "amount": 0.94
+        },
+        {
+          "rate": 4,
+          "base": 2.58,
+          "amount": 0.11
+        }
+      ]
+    },
+    "payment": {
+      "method": "card",
+      "card_brand": "VISA",
+      "card_last4": "0848",
+      "amount_paid": 8.99,
+      "change": 0,
+      "auth_code": "NFZL83",
+      "terminal": null
+    },
+    "loyalty": {
+      "program": "MónConsum",
+      "card_number_masked": null,
+      "points_earned": null,
+      "savings": 0.07
+    },
+    "issues": [
+      {
+        "type": "unknown_abbreviation",
+        "severity": "low",
+        "field": "items.name_normalized",
+        "item_name_raw": "PAPER FORN.CONSUM30",
+        "message": "Expanded FORN. as paper de forn (baking paper). The printed ending '30' may indicate a pack size, but its meaning is unclear, so it was not included in the normalized name."
+      },
+      {
+        "type": "unknown_abbreviation",
+        "severity": "low",
+        "field": "items.name_normalized",
+        "item_name_raw": "HIG.RESIT.CONSUM 8R",
+        "message": "Expanded HIG.RESIT. as paper higiènic resistent and 8R as 8 rotlles; these expansions are inferred from common product abbreviations."
+      },
+      {
+        "type": "ambiguous",
+        "severity": "low",
+        "field": "loyalty.savings",
+        "item_name_raw": null,
+        "message": "The receipt says this purchase would accumulate 0.07 EUR toward a MónConsum gift voucher. Recorded this as loyalty savings; it is a stated future voucher amount, not a discount applied to this purchase."
+      }
+    ]
+  },
+  "expected_n8n": {
+    "receiptKey": "consum|580967|2026-10-14|8.99",
+    "purchasedAt": "2026-10-14T17:53:00.000Z",
+    "storeKey": "consum",
+    "storeName": "Consum",
+    "storeLegalName": "CONSUM, S. COOP. V.",
+    "storeAddress": "Avd. Alginet, nº 1, Silla",
+    "storeTaxId": "F46078986",
+    "receiptNumber": "580967",
+    "currency": "EUR",
+    "subtotal": 8.99,
+    "discountTotal": 0,
+    "taxTotal": 1.13,
+    "total": 8.99,
+    "paymentMethod": "card",
+    "cardBrand": "VISA",
+    "cardLast4": "0848",
+    "itemsCount": 5,
+    "status": "parsed"
+  }
+}
