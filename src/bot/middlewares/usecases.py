@@ -4,7 +4,7 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
-from src.bot.usecases import UseCases
+from src.usecases.container import UseCases
 
 
 class UseCasesMiddleware(BaseMiddleware):

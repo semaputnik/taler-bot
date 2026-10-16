@@ -7,7 +7,7 @@ from src.bot.handlers.setup import register_handlers
 from src.bot.middlewares.access import AccessMiddleware
 from src.bot.middlewares.i18n import I18nMiddleware
 from src.bot.middlewares.usecases import UseCasesMiddleware
-from src.bot.usecases import UseCases
+from src.usecases.container import UseCases
 
 
 def create_dispatcher(

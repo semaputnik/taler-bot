@@ -14,9 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.dispatcher import create_dispatcher
 from src.bot.i18n import create_translator_hub
-from src.bot.usecases import UseCases
 from src.database.dto.user import NewUserDTO
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
+from src.usecases.container import UseCases
 
 
 class RecordingSession(BaseSession):

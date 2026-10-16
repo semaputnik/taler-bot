@@ -10,10 +10,10 @@ from aiogram.fsm.storage.redis import DefaultKeyBuilder, RedisStorage
 
 from src.bot.dispatcher import create_dispatcher
 from src.bot.i18n import create_translator_hub
-from src.bot.usecases import UseCases
 from src.config.settings import Settings
 from src.database.engine import create_engine, create_sessionmaker
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
+from src.usecases.container import UseCases
 
 logger = logging.getLogger(__name__)
 

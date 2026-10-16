@@ -22,3 +22,15 @@ def test_usecases_and_database_do_not_import_aiogram_or_the_bot():
 def test_only_the_database_package_imports_sqlalchemy():
     for package in ("usecases", "bot", "domain", "config"):
         assert not {m for m in imports_of(package) if m.startswith("sqlalchemy")}, package
+
+
+def test_bot_reaches_the_database_only_through_the_composition_root():
+    # `bot/app.py` wires the SQLAlchemy Unit of Work into the use cases; everything else in
+    # `bot` talks to use cases and their own result types.
+    offenders = {
+        path.relative_to(SRC).as_posix()
+        for path in (SRC / "bot").rglob("*.py")
+        if path.name != "app.py" or path.parent != SRC / "bot"
+        if re.search(r"^\s*(?:from|import)\s+src\.database", path.read_text(), re.M)
+    }
+    assert not offenders

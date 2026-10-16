@@ -39,7 +39,7 @@ docker compose up -d --wait     # postgres on localhost:5447, redis on localhost
 uv sync
 uv run alembic upgrade head
 uv run python -m src
-uv run pytest                   # creates and migrates its own <db>_test database
+uv run pytest                   # needs only the dev Postgres; no env file (see Tests)
 uv run ruff check . && uv run ruff format .
 uv run alembic revision --autogenerate -m "..."   # then review it, see Database
 uv run alembic check
@@ -73,6 +73,7 @@ src/
     repositories/          # SQLAlchemy implementations
     uow/                   # SqlAlchemyUnitOfWork
   usecases/                # one class per user action, no aiogram imports
+    container.py           # UseCases: every use case, built once by App
     user/  receipt/
   domain/                  # pure business rules, no I/O
     enums.py
@@ -108,10 +109,16 @@ tests/
     `__init__`.
   - It is called as `await usecase(input_dto) -> result_dto`.
   - The bot passes in plain data (photo bytes, ids), never aiogram objects.
+  - Results are the use case's own pydantic types (e.g. `CurrentUser`), not database
+    DTOs, so the bot never depends on `database`.
 - **bot**:
   - Handlers and getters only call usecases and render the results through i18n.
-  - `App` builds the usecases once, and a middleware puts them into handler data, so
-    getters receive them as arguments. There is no DI library.
+  - `App` builds the usecases once (`UseCases` in `usecases/container.py`), and a
+    middleware puts them into handler data, so getters receive them as arguments. There
+    is no DI library.
+  - `bot/app.py` is the composition root: the only module in `bot` that may import
+    `database` (to wire the SQLAlchemy Unit of Work). `tests/test_layers.py` enforces
+    this and the other import rules.
 - **Business logic services** (a `services/` package) were considered and postponed. Use
   `domain` + `usecases` for now.
 
@@ -155,7 +162,9 @@ no string literals in windows.
 ### Tests
 
 - Repositories and usecases are tested against a real Postgres (a separate `<db>_test`
-  database, each test rolled back). There is no fake UoW: it would double the code and
+  database, each test rolled back). Tests never read the app's env file: the server is
+  the dev Postgres by default, or `TEST_DATABASE_URL` (its database name is only a prefix
+  for the scratch databases). There is no fake UoW: it would double the code and
   could not check SQL constraints.
 - The LLM is stubbed behind the `ReceiptParser` interface. `domain` is tested with JSON
   fixtures.

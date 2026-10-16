@@ -1,6 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from src.database.dto.user import NewUserDTO, UserDTO
+from src.database.dto.user import NewUserDTO
 from src.database.interfaces.uow import UnitOfWorkFactory
 
 
@@ -10,16 +10,30 @@ class EnsureUserInput(BaseModel):
     first_name: str | None
 
 
+class CurrentUser(BaseModel):
+    """The user an update comes from, as the bot layer sees them."""
+
+    model_config = ConfigDict(from_attributes=True, frozen=True)
+
+    id: int
+    username: str | None
+    first_name: str | None
+    is_allowed: bool
+    is_admin: bool
+    timezone: str
+    default_currency: str
+
+
 class EnsureUser:
     """Create the user on first contact (not allowed), refresh names, return the user."""
 
     def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
         self._uow_factory = uow_factory
 
-    async def __call__(self, data: EnsureUserInput) -> UserDTO:
+    async def __call__(self, data: EnsureUserInput) -> CurrentUser:
         async with self._uow_factory() as uow:
             user = await uow.users.upsert(
                 NewUserDTO(id=data.telegram_id, username=data.username, first_name=data.first_name)
             )
             await uow.commit()
-        return user
+        return CurrentUser.model_validate(user)
