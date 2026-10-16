@@ -111,7 +111,7 @@ async def test_card_shows_store_name_payment_and_counts(service, make_uow):
     assert (card.item_count, card.status) == (2, "parsed")
 
 
-async def test_resolve_issue_returns_the_card_without_the_issue(service, make_uow):
+async def test_resolve_issue_returns_the_card_with_no_open_issue(service, make_uow):
     receipt = await parsed_receipt(make_uow, parse(MILK, issues=(ParsedIssue(message="odd"),)))
     assert (await service.card(1, receipt.id)).open_issue_count == 1
     issue_id = (await load(make_uow, receipt.id)).issues[0].id
