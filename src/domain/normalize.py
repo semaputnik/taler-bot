@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 from src.domain.enums import Category, IssueSeverity, IssueSource
 from src.domain.parse import Parse, ParsedIssue, ParsedItem
+from src.exception import InvalidReceiptData
 
 # Bump whenever the prompt, the schema, the model or this module changes (n8n was 2026-10-15.1).
 PARSER_VERSION = "2026-10-17.1"
@@ -168,8 +169,8 @@ def normalize(
     timezone: str,
     known_product_keys: Collection[str],
     known_card_last4: Collection[str],
-    parser_version: str = PARSER_VERSION,
-    model: str | None = None,
+    parser_version: str,
+    model: str | None,
 ) -> Parse:
     """Turn the model's reading of a receipt into a `Parse`.
 
@@ -211,6 +212,8 @@ def normalize(
     store_key = slug(LEGAL_SUFFIX.sub(" ", store_name)) or "unknown-store"
 
     zone = ZoneInfo(timezone)
+    if received_at.tzinfo is None:
+        raise InvalidReceiptData("received_at must be timezone-aware")
     received = received_at.astimezone(zone)
     receipt = ai.get("receipt") or {}
     printed = clean(receipt.get("purchased_at"))

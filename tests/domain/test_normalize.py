@@ -7,6 +7,7 @@ import pytest
 
 from src.domain.enums import IssueSeverity, IssueSource
 from src.domain.normalize import PARSER_VERSION, normalize, slug
+from src.exception import InvalidReceiptData
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures" / "receipts"
 FIXTURES = sorted(FIXTURE_DIR.glob("*.json"))
@@ -167,6 +168,8 @@ CONTEXT = dict(
     timezone="Europe/Madrid",
     known_product_keys=frozenset(),
     known_card_last4=frozenset(),
+    parser_version=PARSER_VERSION,
+    model=None,
 )
 
 
@@ -415,3 +418,8 @@ def test_money_is_decimal_and_purchased_at_is_aware_in_the_zone():
     assert isinstance(parse.total, Decimal)
     assert str(parse.purchased_at.tzinfo) == "Europe/Madrid"
     assert parse.raw_output["store"]["name"] == "Mercadona"
+
+
+def test_naive_received_at_is_refused():
+    with pytest.raises(InvalidReceiptData):
+        normalize(raw_receipt(), **{**CONTEXT, "received_at": datetime(2026, 10, 12, 16, 0)})
