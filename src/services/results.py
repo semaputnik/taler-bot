@@ -50,4 +50,3 @@ class ReceiptCard(BaseModel):
     card_last4: str | None
     item_count: int
     open_issue_count: int
-    photo_count: int

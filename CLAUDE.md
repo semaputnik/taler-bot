@@ -84,7 +84,7 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService.save_photo, .edit_item, .resolve_issue, .soft_delete, …
+    receipt.py             # ReceiptService: save_photo, edit_item, edit_header, resolve_issue, soft_delete, card
     results.py             # CurrentUser, NewPhoto, ReceiptCard: the services' own pydantic types
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
@@ -99,7 +99,9 @@ tests/                     # domain/ database/ services/ bot/ + root conftest.py
 
 Not built yet (each arrives with its feature): `domain/normalize.py` and `domain/matching.py`
 (domain services), `integration/llm` (`ReceiptParser`) and `integration/storage`
-(`PhotoStorage`), `ReceiptService.parse`, photo intake and the dialogs.
+(`PhotoStorage`), `ReceiptService.parse` (its design is in the `services/receipt.py`
+docstring; `_apply_parse` and `_save_with_catalog` are its private path), photo intake and
+the dialogs.
 
 ### Layers and dependencies
 
@@ -220,7 +222,8 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
 
 - A `receipts` row is one receipt with one photo (`receipt_photos`, 1:1) and at most one
   parse (`receipt_parses`, 1:1). Status: `pending → parsing → parsed`, or `failed`,
-  `not_receipt`, `duplicate` (same receipt key as an earlier parsed receipt).
+  `not_receipt`, `duplicate` (same receipt key as an earlier parsed receipt;
+  `duplicate_of_id` points at it, and the row keeps its own parse).
 - Receipt header columns are the parse with `receipt_edits` applied. `receipt_items`
   and `receipt_issues` are rebuilt from `receipt_parses.normalized` whenever the parse is
   set or replaced. **These rules are enforced by the `Receipt` aggregate, not by

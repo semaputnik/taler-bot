@@ -1,4 +1,4 @@
-"""`ReceiptService`: the receipt actions the bot offers (ADR-0001).
+"""`ReceiptService`: the receipt actions the bot offers (ADR-0001, ADR-0002).
 
 Every write is one Unit of Work: load the aggregate, call one aggregate method, apply the
 `ParseOutcome` to the catalog, save, commit. The service holds no receipt rule; a rule showing
@@ -6,11 +6,13 @@ up here belongs on `Receipt`.
 
 LLM hook point (not implemented): a future `parse(user_id, receipt_id)` loads the receipt in one
 Unit of Work and closes it, calls the `ReceiptParser` with no transaction open (up to 120 s),
-then opens a new Unit of Work and calls `_apply_parse` with the normalized `Parse`. `merge`
-already uses `_apply_parse` for the parse it moves.
+then opens a new Unit of Work. There, if `find_by_key(user_id, parse.receipt_key)` finds another
+parsed receipt, it calls `Receipt.apply_parse` and then `mark_duplicate(found.id)`, so the
+duplicate keeps its parse but never collides with the unique parsed key; otherwise it calls
+`apply_parse` alone. Either way `_save_with_catalog` stores the result; `_apply_parse` is the
+private path for the plain case.
 """
 
-from dataclasses import replace
 from typing import Any
 
 from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
@@ -29,52 +31,20 @@ class ReceiptService:
 
     # --- photos ------------------------------------------------------------------------
 
-    async def save_photo(
-        self, user_id: int, photo: NewPhoto, reply_to_message_id: int | None = None
-    ) -> ReceiptCard:
-        """Attach the photo to the receipt the user replied to, else start a `pending` one.
+    async def save_photo(self, user_id: int, photo: NewPhoto) -> ReceiptCard:
+        """Start a `pending` receipt for the photo.
 
         A Telegram photo the user already sent is rejected before anything is written.
         """
         async with self._uow_factory() as uow:
-            await _reject_known(uow, user_id, photo)
-            receipt = None
-            if reply_to_message_id is not None:
-                receipt = await uow.receipts.find_by_message(user_id, reply_to_message_id)
-            if receipt is None:
-                receipt = await uow.receipts.add(Receipt.start(user_id, _photo_of(photo)))
-            else:
-                receipt.attach_photo(_photo_of(photo))
-                await uow.receipts.save(receipt)
+            unique_id = photo.telegram_file_unique_id
+            if unique_id is not None and await uow.receipts.photo_exists(user_id, unique_id):
+                raise DuplicatePhoto(unique_id)
+            receipt = await uow.receipts.add(Receipt.start(user_id, Photo(**photo.model_dump())))
             await uow.commit()
             return await _card(uow, receipt)
-
-    async def attach_photo(self, user_id: int, receipt_id: int, photo: NewPhoto) -> ReceiptCard:
-        async with self._uow_factory() as uow:
-            await _reject_known(uow, user_id, photo)
-            receipt = await _load(uow, user_id, receipt_id)
-            receipt.attach_photo(_photo_of(photo))
-            await uow.receipts.save(receipt)
-            await uow.commit()
-            return await _card(uow, receipt)
-
-    async def remember_message(self, user_id: int, receipt_id: int, message_id: int) -> None:
-        """Link a bot message to the receipt, so a photo sent as a reply to it attaches here."""
-        async with self._uow_factory() as uow:
-            await _load(uow, user_id, receipt_id)
-            await uow.receipts.link_message(receipt_id, user_id, message_id)
-            await uow.commit()
 
     # --- changes to a receipt ----------------------------------------------------------
-
-    async def undo(self, user_id: int, receipt_id: int, parse_id: int) -> ReceiptCard:
-        """Make an earlier parse current again; the user's edits stay."""
-        async with self._uow_factory() as uow:
-            receipt = await _load(uow, user_id, receipt_id)
-            outcome = receipt.undo_to(parse_id)
-            await _save_with_catalog(uow, receipt, outcome)
-            await uow.commit()
-            return await _card(uow, receipt)
 
     async def edit_item(
         self, user_id: int, receipt_id: int, item_ref: str, field: str, value: Any
@@ -103,33 +73,6 @@ class ReceiptService:
             await uow.receipts.save(receipt)
             await uow.commit()
             return await _card(uow, receipt)
-
-    async def merge(self, user_id: int, source_id: int, target_id: int) -> ReceiptCard:
-        """Move the source receipt's photos and current parse to the target; the source stays,
-        marked `merged`. Returns the target's card.
-        """
-        async with self._uow_factory() as uow:
-            source = await _load(uow, user_id, source_id)
-            target = await _load(uow, user_id, target_id)
-            source.merge_into(target.id)
-            await uow.receipts.save(source)
-
-            # The database allows a Telegram photo on one receipt only, and the source keeps
-            # its row, so the target gets a copy without the Telegram unique id.
-            moved = [replace(p, id=None, telegram_file_unique_id=None) for p in source.photos]
-            for photo in moved:
-                target.attach_photo(photo)
-            await uow.receipts.save(target)  # gives the copies their ids
-
-            if source.current_parse is not None:
-                parse = replace(
-                    source.current_parse,
-                    id=None,
-                    photo_ids=tuple(p.id for p in moved if p.id is not None),
-                )
-                await _apply_parse(uow, target, parse)
-            await uow.commit()
-            return await _card(uow, target)
 
     async def soft_delete(self, user_id: int, receipt_id: int) -> None:
         async with self._uow_factory() as uow:
@@ -161,23 +104,13 @@ async def _load(uow: UnitOfWork, user_id: int, receipt_id: int) -> Receipt:
     return receipt
 
 
-async def _reject_known(uow: UnitOfWork, user_id: int, photo: NewPhoto) -> None:
-    unique_id = photo.telegram_file_unique_id
-    if unique_id is not None and await uow.receipts.photo_exists(user_id, unique_id):
-        raise DuplicatePhoto(unique_id)
-
-
-def _photo_of(photo: NewPhoto) -> Photo:
-    return Photo(**photo.model_dump())
-
-
 async def _apply_parse(uow: UnitOfWork, receipt: Receipt, parse: Parse) -> None:
     outcome = receipt.apply_parse(parse)
     await _save_with_catalog(uow, receipt, outcome)
 
 
 async def _save_with_catalog(uow: UnitOfWork, receipt: Receipt, outcome: ParseOutcome) -> None:
-    """Save a receipt whose current parse changed, and keep the catalog in step.
+    """Save a receipt whose parse changed, and keep the catalog in step.
 
     Order matters: new stores and products must exist before the receipt's store and items
     refer to them; released products can only be deleted once the receipt's items stop
@@ -205,7 +138,7 @@ async def _save_with_catalog(uow: UnitOfWork, receipt: Receipt, outcome: ParseOu
 
 
 def _register(catalog: Catalog, receipt: Receipt) -> None:
-    parse = receipt.current_parse
+    parse = receipt.parse
     if parse is None or not parse.is_receipt or parse.store_key is None:
         return
     catalog.ensure_store(
@@ -246,5 +179,4 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         card_last4=header.card_last4,
         item_count=len(receipt.items),
         open_issue_count=sum(1 for i in receipt.issues if i.resolution is IssueResolution.OPEN),
-        photo_count=len(receipt.photos),
     )
