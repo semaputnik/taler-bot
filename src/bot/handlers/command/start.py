@@ -5,7 +5,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message
 from fluentogram import TranslatorRunner
 
-from src.usecases.user.ensure_user import CurrentUser
+from src.services.results import CurrentUser
 
 
 async def start(message: Message, user: CurrentUser, i18n: TranslatorRunner) -> None:

@@ -4,14 +4,14 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject
 
-from src.usecases.container import UseCases
+from src.services.container import Services
 
 
-class UseCasesMiddleware(BaseMiddleware):
-    """Puts the use-case container into handler data as `usecases`."""
+class ServicesMiddleware(BaseMiddleware):
+    """Puts the service container into handler data as `services`."""
 
-    def __init__(self, usecases: UseCases) -> None:
-        self._usecases = usecases
+    def __init__(self, services: Services) -> None:
+        self._services = services
 
     async def __call__(
         self,
@@ -19,5 +19,5 @@ class UseCasesMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
-        data["usecases"] = self._usecases
+        data["services"] = self._services
         return await handler(event, data)

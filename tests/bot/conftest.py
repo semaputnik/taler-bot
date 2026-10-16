@@ -13,7 +13,7 @@ from aiogram.types import Chat, Message, MessageEntity, Update, User
 
 from src.bot.dispatcher import create_dispatcher
 from src.bot.i18n import create_translator_hub
-from src.usecases.container import UseCases
+from src.services.container import Services
 from tests.helpers import add_allowed_user
 
 
@@ -83,7 +83,7 @@ async def harness(make_uow) -> AsyncIterator[BotHarness]:
     bot = Bot("123456:TEST", session=recording)
     dispatcher = create_dispatcher(
         storage=MemoryStorage(),
-        usecases=UseCases.build(make_uow),
+        services=Services.build(make_uow),
         translator_hub=create_translator_hub(),
     )
     yield BotHarness(bot, dispatcher, recording)

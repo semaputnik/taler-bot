@@ -3,7 +3,7 @@ class AppException(Exception):
 
 
 class DatabaseException(AppException):
-    """A database failure that use cases may need to react to."""
+    """A database failure that services may need to react to."""
 
 
 class UniqueViolationError(DatabaseException):
@@ -56,6 +56,14 @@ class InvalidReceiptData(DomainException):
 
 class UnknownStore(DomainException):
     """The catalog has no store with this key."""
+
+
+class ReceiptNotFound(AppException):
+    """No receipt with this id belongs to the user (another user's receipt counts as missing)."""
+
+
+class UserNotFound(AppException):
+    """No user with this id."""
 
 
 class IntegrationException(AppException):
