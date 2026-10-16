@@ -33,7 +33,7 @@ from src.exception import (
 )
 from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
-from src.services.results import IssueLine, NewPhoto, ParseResult, ReceiptCard
+from src.services.results import IssueLine, ItemRow, NewPhoto, ParseResult, ReceiptCard
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +235,28 @@ class ReceiptService:
             if original is None:
                 return card
             return card.model_copy(update={"duplicate_of": await _card(uow, original)})
+
+    async def items(self, user_id: int, receipt_id: int) -> list[ItemRow]:
+        """The receipt's items in parse order, edits applied. A deleted receipt still answers."""
+        async with self._uow_factory() as uow:
+            receipt = await _load(uow, user_id, receipt_id)
+        return [
+            ItemRow(
+                ref=i.ref,
+                printed_name=i.printed_name,
+                readable_name=i.readable_name,
+                category=str(i.category),
+                quantity=i.quantity,
+                unit=i.unit,
+                unit_price=i.unit_price,
+                reference_price=i.reference_price,
+                reference_unit=i.reference_unit,
+                discount=i.discount,
+                line_total=i.line_total,
+                vat_rate=i.vat_rate,
+            )
+            for i in receipt.items
+        ]
 
     async def _edit(self, user_id: int, receipt_id: int, edit: Edit) -> ReceiptCard:
         async with self._uow_factory() as uow:

@@ -336,3 +336,40 @@ async def test_the_card_of_a_duplicate_names_the_original(service, make_uow):
     )
     assert card.duplicate_of.duplicate_of is None
     assert (await service.card(1, original.id)).duplicate_of is None
+
+
+# --- items -----------------------------------------------------------------------------
+
+
+async def test_items_come_in_parse_order_with_an_edit_applied(service, make_uow):
+    receipt = await parsed_receipt(make_uow, parse(MILK, BREAD, total="3.20"))
+    await service.edit_item(1, receipt.id, "mercadona::pan#1", "line_total", "2.50")
+
+    rows = await service.items(1, receipt.id)
+
+    assert [r.ref for r in rows] == ["mercadona::leche#1", "mercadona::pan#1"]
+    assert [str(r.line_total) for r in rows] == ["1.20", "2.50"]
+    first = rows[0]
+    assert (first.printed_name, first.readable_name) == ("LECHE", "Leche")
+    assert (first.category, first.quantity, first.unit) == ("dairy", Decimal(1), "pcs")
+
+
+async def test_items_of_another_users_receipt_are_not_found(service, make_uow):
+    await add_allowed_user(make_uow, 2)
+    receipt = await parsed_receipt(make_uow, parse(MILK))
+
+    with pytest.raises(ReceiptNotFound):
+        await service.items(2, receipt.id)
+
+
+async def test_a_deleted_receipt_still_returns_its_items(service, make_uow):
+    receipt = await parsed_receipt(make_uow, parse(MILK, BREAD))
+    await service.soft_delete(1, receipt.id)
+
+    assert len(await service.items(1, receipt.id)) == 2
+
+
+async def test_a_receipt_without_items_returns_an_empty_list(service):
+    card = await service.save_photo(1, b"img", new_photo())
+
+    assert await service.items(1, card.receipt_id) == []

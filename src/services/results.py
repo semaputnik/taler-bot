@@ -55,6 +55,25 @@ class ReceiptCard(BaseModel):
     duplicate_of: ReceiptCard | None = None  # set by `ReceiptService.card` for a duplicate
 
 
+class ItemRow(BaseModel):
+    """One item of a receipt with the user's edits applied, for the item list and item view."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: str
+    printed_name: str
+    readable_name: str
+    category: str
+    quantity: Decimal
+    unit: str
+    unit_price: Decimal | None
+    reference_price: Decimal | None
+    reference_unit: str | None
+    discount: Decimal
+    line_total: Decimal | None
+    vat_rate: Decimal | None
+
+
 class IssueLine(BaseModel):
     """One doubt for the summary: which item it is about (if any) and what it says."""
 
