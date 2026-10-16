@@ -56,49 +56,49 @@ structural change, check what the book says (domain model ch. 1, repository ch. 
 layer ch. 4, Unit of Work ch. 6, aggregates ch. 7) and cite it. Decisions already taken are
 in `docs/adr/`; the project vocabulary is in `GLOSSARY.md`. Use those terms in code names.
 
-> **Status (2026-10-16):** the code written so far has per-table repositories for the
-> receipt parts and a `usecases/` package. ADR-0001 replaces both with the shape below.
-> The tree shows the target; the migration is a separate ticket.
-
 ```
 src/
   __main__.py              # App(settings).run()
-  exception.py             # AppException → DatabaseException, IntegrationException, …
+  exception.py             # AppException → DatabaseException, DomainException, IntegrationException, …
   config/                  # settings.py (root Settings) + bot.py, database.py, redis.py,
                            # llm.py, storage.py (nested models); standalone DatabaseSettings for Alembic
   bot/                     # everything that knows about aiogram
-    app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, services, lifespan
-    middlewares/           # access (users.is_allowed), i18n, services injection
+    app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, Services, lifespan
+    dispatcher.py          # create_dispatcher: middlewares + handlers
+    middlewares/           # services injection, access (ensures the user, drops strangers), i18n
     handlers/
-      command/             # one module per command, each exposes register_xxx(dp)
-      message/photo.py     # photo intake, works in any state
-      dialog/<name>/       # one folder per aiogram-dialog dialog (see Dialogs)
+      command/             # one module per command (only /start so far), each exposes register_xxx(dp)
+      dialog/              # one folder per aiogram-dialog dialog (none yet, see Dialogs)
     states/                # StatesGroup classes
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
   database/
-    engine.py              # create_engine / create_sessionmaker
+    engine.py              # create_engine / create_sessionmaker; install_error_translation
+    errors.py              # SQLSTATE → app exception mapping
     models/                # SQLAlchemy ORM; never leaves database/
-    interfaces/            # Protocols for repositories and the UoW (typing)
+    dto/                   # UserDTO / NewUserDTO (the user repository's plain-data types)
+    interfaces/            # Protocols for the UoW and the three repositories (typing)
     repositories/          # one per aggregate: ReceiptRepository, CatalogRepository, UserRepository
     mapping/               # ORM rows ↔ domain aggregates (the only place both are known)
     uow/                   # SqlAlchemyUnitOfWork
   services/                # application services: one class per entity, action methods
-    container.py           # Services: every service, built once by App
+    container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService.save_photo, .parse, .refine, .undo, .edit_item, …
-  domain/                  # the model: aggregates with behaviour, value objects, domain services
+    receipt.py             # ReceiptService.save_photo, .attach_photo, .undo, .edit_item, .merge, …
+    results.py             # CurrentUser, NewPhoto, ReceiptCard: the services' own pydantic types
+  domain/                  # the model: aggregates with behaviour, value objects
     enums.py
-    receipt.py             # Receipt aggregate (+ Photo, Parse, Item, Issue, Edit inside it)
+    receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
+    parse.py               # Parse, ParsedItem, ParsedIssue, ParseOutcome (value objects)
+    edits.py               # Edit and the editable fields
     catalog.py             # Catalog aggregate: Store, Product
-    normalize.py           # domain service: raw LLM output → Parse (port of n8n "Normalize Receipt")
-    matching.py            # domain service: receipt key, near-match
-  integration/             # adapters to external systems, behind interfaces
-    llm/                   # ReceiptParser: pydantic-ai agent, schema models, prompt
-    storage/               # PhotoStorage: RECEIPTS_DIR, atomic writes, .trash
 alembic/                   # migrations (alembic.ini at the repo root)
 .env.template, .env        # settings template (committed) and local values (git-ignored)
-tests/
+tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```
+
+Not built yet (each arrives with its feature): `domain/normalize.py` and `domain/matching.py`
+(domain services), `integration/llm` (`ReceiptParser`) and `integration/storage`
+(`PhotoStorage`), `ReceiptService.parse`, photo intake and the dialogs.
 
 ### Layers and dependencies
 
@@ -112,8 +112,8 @@ tests/
     `merge_into`, `mark_failed` keep the same invariants. Nothing outside the aggregate
     changes its parts. `Catalog` (stores and products) is a second aggregate: it outlives
     receipts and is edited by hand.
-  - **Domain services** are the few stateless operations that fit no entity: `normalize`
-    (raw LLM output → `Parse`) and near-matching across receipts.
+  - **Domain services** (planned) are the few stateless operations that fit no entity:
+    `normalize` (raw LLM output → `Parse`) and near-matching across receipts.
   - No DB, network or filesystem access. Tested with plain unit tests on the objects,
     and `normalize` with real receipt JSON fixtures.
 - **integration**: one package per external system. It maps external errors to
@@ -130,17 +130,22 @@ tests/
   - Read models for lists and stats (`ReceiptListRow`, …) are separate query methods
     that return pydantic models shaped for the screen, not aggregates.
 - **services** are application services (one class per entity, action methods:
-  `ReceiptService.parse`, `.refine`, `.undo`, `.edit_item`; `UserService.ensure`).
+  `ReceiptService.save_photo`, `.undo`, `.edit_item`, `.merge`; `UserService.ensure`). Every
+  method takes the `user_id`, and another user's receipt counts as not found.
   - A method does: load the aggregate → call the LLM or storage outside any transaction
     → call **one** aggregate method → save → commit. It contains no receipt rules; if a
     rule is appearing in a service, move it to the aggregate.
-  - Dependencies (UoW factory, `ReceiptParser`, `PhotoStorage`) come in through
-    `__init__`. The bot passes in plain data (photo bytes, ids), never aiogram objects.
+  - Dependencies (the UoW factory now; `ReceiptParser`, `PhotoStorage` later) come in
+    through `__init__`. The bot passes in plain data (`NewPhoto`, ids), never aiogram objects.
+  - A write that changes the current parse also applies the `ParseOutcome` to the catalog in
+    the same transaction: new stores and products first (the receipt's store and items refer
+    to them), the receipt, then the released products this receipt created.
   - Results are the service's own pydantic types (e.g. `CurrentUser`, `ReceiptCard`),
     so the bot never depends on `database` or `domain` internals.
 - **bot**:
-  - Handlers and getters only call services and render the results through i18n.
-  - `App` builds the services once (`Services` in `services/container.py`), and a
+  - Handlers and getters only call services and render the results through i18n. `bot`
+    never imports `domain`; it uses the services' result types.
+  - `App` builds the services once (`Services` in `services/container.py`, handler data key `services`), and a
     middleware puts them into handler data, so getters receive them as arguments. There
     is no DI library.
   - `bot/app.py` is the composition root: the only module in `bot` that may import
@@ -186,12 +191,18 @@ no string literals in windows.
 
 ### Tests
 
+- Layout: `tests/domain/` (aggregates, plain objects, no database), `tests/database/`
+  (repositories and constraints through the aggregate repositories), `tests/services/`
+  (services through the Unit of Work), `tests/bot/` (the real dispatcher with a stubbed
+  Telegram session), and root-level tests for settings, migrations, error translation, layers.
+  `tests/conftest.py` has `make_uow`; `tests/helpers.py` seeds users, catalogs and receipts;
+  `tests/domain/builders.py` builds `Parse` and `Photo` values.
 - Repositories and services are tested against a real Postgres (a separate `<db>_test`
   database, each test rolled back). Tests never read the app's env file: the server is
   the dev Postgres by default, or `TEST_DATABASE_URL` (its database name is only a prefix
   for the scratch databases). There is no fake UoW: it would double the code and
   could not check SQL constraints.
-- The LLM is stubbed behind the `ReceiptParser` interface. `domain` is tested with JSON
+- Once it exists, the LLM is stubbed behind the `ReceiptParser` interface. `domain` is tested with JSON
   fixtures.
 
 ### Database
@@ -202,10 +213,6 @@ bot messages), `uow.catalog` (stores, products), `uow.users`. Protocols in
 `src/database/interfaces/`, implementations in `src/database/repositories/`. Repositories
 have only the methods the code and tests need today; add more when a service needs them.
 Tests never import ORM models.
-
-> **Status (2026-10-16):** the code still has the per-table repositories (`uow.stores`,
-> `products`, `items`, `photos`, `parses`, `issues`, `edits`, `messages`) and DTOs from
-> tickets #5–#6. They are replaced by the aggregate repositories in the migration ticket.
 
 Models: `src/database/models/`. Enums: `src/domain/enums.py`. The design
 rationale is in `docs/features.md` (multi-photo).
