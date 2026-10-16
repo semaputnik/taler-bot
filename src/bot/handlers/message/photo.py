@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, Message, ReplyParameters
+from aiogram.utils.chat_action import ChatActionSender
 from fluentogram import TranslatorRunner
 
 from src.bot import render
@@ -24,6 +25,7 @@ from src.services.results import CurrentUser, NewPhoto, ParseResult
 logger = logging.getLogger(__name__)
 
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024  # the Bot API cannot serve bigger files
+TYPING_INTERVAL = 4.0  # seconds; Telegram shows "typing" for about 5 s after each action
 
 
 async def photo_intake(
@@ -106,7 +108,10 @@ async def _parse_and_reply(
 ) -> None:
     """Parse, then send exactly one reply. Nothing but cancellation leaves this function."""
     try:
-        result = await services.receipts.parse(user_id, receipt_id)
+        # The sender's worker dies on a failed `sendChatAction` and the block still ends
+        # normally, so the typing status never affects the parse or the reply.
+        async with ChatActionSender.typing(bot=bot, chat_id=chat_id, interval=TYPING_INTERVAL):
+            result = await services.receipts.parse(user_id, receipt_id)
         text = _render(result, i18n, ZoneInfo(tz))
     except Exception:
         # The service has already marked the receipt failed; the user must not wait for nothing.
