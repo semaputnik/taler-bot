@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from src.config.settings import DatabaseSettings, Settings
+from src.config.settings import ENV_FILE, DatabaseSettings, Settings
 
 DB_URL = "postgresql+asyncpg://u:p@db:5432/app"
 
@@ -105,3 +105,25 @@ def test_database_settings_read_the_env_file_and_ignore_other_keys(tmp_path: Pat
     env_file.write_text(f"DATABASE__URL={DB_URL}\nBOT__TOKEN=whatever\n")
 
     assert str(DatabaseSettings(_env_file=env_file).database.url) == DB_URL
+
+
+def test_default_env_file_lives_in_the_config_package() -> None:
+    assert ENV_FILE == Path("src/config/envs/.env").resolve()
+
+
+def test_env_template_has_every_key_and_no_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    template = ENV_FILE.with_name(".env.template")
+    values = dict(
+        line.split("=", 1)
+        for line in template.read_text().splitlines()
+        if line and not line.startswith("#")
+    )
+
+    assert set(values) == set(KEYS)
+    assert values["BOT__TOKEN"] == ""
+    assert values["LLM__API_KEY"] == ""
+
+    # With the two secrets filled in, the template is a valid configuration.
+    for key, value in values.items():
+        monkeypatch.setenv(key, value or "secret")
+    assert Settings(_env_file=None).database.url
