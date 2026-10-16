@@ -5,12 +5,14 @@ The live test is deselected by default (`uv run pytest -m llm` runs it). It need
 `tests/fixtures/images/receipt.*`.
 """
 
+import json
 import os
 from pathlib import Path
 
 import pytest
 from pydantic import SecretStr
 from pydantic_ai.exceptions import ModelHTTPError, UnexpectedModelBehavior
+from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
 from src.config.llm import LLMConfig
@@ -29,6 +31,33 @@ def parser_failing_with(error: Exception) -> OpenAIReceiptParser:
 
     parser._agent.model = FunctionModel(fail)  # swap the network model for a failing one
     return parser
+
+
+def parser_answering_with(raw: dict) -> OpenAIReceiptParser:
+    """A parser whose model returns `raw` as the structured output, with no network."""
+    parser = OpenAIReceiptParser(LLMConfig(api_key=SecretStr(SECRET)))
+
+    def answer(messages, info):
+        tool = next(t for t in info.output_tools)
+        return ModelResponse(parts=[ToolCallPart(tool_name=tool.name, args=raw)])
+
+    parser._agent.model = FunctionModel(answer)
+    return parser
+
+
+async def test_a_successful_call_yields_the_raw_parse_model_and_usage():
+    fixture = json.loads(
+        (Path(__file__).parents[2] / "fixtures" / "receipts" / "03-consum-parsed.json").read_text()
+    )
+    parser = parser_answering_with(fixture["raw"])
+
+    output = await parser.parse(b"img", "image/jpeg")
+
+    assert output.raw.is_receipt is True
+    assert len(output.raw.items) == 2
+    assert output.model == "gpt-6-luna"
+    assert output.input_tokens is not None and output.output_tokens is not None
+    assert output.duration_ms >= 0
 
 
 def test_the_system_prompt_is_the_n8n_file_verbatim():

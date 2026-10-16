@@ -59,7 +59,7 @@ class OpenAIReceiptParser:
             # Only the model call is in the try block, so anything escaping it (pydantic-ai,
             # openai, httpx, timeouts or an unforeseen SDK error) is a model/provider failure.
             raise LLMError(self._one_line(error)) from error
-        usage = result.usage()
+        usage = result.usage  # a property on AgentRunResult in pydantic-ai 2.x
         return ParserOutput(
             raw=result.output,
             model=self._model_name,
