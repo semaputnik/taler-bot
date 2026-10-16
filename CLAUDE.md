@@ -4,14 +4,15 @@ Telegram bot for household receipts. It replaces the **Receipts Bot** workflow i
 (workflow id `macYuhowbTG2gdRo`) and adds more features. The first goal is parity with
 that workflow. New features come after.
 
-**Planned features, dialogs and the multi-photo design are in [docs/features.md](docs/features.md).**
+**Planned features and dialogs are in [docs/features.md](docs/features.md).**
 Read it before working on any user-facing flow. Key decisions:
 - All data is scoped by the Telegram user (`user_id` on every table). There is no
   shared or household view yet.
 - The UI is in English. All user-facing text goes through fluentogram (`.ftl` files).
-- A repeat photo of a known receipt **refines** that receipt (all photos are re-parsed
-  together and the result is applied at once, with undo). It is no longer trashed as a
-  duplicate. This intentionally differs from n8n step 7 below.
+- **One receipt has one photo and one parse** (ADR-0002). A bad reading is fixed by
+  deleting the receipt and sending a new photo, or by editing values by hand. The same
+  photo sent twice is refused without an LLM call; the same receipt photographed twice
+  is marked `duplicate`, like n8n step 7 below.
 
 ## Stack
 
@@ -83,7 +84,7 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService.save_photo, .attach_photo, .undo, .edit_item, .merge, …
+    receipt.py             # ReceiptService.save_photo, .edit_item, .resolve_issue, .soft_delete, …
     results.py             # CurrentUser, NewPhoto, ReceiptCard: the services' own pydantic types
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
@@ -106,14 +107,14 @@ Not built yet (each arrives with its feature): `domain/normalize.py` and `domain
 `domain` imports nothing from the other layers. See ADR-0001.
 
 - **domain** is the model, not a utils bag. Rules live on the objects they protect:
-  - **Aggregates** are classes with behaviour. `Receipt` owns its photos, parses, items,
-    issues and edits; `receipt.apply_parse(parse)` rebuilds the header, items and
-    issues, applies the edits and reports orphaned products. `undo_to`, `record_edit`,
-    `merge_into`, `mark_failed` keep the same invariants. Nothing outside the aggregate
+  - **Aggregates** are classes with behaviour. `Receipt` owns its photo, parse, items,
+    issues and edits; `receipt.apply_parse(parse)` sets or replaces the parse, rebuilds
+    the header, items and issues, applies the edits and reports released products.
+    `record_edit`, `mark_failed`, `soft_delete` keep the same invariants. Nothing outside the aggregate
     changes its parts. `Catalog` (stores and products) is a second aggregate: it outlives
     receipts and is edited by hand.
   - **Domain services** (planned) are the few stateless operations that fit no entity:
-    `normalize` (raw LLM output → `Parse`) and near-matching across receipts.
+    `normalize` (raw LLM output → `Parse`, including the receipt key).
   - No DB, network or filesystem access. Tested with plain unit tests on the objects,
     and `normalize` with real receipt JSON fixtures.
 - **integration**: one package per external system. It maps external errors to
@@ -130,16 +131,16 @@ Not built yet (each arrives with its feature): `domain/normalize.py` and `domain
   - Read models for lists and stats (`ReceiptListRow`, …) are separate query methods
     that return pydantic models shaped for the screen, not aggregates.
 - **services** are application services (one class per entity, action methods:
-  `ReceiptService.save_photo`, `.undo`, `.edit_item`, `.merge`; `UserService.ensure`). Every
+  `ReceiptService.save_photo`, `.edit_item`, `.soft_delete`; `UserService.ensure`). Every
   method takes the `user_id`, and another user's receipt counts as not found.
   - A method does: load the aggregate → call the LLM or storage outside any transaction
     → call **one** aggregate method → save → commit. It contains no receipt rules; if a
     rule is appearing in a service, move it to the aggregate.
   - Dependencies (the UoW factory now; `ReceiptParser`, `PhotoStorage` later) come in
     through `__init__`. The bot passes in plain data (`NewPhoto`, ids), never aiogram objects.
-  - A write that changes the current parse also applies the `ParseOutcome` to the catalog in
-    the same transaction: new stores and products first (the receipt's store and items refer
-    to them), the receipt, then the released products this receipt created.
+  - A write that sets or replaces the parse also applies the `ParseOutcome` to the catalog
+    in the same transaction: new stores and products first (the receipt's store and items
+    refer to them), the receipt, then the released products this receipt created.
   - Results are the service's own pydantic types (e.g. `CurrentUser`, `ReceiptCard`),
     so the bot never depends on `database` or `domain` internals.
 - **bot**:
@@ -208,26 +209,22 @@ no string literals in windows.
 ### Database
 
 Every table is reached through the Unit of Work (`async with uow:`) and one repository per
-aggregate (ADR-0001): `uow.receipts` (receipt + photos, parses, items, issues, edits,
+aggregate (ADR-0001): `uow.receipts` (receipt + photo, parse, items, issues, edits),
 bot messages), `uow.catalog` (stores, products), `uow.users`. Protocols in
 `src/database/interfaces/`, implementations in `src/database/repositories/`. Repositories
 have only the methods the code and tests need today; add more when a service needs them.
 Tests never import ORM models.
 
-Models: `src/database/models/`. Enums: `src/domain/enums.py`. The design
-rationale is in `docs/features.md` (multi-photo).
+Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-0001
+(aggregates), ADR-0002 (one photo and one parse per receipt).
 
-- A `receipts` row is one **receipt**, not one photo. Each new photo first gets its own
-  receipt (`pending`) and is parsed alone. Then one of three things happens:
-  - it matches a known receipt, so its photo and parse move there, it becomes `merged`
-    (with `merged_into_id`), and the target is re-parsed from all photos;
-  - it is a near match, so it becomes `awaiting_match` until the user answers;
-  - otherwise it ends up `parsed`.
-- Receipt header columns are the current parse (`current_parse_id`) with `receipt_edits`
-  applied. `receipt_items` are rebuilt from `receipt_parses.normalized` whenever the
-  current parse changes. Active issues are those of the current parse. **These rules are
-  enforced by the `Receipt` aggregate, not by repositories or services**; the DB
-  constraints are the second line of defence.
+- A `receipts` row is one receipt with one photo (`receipt_photos`, 1:1) and at most one
+  parse (`receipt_parses`, 1:1). Status: `pending → parsing → parsed`, or `failed`,
+  `not_receipt`, `duplicate` (same receipt key as an earlier parsed receipt).
+- Receipt header columns are the parse with `receipt_edits` applied. `receipt_items`
+  and `receipt_issues` are rebuilt from `receipt_parses.normalized` whenever the parse is
+  set or replaced. **These rules are enforced by the `Receipt` aggregate, not by
+  repositories or services**; the DB constraints are the second line of defence.
 - Product name and category edits go to `store_products`, never to `receipt_edits`.
   A parse never overwrites `store_products` or `stores.name`.
 - Deleting a receipt is soft (`deleted_at`). Every list, stats query and uniqueness check
@@ -239,11 +236,11 @@ rationale is in `docs/features.md` (multi-photo).
   recreates the CHECK.
 - `source_ref = 'n8n:<id>'` marks imported rows, so the import can be rerun.
 - **Review every autogenerated migration.** Alembic silently drops `use_alter` FKs inside
-  `create_table`; the `receipts.current_parse_id` FK had to be added by hand. Partial
+  `create_table` (iteration 1 hit this with a receipts ↔ parses cycle). Partial
   indexes and CHECKs must be checked too. Run `alembic check` and a down/up round trip.
 - DB tests run against a real Postgres. Each test is rolled back (`tests/conftest.py`).
   Add a constraint test for every new constraint.
-- By-id lookups (`get(id)`) return soft-deleted receipts too, because undo and restore need
+- By-id lookups (`get(id)`) return soft-deleted receipts too, because restore needs
   them. Only list, stats and uniqueness queries filter `deleted_at IS NULL`.
 - Database errors never leave `src/database` as SQLAlchemy errors: one engine-level
   `handle_error` listener (`translate_db_error`, installed by `install_error_translation`)
@@ -259,8 +256,7 @@ rationale is in `docs/features.md` (multi-photo).
   DB stores the path relative to `RECEIPTS_DIR`.
 - Write to a temp file in the same directory, then rename it, so a crash never leaves a
   half-written photo.
-- Never delete photos. A deleted receipt's photos move to `RECEIPTS_DIR/.trash/`.
-  Repeat photos are kept and attached to their receipt (`receipt_photos`).
+- Never delete photos. A deleted receipt's photo moves to `RECEIPTS_DIR/.trash/`.
 
 ## What the n8n workflow does (the spec for parity)
 
@@ -368,4 +364,4 @@ Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root (ADR-0001: Receipt aggregate, services). See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root (ADR-0001: Receipt aggregate, services; ADR-0002: one photo per receipt). See `docs/agents/domain.md`.
