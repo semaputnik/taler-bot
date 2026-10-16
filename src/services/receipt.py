@@ -4,45 +4,176 @@ Every write is one Unit of Work: load the aggregate, call one aggregate method, 
 `ParseOutcome` to the catalog, save, commit. The service holds no receipt rule; a rule showing
 up here belongs on `Receipt`.
 
-LLM hook point (not implemented): a future `parse(user_id, receipt_id)` loads the receipt in one
-Unit of Work and closes it, calls the `ReceiptParser` with no transaction open (up to 120 s),
-then opens a new Unit of Work. There, if `find_by_key(user_id, parse.receipt_key)` finds another
-parsed receipt, it calls `Receipt.apply_parse` and then `mark_duplicate(found.id)`, so the
-duplicate keeps its parse but never collides with the unique parsed key; otherwise it calls
-`apply_parse` alone. Either way `_save_with_catalog` stores the result; `_apply_parse` is the
-private path for the plain case.
+`parse` is the exception: it is three short Units of Work around one model call that holds no
+transaction (CLAUDE.md "Code rules"), under a per-user lock so one user has one model call at a
+time.
 """
 
-from typing import Any
+import asyncio
+import logging
+import weakref
+from dataclasses import replace
+from typing import Any, Literal
+from zoneinfo import ZoneInfo
 
 from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
 from src.domain.catalog import Catalog
 from src.domain.edits import Edit
-from src.domain.enums import EditTarget, IssueResolution
+from src.domain.enums import EditTarget, IssueResolution, ReceiptStatus
+from src.domain.normalize import PARSER_VERSION, normalize
 from src.domain.parse import Parse, ParseOutcome
 from src.domain.receipt import Photo, Receipt
-from src.exception import DuplicatePhoto, InvalidIssueResolution, ReceiptNotFound
-from src.services.results import NewPhoto, ReceiptCard
+from src.exception import (
+    DuplicatePhoto,
+    IntegrationException,
+    InvalidIssueResolution,
+    InvalidReceiptData,
+    ReceiptNotFound,
+    UserNotFound,
+)
+from src.integration.llm import ParserOutput, ReceiptParser
+from src.integration.storage import PhotoStorage
+from src.services.results import IssueLine, NewPhoto, ParseResult, ReceiptCard
+
+logger = logging.getLogger(__name__)
+
+_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 
 class ReceiptService:
-    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+    def __init__(
+        self, uow_factory: UnitOfWorkFactory, storage: PhotoStorage, parser: ReceiptParser
+    ) -> None:
         self._uow_factory = uow_factory
+        self._storage = storage
+        self._parser = parser
+        # A lock lives while a parse holds or awaits it, so the registry does not grow.
+        self._parse_locks: weakref.WeakValueDictionary[int, asyncio.Lock] = (
+            weakref.WeakValueDictionary()
+        )
 
     # --- photos ------------------------------------------------------------------------
 
-    async def save_photo(self, user_id: int, photo: NewPhoto) -> ReceiptCard:
-        """Start a `pending` receipt for the photo.
+    async def save_photo(self, user_id: int, data: bytes, photo: NewPhoto) -> ReceiptCard:
+        """Store the photo's bytes, then start a `pending` receipt for it.
 
-        A Telegram photo the user already sent is rejected before anything is written.
+        A Telegram photo the user already sent is rejected before anything is written. The
+        file goes to disk between two Units of Work, so no transaction is open during the
+        write. If the second one fails the file stays (photos are never deleted).
         """
         async with self._uow_factory() as uow:
             unique_id = photo.telegram_file_unique_id
             if unique_id is not None and await uow.receipts.photo_exists(user_id, unique_id):
                 raise DuplicatePhoto(unique_id)
-            receipt = await uow.receipts.add(Receipt.start(user_id, Photo(**photo.model_dump())))
-            await uow.commit()
+            user = await uow.users.get(user_id)
+            if user is None:
+                raise UserNotFound(user_id)
+            timezone = user.timezone
+
+        path = _photo_path(photo, timezone)
+        await self._storage.save(path, data)
+
+        try:
+            async with self._uow_factory() as uow:
+                receipt = await uow.receipts.add(
+                    Receipt.start(user_id, Photo(path=path, **photo.model_dump()))
+                )
+                await uow.commit()
+        except Exception:
+            logger.warning("Receipt was not saved; photo file left on disk: %s", path)
+            raise
+        async with self._uow_factory() as uow:
             return await _card(uow, receipt)
+
+    # --- parsing -----------------------------------------------------------------------
+
+    async def parse(self, user_id: int, receipt_id: int) -> ParseResult:
+        """Read a `pending` or `failed` receipt's photo with the model and store the parse.
+
+        1. Unit of Work: load, read the photo and the normalization context, `mark_parsing`.
+        2. No transaction: read the file, call the model, `normalize`.
+        3. Unit of Work: load again, `apply_parse`, mark a duplicate, save with the catalog.
+
+        A model, storage or normalization failure marks the receipt `failed` (outcome
+        `failed`); any other error marks it failed and is re-raised. A cancelled task (shutdown)
+        awaits no database work, so its receipt stays `parsing`: recovering those at start-up is
+        a follow-up.
+        """
+        lock = self._parse_locks.setdefault(user_id, asyncio.Lock())
+        async with lock:
+            return await self._parse(user_id, receipt_id)
+
+    async def _parse(self, user_id: int, receipt_id: int) -> ParseResult:
+        async with self._uow_factory() as uow:
+            receipt = await _load(uow, user_id, receipt_id)
+            receipt.mark_parsing()
+            user = await uow.users.get(user_id)
+            if user is None:
+                raise UserNotFound(user_id)
+            known_product_keys = set((await uow.catalog.get(user_id)).products)
+            known_card_last4 = await uow.receipts.known_card_last4(user_id)
+            await uow.receipts.save(receipt)
+            await uow.commit()
+            path, mime_type = receipt.photo.path, receipt.photo.mime_type
+            received_at = receipt.photo.received_at
+            timezone = user.timezone
+        assert path is not None, f"receipt {receipt_id} has no stored photo"
+
+        try:
+            try:
+                image = await self._storage.read(path)
+                output = await self._parser.parse(image, mime_type or "image/jpeg")
+                parse = _stamped(
+                    normalize(
+                        output.raw.model_dump(),
+                        received_at=received_at,
+                        timezone=timezone,
+                        known_product_keys=known_product_keys,
+                        known_card_last4=known_card_last4,
+                        parser_version=PARSER_VERSION,
+                        model=output.model,
+                    ),
+                    output,
+                )
+            except (IntegrationException, InvalidReceiptData) as error:
+                return await self._fail(user_id, receipt_id, str(error))
+            return await self._store_parse(user_id, receipt_id, parse)
+        except Exception as error:  # not an expected failure: leave no receipt `parsing`
+            try:
+                await self._fail(user_id, receipt_id, f"unexpected error: {type(error).__name__}")
+            except Exception:
+                logger.exception("Receipt %s could not be marked failed", receipt_id)
+            raise
+
+    async def _store_parse(self, user_id: int, receipt_id: int, parse: Parse) -> ParseResult:
+        async with self._uow_factory() as uow:
+            receipt = await _load(uow, user_id, receipt_id)
+            earlier = None
+            if parse.receipt_key is not None:
+                earlier = await uow.receipts.find_by_key(user_id, parse.receipt_key)
+            outcome = receipt.apply_parse(parse, same_key_as=earlier.id if earlier else None)
+            await _save_with_catalog(uow, receipt, outcome)
+            await uow.commit()
+            return ParseResult(
+                card=await _card(uow, receipt),
+                outcome=_OUTCOMES[receipt.status],
+                duplicate_of=await _card(uow, earlier)
+                if receipt.duplicate_of_id and earlier
+                else None,
+                issues=[
+                    IssueLine(item_name=i.item_name, message=i.message)
+                    for i in receipt.top_issues()
+                ],
+            )
+
+    async def _fail(self, user_id: int, receipt_id: int, message: str) -> ParseResult:
+        """Mark the receipt `failed` in its own Unit of Work."""
+        async with self._uow_factory() as uow:
+            receipt = await _load(uow, user_id, receipt_id)
+            receipt.mark_failed(message)
+            await uow.receipts.save(receipt)
+            await uow.commit()
+            return ParseResult(card=await _card(uow, receipt), outcome="failed", error=message)
 
     # --- changes to a receipt ----------------------------------------------------------
 
@@ -95,6 +226,32 @@ class ReceiptService:
 
 
 # --- helpers ---------------------------------------------------------------------------
+
+
+_OUTCOMES: dict[ReceiptStatus, Literal["parsed", "not_receipt", "duplicate"]] = {
+    ReceiptStatus.PARSED: "parsed",
+    ReceiptStatus.NOT_RECEIPT: "not_receipt",
+    ReceiptStatus.DUPLICATE: "duplicate",
+}
+
+
+def _stamped(parse: Parse, output: ParserOutput) -> Parse:
+    return replace(
+        parse,
+        input_tokens=output.input_tokens,
+        output_tokens=output.output_tokens,
+        duration_ms=output.duration_ms,
+    )
+
+
+def _photo_path(photo: NewPhoto, timezone: str) -> str:
+    """`yyyy/mm/receipt_<yyyy-MM-dd_HH-mm-ss>_<message_id>.<ext>` in the user's time zone."""
+    local = photo.received_at.astimezone(ZoneInfo(timezone))
+    extension = _EXTENSIONS.get(photo.mime_type or "", "jpg")
+    return (
+        f"{local:%Y/%m}/receipt_{local:%Y-%m-%d_%H-%M-%S}_{photo.telegram_message_id or 0}"
+        f".{extension}"
+    )
 
 
 async def _load(uow: UnitOfWork, user_id: int, receipt_id: int) -> Receipt:

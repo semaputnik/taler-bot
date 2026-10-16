@@ -34,6 +34,10 @@ asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "-m 'not llm'"
+markers = [
+    "llm: calls the real model; needs LLM__API_KEY and a photo in tests/fixtures/images (run with -m llm)",
+]
 filterwarnings = [
     # fluent_compiler still uses a deprecated ast.Module call.
     "ignore::DeprecationWarning:fluent_compiler.*",

@@ -19,7 +19,7 @@ and dependencies, not commitments.
 
 ## Stages
 
-**Stage 0: n8n parity.** Photo → save → parse → summary. Covers "not a receipt",
+**Stage 0: n8n parity (done).** Photo → save → parse → summary. Covers "not a receipt",
 failures, the same photo sent twice and the same receipt photographed twice.
 
 **Stage 1: working with a receipt after parsing**

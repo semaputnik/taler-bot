@@ -40,7 +40,8 @@ docker compose up -d --wait     # postgres on localhost:5447, redis on localhost
 uv sync
 uv run alembic upgrade head
 uv run python -m src
-uv run pytest                   # needs only the dev Postgres; no env file (see Tests)
+uv run pytest                   # needs only the dev Postgres; no env file (see Tests); skips the `llm` test
+LLM__API_KEY=... uv run pytest -m llm   # the live model test: needs the key exported and tests/fixtures/images/receipt.jpg
 uv run ruff check . && uv run ruff format .
 uv run alembic revision --autogenerate -m "..."   # then review it, see Database
 uv run alembic check
@@ -66,9 +67,11 @@ src/
   bot/                     # everything that knows about aiogram
     app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, Services, lifespan
     dispatcher.py          # create_dispatcher: middlewares + handlers
-    middlewares/           # services injection, access (ensures the user, drops strangers), i18n
+    tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
+    middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (only /start so far), each exposes register_xxx(dp)
+      message/photo.py     # photo intake: save, reply, parse in the background; catch-all "send me a photo"
       dialog/              # one folder per aiogram-dialog dialog (none yet, see Dialogs)
     states/                # StatesGroup classes
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
@@ -84,8 +87,11 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService: save_photo, edit_item, edit_header, resolve_issue, soft_delete, card
-    results.py             # CurrentUser, NewPhoto, ReceiptCard: the services' own pydantic types
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, soft_delete, card
+    results.py             # CurrentUser, NewPhoto, ReceiptCard, ParseResult: the services' own pydantic types
+  integration/
+    llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
+    storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
@@ -97,10 +103,7 @@ alembic/                   # migrations (alembic.ini at the repo root)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```
 
-Not built yet (each arrives with its feature): `domain/normalize.py` and `domain/matching.py`
-(domain services), `integration/llm` (`ReceiptParser`) and `integration/storage`
-(`PhotoStorage`), `ReceiptService.parse` (its design is in the `services/receipt.py`
-docstring; `_apply_parse` and `_save_with_catalog` are its private path), photo intake and
+Not built yet (each arrives with its feature): `domain/matching.py` (a domain service) and
 the dialogs.
 
 ### Layers and dependencies
@@ -138,7 +141,7 @@ the dialogs.
   - A method does: load the aggregate → call the LLM or storage outside any transaction
     → call **one** aggregate method → save → commit. It contains no receipt rules; if a
     rule is appearing in a service, move it to the aggregate.
-  - Dependencies (the UoW factory now; `ReceiptParser`, `PhotoStorage` later) come in
+  - Dependencies (the UoW factory and `PhotoStorage` now; `ReceiptParser` later) come in
     through `__init__`. The bot passes in plain data (`NewPhoto`, ids), never aiogram objects.
   - A write that sets or replaces the parse also applies the `ParseOutcome` to the catalog
     in the same transaction: new stores and products first (the receipt's store and items
@@ -148,6 +151,12 @@ the dialogs.
 - **bot**:
   - Handlers and getters only call services and render the results through i18n. `bot`
     never imports `domain`; it uses the services' result types.
+  - Texts: call `i18n.get("receipt-saved", **vars)` with the `.ftl` key. The attribute form
+    (`i18n.receipt.saved()`) cannot reach keys with more than one dash segment, and a failed
+    lookup leaves the translator's chain polluted.
+  - `App` owns one `TaskRegistry` (handler data key `tasks`, put there by `TasksMiddleware`);
+    `lifespan` awaits pending parses for up to `TASK_SHUTDOWN_TIMEOUT`, cancels the rest, then
+    closes the bot session. The photo router is included last: it holds a catch-all.
   - `App` builds the services once (`Services` in `services/container.py`, handler data key `services`), and a
     middleware puts them into handler data, so getters receive them as arguments. There
     is no DI library.
@@ -159,7 +168,7 @@ the dialogs.
 
 - **Never hold a DB transaction across an LLM call** (up to 120 s). Photo intake is two
   service calls:
-  1. `ReceiptService.save_photo` saves the file and a `pending` receipt, commits, and the
+  1. `ReceiptService.save_photo(user_id, data, photo)` saves the file and a `pending` receipt, commits, and the
      bot replies "✅ Saved, reading…";
   2. `ReceiptService.parse` runs as a background task (`asyncio.create_task`, with a reference
      kept and errors logged). It calls the LLM with no transaction open, then writes the
@@ -196,7 +205,7 @@ no string literals in windows.
 
 - Layout: `tests/domain/` (aggregates, plain objects, no database), `tests/database/`
   (repositories and constraints through the aggregate repositories), `tests/services/`
-  (services through the Unit of Work), `tests/bot/` (the real dispatcher with a stubbed
+  (services through the Unit of Work), `tests/integration/` (adapters, e.g. `LocalPhotoStorage` on a tmp dir), `tests/bot/` (the real dispatcher with a stubbed
   Telegram session), and root-level tests for settings, migrations, error translation, layers.
   `tests/conftest.py` has `make_uow`; `tests/helpers.py` seeds users, catalogs and receipts;
   `tests/domain/builders.py` builds `Parse` and `Photo` values.
@@ -205,8 +214,10 @@ no string literals in windows.
   the dev Postgres by default, or `TEST_DATABASE_URL` (its database name is only a prefix
   for the scratch databases). There is no fake UoW: it would double the code and
   could not check SQL constraints.
-- Once it exists, the LLM is stubbed behind the `ReceiptParser` interface. `domain` is tested with JSON
-  fixtures.
+- The LLM is stubbed behind the `ReceiptParser` interface (`StubReceiptParser` in `tests/stubs.py`).
+  `domain` is tested with JSON fixtures. The one `llm`-marked test calls the real model; it reads
+  `LLM__API_KEY` (and optionally `LLM__MODEL`) from the process environment only, never `.env`,
+  and skips without a key or photo: `LLM__API_KEY=... uv run pytest -m llm`.
 
 ### Database
 
@@ -262,6 +273,9 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
 - Never delete photos. A deleted receipt's photo moves to `RECEIPTS_DIR/.trash/`.
 
 ## What the n8n workflow does (the spec for parity)
+
+Steps 2 to 8 are done in taler-bot (stage 0, `handlers/message/photo.py`); step 1 is the
+access middleware.
 
 Trigger: a Telegram `message` update to the **Casa Receipts bot**.
 

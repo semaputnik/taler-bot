@@ -127,7 +127,15 @@ def photo_from_row(row: ReceiptPhoto) -> Photo:
 # `normalized` holds the Parse minus the fields that have their own columns. Decimal is
 # written as str and datetime as ISO text, so nothing is lost to JSON floats.
 
-_PARSE_COLUMNS = {"id", "raw_output", "model", "parser_version"}
+_PARSE_COLUMNS = {
+    "id",
+    "raw_output",
+    "model",
+    "parser_version",
+    "input_tokens",
+    "output_tokens",
+    "duration_ms",
+}
 _PARSE_MONEY = (
     "subtotal",
     "discount_total",
@@ -151,6 +159,9 @@ def parse_values(parse: Parse, *, receipt_id: int | None) -> dict[str, Any]:
         "parser_version": parse.parser_version,
         "model": parse.model,
         "raw_output": parse.raw_output,
+        "input_tokens": parse.input_tokens,
+        "output_tokens": parse.output_tokens,
+        "duration_ms": parse.duration_ms,
         "normalized": normalized_of(parse),
     }
 
@@ -178,6 +189,9 @@ def parse_from_row(row: ReceiptParse) -> Parse:
         "raw_output": row.raw_output,
         "model": row.model,
         "parser_version": row.parser_version,
+        "input_tokens": row.input_tokens,
+        "output_tokens": row.output_tokens,
+        "duration_ms": row.duration_ms,
     }
     data = row.normalized
     if data is None:  # a reading that produced nothing usable: only what the columns say

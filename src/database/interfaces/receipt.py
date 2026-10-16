@@ -22,6 +22,10 @@ class ReceiptRepository(Protocol):
         """The user's parsed, not deleted receipt with this key."""
         ...
 
+    async def known_card_last4(self, user_id: int) -> set[str]:
+        """Card endings of the user's parsed, not deleted receipts."""
+        ...
+
     async def product_keys_in_items_elsewhere(
         self, user_id: int, product_keys: set[str], excluding_receipt_id: int
     ) -> set[str]:

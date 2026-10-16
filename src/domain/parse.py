@@ -72,6 +72,9 @@ class Parse:
     raw_output: dict[str, Any] | None = None
     model: str | None = None
     parser_version: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    duration_ms: int | None = None
 
     def __post_init__(self) -> None:
         if self.purchased_at is not None and self.purchased_at.tzinfo is None:
