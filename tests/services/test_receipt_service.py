@@ -252,14 +252,14 @@ async def test_a_reparse_keeps_a_product_another_receipt_also_uses(service, make
 # --- soft_delete and the card of a deleted or duplicate receipt ---------------------------
 
 
-async def stored_receipt(service, storage) -> int:
+async def stored_receipt(service) -> int:
     """A receipt saved through the service, so its photo really is in the storage."""
     card = await service.save_photo(1, b"img", new_photo())
     return card.receipt_id
 
 
 async def test_soft_delete_sets_deleted_at_and_trashes_the_file(service, tmp_storage, make_uow):
-    receipt_id = await stored_receipt(service, tmp_storage)
+    receipt_id = await stored_receipt(service)
     (path,) = stored_files(tmp_storage)
     async with make_uow() as uow:
         receipt = await uow.receipts.get(receipt_id)
@@ -276,7 +276,7 @@ async def test_soft_delete_sets_deleted_at_and_trashes_the_file(service, tmp_sto
 async def test_a_failing_trash_still_leaves_the_receipt_deleted(
     service, tmp_storage, make_uow, caplog
 ):
-    receipt_id = await stored_receipt(service, tmp_storage)
+    receipt_id = await stored_receipt(service)
 
     async def broken(relative_path: str) -> None:
         raise StorageError("disk full")
@@ -291,7 +291,7 @@ async def test_a_failing_trash_still_leaves_the_receipt_deleted(
 
 
 async def test_a_parsing_receipt_cannot_be_deleted(service, tmp_storage, make_uow):
-    receipt_id = await stored_receipt(service, tmp_storage)
+    receipt_id = await stored_receipt(service)
     async with make_uow() as uow:
         receipt = await uow.receipts.get(receipt_id)
         receipt.mark_parsing()

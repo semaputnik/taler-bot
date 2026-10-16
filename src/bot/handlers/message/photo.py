@@ -1,8 +1,8 @@
 """Photo intake: save the photo, answer at once, read it in the background, answer again.
 
-Registered on its own router that `register_handlers` includes after the commands and the
-dialogs. aiogram tries a router's own handlers before its sub-routers, so a catch-all on the
-dispatcher itself would swallow a dialog's text input; here it comes last.
+The photo handler is included before the dialogs (a dialog's message handler takes every
+message sent while it is open, so a photo would never get through); the catch-all "send me a
+photo" is included after them, so it never swallows a dialog's text input.
 """
 
 import logging
@@ -11,18 +11,19 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.types import Message, ReplyParameters
+from aiogram.types import InlineKeyboardMarkup, Message, ReplyParameters
 from fluentogram import TranslatorRunner
 
+from src.bot import render
+from src.bot.keyboards.receipt import receipt_keyboard
 from src.bot.tasks import TaskRegistry
 from src.exception import DuplicatePhoto
 from src.services.container import Services
-from src.services.results import CurrentUser, NewPhoto, ParseResult, ReceiptCard
+from src.services.results import CurrentUser, NewPhoto, ParseResult
 
 logger = logging.getLogger(__name__)
 
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024  # the Bot API cannot serve bigger files
-_DATE_FORMAT = "%d.%m.%Y %H:%M"
 
 
 async def photo_intake(
@@ -111,15 +112,22 @@ async def _parse_and_reply(
         # The service has already marked the receipt failed; the user must not wait for nothing.
         logger.exception("Parsing receipt %s failed", receipt_id)
         text = i18n.get("receipt-failed")
-    await _send(bot, chat_id, reply_to, text)
+    await _send(bot, chat_id, reply_to, text, receipt_keyboard(i18n, receipt_id))
 
 
-async def _send(bot: Bot, chat_id: int, reply_to: int, text: str) -> None:
+async def _send(
+    bot: Bot,
+    chat_id: int,
+    reply_to: int,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
     """A Telegram failure is logged, never raised into the caller."""
     try:
         await bot.send_message(
             chat_id,
             text,
+            reply_markup=reply_markup,
             reply_parameters=ReplyParameters(message_id=reply_to, allow_sending_without_reply=True),
         )
     except TelegramAPIError:
@@ -134,28 +142,19 @@ def _render(result: ParseResult, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
             return i18n.get("receipt-not-a-receipt")
         case "duplicate":
             original = result.duplicate_of or result.card
-            store, date, amount = (
-                _store(original, i18n),
-                _date(original, tz),
-                _amount(original, i18n),
+            return i18n.get(
+                "receipt-duplicate",
+                store=render.store(original, i18n),
+                date=render.date(original, tz),
+                amount=render.amount(original, i18n),
             )
-            return i18n.get("receipt-duplicate", store=store, date=date, amount=amount)
         case _:
             return i18n.get("receipt-failed")
 
 
 def _summary(result: ParseResult, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
     card = result.card
-    store, date, amount = _store(card, i18n), _date(card, tz), _amount(card, i18n)
-    payment = _payment(card, i18n)
-    text = i18n.get(
-        "receipt-summary",
-        store=store,
-        date=date,
-        amount=amount,
-        payment=payment,
-        items=str(card.item_count),
-    )
+    text = render.header(card, i18n, tz)
     if not result.issues:
         return text
     lines = []
@@ -173,35 +172,17 @@ def _summary(result: ParseResult, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
     return "\n\n".join((text, "\n".join((header, *lines))))
 
 
-def _store(card: ReceiptCard, i18n: TranslatorRunner) -> str:
-    return escape(card.store_name) if card.store_name else i18n.get("receipt-unknown-store")
-
-
-def _date(card: ReceiptCard, tz: ZoneInfo) -> str:
-    return card.purchased_at.astimezone(tz).strftime(_DATE_FORMAT) if card.purchased_at else ""
-
-
-def _amount(card: ReceiptCard, i18n: TranslatorRunner) -> str:
-    if card.total is None:
-        return i18n.get("receipt-amount-unknown")
-    currency = escape(card.currency or "")
-    return i18n.get("receipt-amount", total=format(card.total, ".2f"), currency=currency)
-
-
-def _payment(card: ReceiptCard, i18n: TranslatorRunner) -> str:
-    if card.card_last4:
-        if card.card_brand:
-            brand = escape(card.card_brand)
-            return i18n.get("receipt-payment-card-brand", brand=brand, last4=card.card_last4)
-        return i18n.get("receipt-payment-card", last4=card.card_last4)
-    if card.payment_method:
-        return i18n.get("receipt-payment-method", method=escape(card.payment_method))
-    return i18n.get("receipt-payment-none")
-
-
 def register_photo(dp) -> None:
+    """The photo handler: before the dialogs, so a photo is accepted while a dialog is open
+    (a dialog consumes every message sent in its states)."""
     router = Router(name="photo")
     router.message.register(photo_intake, F.photo | F.document)
-    # Any other message that is not a command (commands are handled before this router).
+    dp.include_router(router)
+
+
+def register_not_a_photo(dp) -> None:
+    """The catch-all: after the dialogs, so it never swallows a dialog's text input."""
+    router = Router(name="not-a-photo")
+    # Any message that is not a command (commands are handled before this router).
     router.message.register(not_a_photo, ~F.text.startswith("/"))
     dp.include_router(router)

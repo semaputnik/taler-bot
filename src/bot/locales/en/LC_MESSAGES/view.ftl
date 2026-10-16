@@ -25,3 +25,16 @@ receipt-issues = ⚠️ Issues ({ $count }):
 receipt-issue-line = • { $item }: { $message }
 receipt-issue-line-plain = • { $message }
 receipt-issues-more = …
+
+card-deleted-alert = This receipt was deleted.
+card-deleted = 🗑 This receipt was deleted.
+card-deleted-done = 🗑 Deleted
+card-status-pending = ⏳ Waiting to be read.
+card-status-parsing = ⏳ Being read…
+card-status-failed = ❌ Could not be read.
+card-status-not-receipt = 🤔 Not a receipt.
+card-status-duplicate = ♻️ Duplicate.
+card-received = Photo received: { $date }
+card-repeats = Repeats <b>{ $store }</b>, { $date }, { $amount }
+card-delete-confirm = Delete this receipt? The photo is kept in the trash.
+card-cannot-delete-parsing = This receipt is still being read. Try again in a moment.
