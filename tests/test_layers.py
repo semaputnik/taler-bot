@@ -34,3 +34,16 @@ def test_bot_reaches_the_database_only_through_the_composition_root():
         if re.search(r"^\s*(?:from|import)\s+src\.database", path.read_text(), re.M)
     }
     assert not offenders
+
+
+def test_domain_imports_no_other_layer_and_no_framework():
+    forbidden = (
+        "src.database",
+        "src.services",
+        "src.usecases",
+        "src.bot",
+        "sqlalchemy",
+        "pydantic",
+    )
+    offenders = {m for m in imports_of("domain") if m.startswith(forbidden)}
+    assert not offenders
