@@ -86,6 +86,8 @@ src/
     user.py                # UserService.ensure, .allow
     receipt.py             # ReceiptService: save_photo, edit_item, edit_header, resolve_issue, soft_delete, card
     results.py             # CurrentUser, NewPhoto, ReceiptCard: the services' own pydantic types
+  integration/
+    storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
@@ -98,8 +100,7 @@ tests/                     # domain/ database/ services/ bot/ + root conftest.py
 ```
 
 Not built yet (each arrives with its feature): `domain/normalize.py` and `domain/matching.py`
-(domain services), `integration/llm` (`ReceiptParser`) and `integration/storage`
-(`PhotoStorage`), `ReceiptService.parse` (its design is in the `services/receipt.py`
+(domain services), `integration/llm` (`ReceiptParser`), `ReceiptService.parse` (its design is in the `services/receipt.py`
 docstring; `_apply_parse` and `_save_with_catalog` are its private path), photo intake and
 the dialogs.
 
@@ -138,7 +139,7 @@ the dialogs.
   - A method does: load the aggregate → call the LLM or storage outside any transaction
     → call **one** aggregate method → save → commit. It contains no receipt rules; if a
     rule is appearing in a service, move it to the aggregate.
-  - Dependencies (the UoW factory now; `ReceiptParser`, `PhotoStorage` later) come in
+  - Dependencies (the UoW factory and `PhotoStorage` now; `ReceiptParser` later) come in
     through `__init__`. The bot passes in plain data (`NewPhoto`, ids), never aiogram objects.
   - A write that sets or replaces the parse also applies the `ParseOutcome` to the catalog
     in the same transaction: new stores and products first (the receipt's store and items
@@ -159,7 +160,7 @@ the dialogs.
 
 - **Never hold a DB transaction across an LLM call** (up to 120 s). Photo intake is two
   service calls:
-  1. `ReceiptService.save_photo` saves the file and a `pending` receipt, commits, and the
+  1. `ReceiptService.save_photo(user_id, data, photo)` saves the file and a `pending` receipt, commits, and the
      bot replies "✅ Saved, reading…";
   2. `ReceiptService.parse` runs as a background task (`asyncio.create_task`, with a reference
      kept and errors logged). It calls the LLM with no transaction open, then writes the

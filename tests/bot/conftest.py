@@ -78,12 +78,12 @@ class BotHarness:
 
 
 @pytest.fixture
-async def harness(make_uow) -> AsyncIterator[BotHarness]:
+async def harness(make_uow, tmp_storage) -> AsyncIterator[BotHarness]:
     recording = RecordingSession()
     bot = Bot("123456:TEST", session=recording)
     dispatcher = create_dispatcher(
         storage=MemoryStorage(),
-        services=Services.build(make_uow),
+        services=Services.build(make_uow, storage=tmp_storage),
         translator_hub=create_translator_hub(),
     )
     yield BotHarness(bot, dispatcher, recording)

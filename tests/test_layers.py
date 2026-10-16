@@ -50,3 +50,9 @@ def test_domain_imports_no_other_layer_and_no_framework():
     forbidden = ("src.database", "src.services", "src.bot", "sqlalchemy", "pydantic")
     offenders = {m for m in imports_of("domain") if m.startswith(forbidden)}
     assert not offenders
+
+
+def test_integration_imports_no_bot_services_or_database():
+    forbidden = ("src.bot", "src.services", "src.database")
+    offenders = {m for m in imports_of("integration") if m.startswith(forbidden)}
+    assert not offenders
