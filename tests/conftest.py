@@ -1,13 +1,18 @@
 """DB fixtures: a separate `<db>_test` database, migrated once, with each test rolled back."""
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 import asyncpg
 import pytest
 from alembic.config import Config
 from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    AsyncSession,
+    create_async_engine,
+)
 
 from alembic import command
 from src.config.settings import DatabaseSettings
@@ -55,10 +60,27 @@ async def engine() -> AsyncIterator[AsyncEngine]:
 
 
 @pytest.fixture
-async def session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
+async def connection(engine: AsyncEngine) -> AsyncIterator[AsyncConnection]:
+    """A connection inside an outer transaction that is rolled back after the test."""
     async with engine.connect() as conn:
         transaction = await conn.begin()
-        # Commits inside a test become savepoints, so the outer rollback undoes everything.
-        async with AsyncSession(bind=conn, join_transaction_mode="create_savepoint") as session:
-            yield session
+        yield conn
         await transaction.rollback()
+
+
+@pytest.fixture
+def session_factory(connection: AsyncConnection) -> Callable[[], AsyncSession]:
+    """Sessions bound to the test connection: commits become savepoints of the outer transaction."""
+
+    def make() -> AsyncSession:
+        return AsyncSession(
+            bind=connection, join_transaction_mode="create_savepoint", expire_on_commit=False
+        )
+
+    return make
+
+
+@pytest.fixture
+async def session(session_factory: Callable[[], AsyncSession]) -> AsyncIterator[AsyncSession]:
+    async with session_factory() as session:
+        yield session
