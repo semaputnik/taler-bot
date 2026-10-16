@@ -12,19 +12,14 @@ dependencies = [
     "aiogram-dialog>=2.6.0",
     "alembic>=1.20.0",
     "asyncpg>=0.32.0",
+    "fluent-compiler>=1.1",
+    "fluentogram>=1.2.1",
     "pydantic>=2.13.5",
     "pydantic-ai-slim[openai]>=2.57.0",
     "pydantic-settings>=2.16.0",
     "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.1.4",
 ]
-
-[project.scripts]
-taler-bot = "taler_bot:main"
-
-[build-system]
-requires = ["uv_build>=0.12.6,<0.13.0"]
-build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
@@ -38,6 +33,11 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    # fluent_compiler still uses a deprecated ast.Module call.
+    "ignore::DeprecationWarning:fluent_compiler.*",
+]
 
 [tool.ruff]
 line-length = 100
@@ -45,6 +45,10 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
+[tool.ruff.lint.isort]
+# The repo-root `alembic/` migrations directory makes ruff take the alembic package for ours.
+known-third-party = ["alembic"]
+
 [tool.ruff.lint.per-file-ignores]
 # Generated; long CHECK expressions are fine there.
-"migrations/versions/*" = ["E501"]
+"alembic/versions/*" = ["E501"]

@@ -7,8 +7,8 @@ and dependencies, not commitments.
 
 - **Data belongs to the Telegram user** the bot is talking to. Every row is scoped by
   `user_id`. A household or shared view is out of scope for now.
-- **The UI is in English.** No i18n yet, but keep user-facing strings in one module so
-  i18n can be added later.
+- **The UI is in English.** All texts live in fluentogram `.ftl` files (`en` locale);
+  another language is one more locale directory.
 - **Several photos per receipt.** A second photo of a known receipt refines the stored
   data instead of being thrown away (see below). Refinements are **applied immediately**,
   and the user can undo them.
@@ -76,7 +76,7 @@ This also covers long receipts photographed in parts.
 - Normalize as usual, diff against the current state, and apply the result at once.
 - **User edits win.** A field the user corrected by hand is never overwritten. If the
   new parse reads it differently, add an issue instead.
-- `product_prices` for the receipt are rebuilt in one transaction. `store_products` rows
+- `receipt_items` for the receipt are rebuilt in one transaction. `store_products` rows
   that this receipt created and nothing else references are deleted (they are misreads).
 - Undo restores the previous parse together with the user edits.
 
