@@ -5,10 +5,14 @@ docs file stays the single source. The Docker image must therefore ship `docs/n8
 (or the prompt must move into the package) before the bot is containerised.
 """
 
+import os
 import time
 from pathlib import Path
 
-from pydantic_ai import Agent, BinaryContent
+# pydantic-ai prints a Logfire advert on the first run unless told not to.
+os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
+
+from pydantic_ai import Agent, BinaryContent  # noqa: E402
 from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 

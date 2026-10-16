@@ -9,5 +9,5 @@ Rules:
 - Line discounts and promotions go into the discount of the line they apply to, as a positive number; line_total is after that discount. Receipt-wide discounts go only into totals.discount_total.
 - Numbers use a dot as decimal separator, no currency symbols. purchased_at is local time as printed: YYYY-MM-DDTHH:mm:ss.
 - Card numbers: only ever output the last 4 digits; never the full number.
-- Report every problem in issues: unreadable or cut-off text, values you had to guess, abbreviations you could not expand, line totals that do not add up to the total, unusual layout. Say what you assumed. These notes are used to improve the process, so be specific and do not hide uncertainty.
+- Report every problem in issues: unreadable or cut-off text, values you had to guess, abbreviations you could not expand, line totals that do not add up to the total, unusual layout. Say what you assumed. These notes are used to improve the process, so be specific and do not hide uncertainty. Write every issue message in English, whatever the language of the receipt; quote printed text as is.
 - If the image is not a receipt, set is_receipt to false and leave items empty.

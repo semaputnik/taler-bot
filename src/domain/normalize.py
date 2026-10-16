@@ -19,7 +19,7 @@ from src.domain.parse import Parse, ParsedIssue, ParsedItem
 from src.exception import InvalidReceiptData
 
 # Bump whenever the prompt, the schema, the model or this module changes (n8n was 2026-10-15.1).
-PARSER_VERSION = "2026-10-17.1"
+PARSER_VERSION = "2026-10-17.2"
 
 TOLERANCE = Decimal("0.02")
 
