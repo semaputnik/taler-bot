@@ -9,7 +9,7 @@ import warnings
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IssueType(StrEnum):
@@ -47,7 +47,8 @@ with warnings.catch_warnings():
         number: str | None
         purchased_at: str | None  # local date-time as printed, ISO 8601 without offset
         cashier: str | None
-        register: str | None
+        # `Field(...)`: without it the inherited `BaseModel.register` becomes the default.
+        register: str | None = Field(...)
 
 
 class RawItem(BaseModel):

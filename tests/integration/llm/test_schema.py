@@ -25,3 +25,8 @@ def test_fixture_raw_output_validates_and_normalizes_the_same_as_plain_data(path
     from_plain = normalize(data["raw"], **context)
     from_model = normalize(RawParse.model_validate(data["raw"]).model_dump(), **context)
     assert from_model == from_plain
+
+
+def test_every_schema_field_is_required_in_the_json_schema_the_model_sees():
+    receipt_info = RawParse.model_json_schema()["$defs"]["RawReceiptInfo"]
+    assert set(receipt_info["required"]) == set(receipt_info["properties"])
