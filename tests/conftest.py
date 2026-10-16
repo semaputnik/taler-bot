@@ -3,6 +3,7 @@
 import asyncio
 import os
 from collections.abc import AsyncIterator, Callable, Iterator
+from pathlib import Path
 
 import asyncpg
 import pytest
@@ -19,6 +20,7 @@ from sqlalchemy.ext.asyncio import (
 
 from src.database.engine import install_error_translation
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
+from src.integration.storage import LocalPhotoStorage
 from tests.helpers import MakeUow
 
 # Tests never read the app's env file, so a fresh clone (or CI) runs them as is.
@@ -105,3 +107,9 @@ def statements(connection: AsyncConnection) -> Iterator[list[str]]:
     event.listen(connection.sync_connection, "before_cursor_execute", record)
     yield seen
     event.remove(connection.sync_connection, "before_cursor_execute", record)
+
+
+@pytest.fixture
+def tmp_storage(tmp_path: Path) -> LocalPhotoStorage:
+    """Photo storage on a throwaway directory."""
+    return LocalPhotoStorage(tmp_path / "receipts")

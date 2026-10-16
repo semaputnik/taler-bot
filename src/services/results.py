@@ -21,11 +21,10 @@ class CurrentUser(BaseModel):
 
 
 class NewPhoto(BaseModel):
-    """A received photo: Telegram's ids and where its bytes were stored (relative path)."""
+    """A received photo's Telegram ids and metadata; the service decides where its bytes go."""
 
     model_config = ConfigDict(frozen=True)
 
-    path: str
     received_at: datetime
     telegram_file_unique_id: str | None = None
     telegram_file_id: str | None = None

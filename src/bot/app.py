@@ -13,6 +13,7 @@ from src.bot.i18n import create_translator_hub
 from src.config.settings import Settings
 from src.database.engine import create_engine, create_sessionmaker
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
+from src.integration.storage import LocalPhotoStorage
 from src.services.container import Services
 
 logger = logging.getLogger(__name__)
@@ -34,7 +35,10 @@ class App:
             str(settings.redis.url), key_builder=DefaultKeyBuilder(with_destiny=True)
         )
         self.translator_hub = create_translator_hub()
-        self.services = Services.build(lambda: SqlAlchemyUnitOfWork(session_factory))
+        self.photo_storage = LocalPhotoStorage(settings.storage.receipts_dir)
+        self.services = Services.build(
+            lambda: SqlAlchemyUnitOfWork(session_factory), storage=self.photo_storage
+        )
         self.dispatcher = create_dispatcher(
             storage=self.storage, services=self.services, translator_hub=self.translator_hub
         )

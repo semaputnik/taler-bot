@@ -13,7 +13,9 @@ duplicate keeps its parse but never collides with the unique parsed key; otherwi
 private path for the plain case.
 """
 
+import logging
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
 from src.domain.catalog import Catalog
@@ -21,27 +23,56 @@ from src.domain.edits import Edit
 from src.domain.enums import EditTarget, IssueResolution
 from src.domain.parse import Parse, ParseOutcome
 from src.domain.receipt import Photo, Receipt
-from src.exception import DuplicatePhoto, InvalidIssueResolution, ReceiptNotFound
+from src.exception import (
+    DuplicatePhoto,
+    InvalidIssueResolution,
+    ReceiptNotFound,
+    UserNotFound,
+)
+from src.integration.storage import PhotoStorage
 from src.services.results import NewPhoto, ReceiptCard
+
+logger = logging.getLogger(__name__)
+
+_EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 
 class ReceiptService:
-    def __init__(self, uow_factory: UnitOfWorkFactory) -> None:
+    def __init__(self, uow_factory: UnitOfWorkFactory, storage: PhotoStorage) -> None:
         self._uow_factory = uow_factory
+        self._storage = storage
 
     # --- photos ------------------------------------------------------------------------
 
-    async def save_photo(self, user_id: int, photo: NewPhoto) -> ReceiptCard:
-        """Start a `pending` receipt for the photo.
+    async def save_photo(self, user_id: int, data: bytes, photo: NewPhoto) -> ReceiptCard:
+        """Store the photo's bytes, then start a `pending` receipt for it.
 
-        A Telegram photo the user already sent is rejected before anything is written.
+        A Telegram photo the user already sent is rejected before anything is written. The
+        file goes to disk between two Units of Work, so no transaction is open during the
+        write. If the second one fails the file stays (photos are never deleted).
         """
         async with self._uow_factory() as uow:
             unique_id = photo.telegram_file_unique_id
             if unique_id is not None and await uow.receipts.photo_exists(user_id, unique_id):
                 raise DuplicatePhoto(unique_id)
-            receipt = await uow.receipts.add(Receipt.start(user_id, Photo(**photo.model_dump())))
-            await uow.commit()
+            user = await uow.users.get(user_id)
+            if user is None:
+                raise UserNotFound(user_id)
+            timezone = user.timezone
+
+        path = _photo_path(photo, timezone)
+        await self._storage.save(path, data)
+
+        try:
+            async with self._uow_factory() as uow:
+                receipt = await uow.receipts.add(
+                    Receipt.start(user_id, Photo(path=path, **photo.model_dump()))
+                )
+                await uow.commit()
+        except Exception:
+            logger.warning("Receipt was not saved; photo file left on disk: %s", path)
+            raise
+        async with self._uow_factory() as uow:
             return await _card(uow, receipt)
 
     # --- changes to a receipt ----------------------------------------------------------
@@ -95,6 +126,16 @@ class ReceiptService:
 
 
 # --- helpers ---------------------------------------------------------------------------
+
+
+def _photo_path(photo: NewPhoto, timezone: str) -> str:
+    """`yyyy/mm/receipt_<yyyy-MM-dd_HH-mm-ss>_<message_id>.<ext>` in the user's time zone."""
+    local = photo.received_at.astimezone(ZoneInfo(timezone))
+    extension = _EXTENSIONS.get(photo.mime_type or "", "jpg")
+    return (
+        f"{local:%Y/%m}/receipt_{local:%Y-%m-%d_%H-%M-%S}_{photo.telegram_message_id or 0}"
+        f".{extension}"
+    )
 
 
 async def _load(uow: UnitOfWork, user_id: int, receipt_id: int) -> Receipt:
