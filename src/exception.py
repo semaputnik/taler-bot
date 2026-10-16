@@ -54,5 +54,9 @@ class InvalidReceiptData(DomainException):
     """A value breaks a model invariant (for example a naive datetime)."""
 
 
+class UnknownStore(DomainException):
+    """The catalog has no store with this key."""
+
+
 class IntegrationException(AppException):
     """An external system (LLM, storage, ...) failed."""

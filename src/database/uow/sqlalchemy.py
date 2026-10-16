@@ -4,6 +4,7 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.database.repositories.catalog import SqlAlchemyCatalogRepository
 from src.database.repositories.edit import SqlAlchemyReceiptEditRepository
 from src.database.repositories.issue import SqlAlchemyReceiptIssueRepository
 from src.database.repositories.message import SqlAlchemyReceiptMessageRepository
@@ -12,10 +13,6 @@ from src.database.repositories.photo import SqlAlchemyReceiptPhotoRepository
 from src.database.repositories.receipt import (
     SqlAlchemyReceiptItemRepository,
     SqlAlchemyReceiptRepository,
-)
-from src.database.repositories.store import (
-    SqlAlchemyStoreProductRepository,
-    SqlAlchemyStoreRepository,
 )
 from src.database.repositories.user import SqlAlchemyUserRepository
 
@@ -33,8 +30,7 @@ class SqlAlchemyUnitOfWork:
     async def __aenter__(self) -> Self:
         self._session = self._session_factory()
         self.users = SqlAlchemyUserRepository(self._session)
-        self.stores = SqlAlchemyStoreRepository(self._session)
-        self.products = SqlAlchemyStoreProductRepository(self._session)
+        self.catalog = SqlAlchemyCatalogRepository(self._session)
         self.receipts = SqlAlchemyReceiptRepository(self._session)
         self.items = SqlAlchemyReceiptItemRepository(self._session)
         self.photos = SqlAlchemyReceiptPhotoRepository(self._session)
