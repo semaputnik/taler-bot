@@ -1,5 +1,7 @@
+import asyncio
 from types import SimpleNamespace
 
+from src.bot import app as app_module
 from src.bot.app import App
 from src.config.bot import BotConfig
 from src.config.database import DatabaseConfig
@@ -77,10 +79,6 @@ async def test_lifespan_closes_the_receipt_parser():
 
 
 async def test_lifespan_with_a_pending_task_finishes_within_the_timeout(monkeypatch):
-    import asyncio
-
-    from src.bot import app as app_module
-
     monkeypatch.setattr(app_module, "TASK_SHUTDOWN_TIMEOUT", 0.05)
     settings = Settings(
         _env_file=None,

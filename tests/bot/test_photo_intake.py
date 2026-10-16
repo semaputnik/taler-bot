@@ -178,3 +178,23 @@ async def test_model_text_is_html_escaped_in_the_summary(harness):
     await harness.tasks.drain()
 
     assert "&lt;b&gt;Shop &amp; Co" in harness.sent_messages[-1].text
+
+
+async def test_a_sticker_is_asked_for_a_photo(harness):
+    from aiogram.types import Sticker
+
+    await harness._feed(
+        USER,
+        sticker=Sticker(
+            file_id="s",
+            file_unique_id="s",
+            type="regular",
+            width=1,
+            height=1,
+            is_animated=False,
+            is_video=False,
+        ),
+    )
+
+    (sent,) = harness.sent_messages
+    assert sent.text == i18n.get("photo-send-me-one")

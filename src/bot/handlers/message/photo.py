@@ -48,15 +48,16 @@ async def photo_intake(
         return
     try:
         file = await bot.get_file(attachment.file_id)
-        assert file.file_path is not None
+        if file.file_path is None:  # Telegram gives no path for files it will not serve
+            await message.reply(i18n.get("photo-too-large"))
+            return
         buffer = await bot.download_file(file.file_path)
     except TelegramBadRequest as error:
         if "too big" not in str(error):
             raise
         await message.reply(i18n.get("photo-too-large"))
         return
-    assert buffer is not None
-    data = buffer.read()
+    data = buffer.read() if buffer is not None else b""
 
     new_photo = NewPhoto(
         received_at=message.date,
