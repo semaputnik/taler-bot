@@ -210,7 +210,7 @@ no string literals in windows.
 
 Every table is reached through the Unit of Work (`async with uow:`) and one repository per
 aggregate (ADR-0001): `uow.receipts` (receipt + photo, parse, items, issues, edits),
-bot messages), `uow.catalog` (stores, products), `uow.users`. Protocols in
+`uow.catalog` (stores, products), `uow.users`. Protocols in
 `src/database/interfaces/`, implementations in `src/database/repositories/`. Repositories
 have only the methods the code and tests need today; add more when a service needs them.
 Tests never import ORM models.
