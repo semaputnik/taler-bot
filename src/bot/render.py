@@ -1,5 +1,6 @@
 """Texts about a receipt that both the parse reply and the card dialog show."""
 
+from decimal import Decimal
 from html import escape
 from zoneinfo import ZoneInfo
 
@@ -23,6 +24,16 @@ def amount(card: ReceiptCard, i18n: TranslatorRunner) -> str:
         return i18n.get("receipt-amount-unknown")
     currency = escape(card.currency or "")
     return i18n.get("receipt-amount", total=format(card.total, ".2f"), currency=currency)
+
+
+def money(value: Decimal | None, i18n: TranslatorRunner) -> str:
+    """A bare amount with 2 decimals, or "not specified"."""
+    return format(value, ".2f") if value is not None else i18n.get("item-not-specified")
+
+
+def quantity(value: Decimal) -> str:
+    """Up to 4 decimals, trailing zeros stripped: `2`, `0.35`, `1.2345`."""
+    return format(value.quantize(Decimal("0.0001")).normalize(), "f")
 
 
 def payment(card: ReceiptCard, i18n: TranslatorRunner) -> str:

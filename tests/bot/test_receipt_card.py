@@ -6,11 +6,13 @@ from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, EditMes
 from sqlalchemy import text
 
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
+from src.domain.enums import Category
 from src.integration.llm import LLMError
 from tests.stubs import fixture, output_of
 
 USER = 7
 DELETE = "🗑 Delete"
+ITEMS = "📋 Items"
 
 i18n = create_translator_hub().get_translator_by_locale(DEFAULT_LOCALE)
 
@@ -53,7 +55,7 @@ def last_text(harness) -> str:
 async def test_the_parse_reply_carries_a_delete_button(harness):
     await parsed(harness)
 
-    assert harness.button_texts() == [DELETE]
+    assert harness.button_texts() == [ITEMS, DELETE]
 
 
 @pytest.mark.parametrize("outcome", ["not_receipt", "failed"])
@@ -98,7 +100,7 @@ async def test_back_returns_to_the_card(harness):
     await harness.tap(USER, "◀ Back")
 
     assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [DELETE, "✖ Close"]
+    assert harness.button_texts() == [ITEMS, DELETE, "✖ Close"]
 
 
 async def test_confirming_deletes_the_receipt_and_trashes_the_photo(
@@ -225,3 +227,159 @@ async def test_a_receipt_that_is_being_read_cannot_be_deleted(harness, session_f
         (i18n.get("card-cannot-delete-parsing"), True)
     ]
     assert await deleted_flags(session_factory) == [False]
+
+
+# --- items ---------------------------------------------------------------------------------
+
+PELLEGRINO = "Aigua amb gas Pellegrino · 2 pcs · 2.78"
+FREE_LIMO = "Cervesa Free Limo · 6 pcs · 4.80"
+
+
+def many_items(count: int, *, number: str = "N1") -> dict:
+    """The fixture receipt with `count` distinct items (the lines no longer add up: fine)."""
+    raw = fixture("03")["raw"]
+    items = [
+        raw["items"][0] | {"name_raw": f"ITEM {i}", "name_normalized": f"Item {i}"}
+        for i in range(count)
+    ]
+    return raw | {"items": items, "receipt": raw["receipt"] | {"number": number}}
+
+
+async def test_a_receipt_without_items_has_no_items_button(harness):
+    raw = fixture("03")["raw"] | {"items": [], "issues": []}
+    harness.parser.default = output_of(raw)
+
+    await parsed(harness)
+
+    assert harness.button_texts() == [DELETE]
+
+
+async def test_the_card_of_a_receipt_without_items_has_no_items_button(harness):
+    raw = fixture("03")["raw"] | {"items": [], "issues": []}
+    harness.parser.default = output_of(raw)
+    await parsed(harness)
+    await harness.tap(USER, DELETE)
+
+    await harness.tap(USER, "◀ Back")
+
+    assert harness.button_texts() == [DELETE, "✖ Close"]
+
+
+async def test_items_opens_the_list_as_a_new_message(harness):
+    summary_id = await parsed(harness)
+    sent_before = len(harness.sent_messages)
+
+    await harness.tap(USER, ITEMS)
+
+    assert len(harness.sent_messages) == sent_before + 1
+    assert harness.sent_messages[-1].text == i18n.get("card-items-title", count="2")
+    assert harness.last_keyboard()[0] != summary_id
+    assert harness.button_texts() == [PELLEGRINO, FREE_LIMO, "◀ Back"]
+
+
+async def test_a_row_tap_shows_the_item_details(harness):
+    await parsed(harness)
+    await harness.tap(USER, ITEMS)
+
+    await harness.tap(USER, FREE_LIMO)
+
+    body = last_text(harness)
+    assert "<b>Cervesa Free Limo</b>" in body
+    assert "CERV FREE LIMO." in body
+    assert "Drinks" in body
+    assert "6 pcs" in body
+    assert "0.80" in body
+    assert "4.80" in body
+    assert "21%" in body
+    assert "Discount" not in body  # zero discount is hidden
+    assert harness.button_texts() == ["◀ Back"]
+
+
+async def test_back_goes_from_the_item_to_the_list_and_then_to_the_card(harness):
+    await parsed(harness)
+    await harness.tap(USER, ITEMS)
+    await harness.tap(USER, PELLEGRINO)
+
+    await harness.tap(USER, "◀ Back")
+    assert harness.button_texts() == [PELLEGRINO, FREE_LIMO, "◀ Back"]
+
+    await harness.tap(USER, "◀ Back")
+    assert "Consum" in last_text(harness)
+    assert harness.button_texts() == [ITEMS, DELETE, "✖ Close"]
+
+
+async def test_a_long_list_is_paged_by_eight(harness):
+    harness.parser.default = output_of(many_items(12))
+    await parsed(harness)
+
+    await harness.tap(USER, ITEMS)
+
+    rows = [t for t in harness.button_texts() if t.startswith("Item ")]
+    assert len(rows) == 8
+    assert rows[0].startswith("Item 0 ·")
+    assert harness.button_texts()[-2:] == ["2", "◀ Back"]
+
+    await harness.tap(USER, ">")
+
+    rows = [t for t in harness.button_texts() if t.startswith("Item ")]
+    assert [r.split(" ·")[0] for r in rows] == ["Item 8", "Item 9", "Item 10", "Item 11"]
+
+
+async def test_a_tap_on_the_second_page_opens_that_item(harness):
+    harness.parser.default = output_of(many_items(12))
+    await parsed(harness)
+    await harness.tap(USER, ITEMS)
+    await harness.tap(USER, ">")
+
+    await harness.tap(USER, "Item 10 · 2 pcs · 2.78")
+
+    assert "<b>Item 10</b>" in last_text(harness)
+
+
+async def test_a_discount_and_unknown_vat_render_when_present(harness):
+    raw = fixture("03")["raw"]
+    item = raw["items"][0] | {"discount": 0.5, "vat_rate": None, "reference_price": 1.95}
+    item |= {"reference_unit": "l"}
+    harness.parser.default = output_of(raw | {"items": [item]})
+    await parsed(harness)
+    await harness.tap(USER, ITEMS)
+
+    await harness.tap(USER, "Aigua amb gas Pellegrino · 2 pcs · 2.78")
+
+    body = last_text(harness)
+    assert "Discount: 0.50" in body
+    assert "1.95 per l" in body
+    assert "VAT" not in body
+
+
+async def test_a_deleted_receipts_items_are_not_reachable_from_an_old_button(harness):
+    summary_id = await parsed(harness)
+    items_data = harness.last_keyboard()[1].inline_keyboard[0][0].callback_data
+    await harness.tap(USER, DELETE)
+    await harness.tap(USER, "🗑 Yes, delete")
+
+    await harness.press(USER, items_data, summary_id)
+
+    alerts = [c for c in harness.session.calls if isinstance(c, AnswerCallbackQuery) and c.text]
+    assert alerts[-1].text == i18n.get("card-deleted-alert")
+
+
+async def test_opening_the_items_costs_the_same_for_5_and_40_items(harness, statements):
+    counts = []
+    for count, number in ((5, "A"), (40, "B")):
+        harness.parser.default = output_of(many_items(count, number=number))
+        await parsed(harness, file_id=f"photo-{number}")
+        statements.clear()
+
+        await harness.tap(USER, ITEMS)
+
+        counts.append(len(statements))
+
+    assert counts[0] == counts[1]
+    assert counts[0] > 0
+
+
+def test_every_category_has_a_name():
+    for category in Category:
+        key = f"category-{category.replace('_', '-')}"
+        assert i18n.get(key) != key, key

@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 _WINDOWS = {
     CardWindow.MAIN: ReceiptCardSG.main,
+    CardWindow.ITEMS: ReceiptCardSG.items,
     CardWindow.DELETE_CONFIRM: ReceiptCardSG.delete_confirm,
 }
 _GONE_MARKERS = ("message to edit not found", "message is not modified")

@@ -1,6 +1,6 @@
 from aiogram.types import CallbackQuery
 from aiogram_dialog import DialogManager
-from aiogram_dialog.widgets.kbd import Button
+from aiogram_dialog.widgets.kbd import Button, Select
 from fluentogram import TranslatorRunner
 
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys
@@ -12,6 +12,31 @@ from src.services.results import CurrentUser
 
 async def ask_delete(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(ReceiptCardSG.delete_confirm)
+
+
+async def show_items(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(ReceiptCardSG.items)
+
+
+async def back_to_items(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(ReceiptCardSG.items)
+
+
+async def select_item(
+    query: CallbackQuery, widget: Select, manager: DialogManager, item_id: str
+) -> None:
+    """Remember the tapped item's ref. A row carries only its position (a ref can be too long
+    for callback data), so the ref comes from the current list."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    rows = await services.receipts.items(user.id, manager.dialog_data[DialogDataKeys.RECEIPT_ID])
+    position = int(item_id)
+    if position >= len(rows):
+        await query.answer(i18n.get("item-gone"), show_alert=True)
+        return
+    manager.dialog_data[DialogDataKeys.ITEM_REF] = rows[position].ref
+    await manager.switch_to(ReceiptCardSG.item)
 
 
 async def back_to_main(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
