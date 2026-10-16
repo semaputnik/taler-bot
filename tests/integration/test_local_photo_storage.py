@@ -67,6 +67,16 @@ async def test_trash_moves_the_file_keeping_the_relative_layout(storage, tmp_pat
     assert (tmp_path / "receipts/.trash" / PATH).read_bytes() == b"x"
 
 
+async def test_trashing_the_same_path_twice_keeps_both_photos(storage, tmp_path):
+    await storage.save(PATH, b"first")
+    await storage.trash(PATH)
+    await storage.save(PATH, b"second")
+    await storage.trash(PATH)
+
+    trashed = sorted(p.read_bytes() for p in (tmp_path / "receipts/.trash").rglob("*.jpg*"))
+    assert trashed == [b"first", b"second"]
+
+
 async def test_trash_of_a_missing_file_raises_storage_error(storage):
     with pytest.raises(StorageError):
         await storage.trash(PATH)

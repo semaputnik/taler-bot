@@ -197,7 +197,7 @@ no string literals in windows.
 
 - Layout: `tests/domain/` (aggregates, plain objects, no database), `tests/database/`
   (repositories and constraints through the aggregate repositories), `tests/services/`
-  (services through the Unit of Work), `tests/bot/` (the real dispatcher with a stubbed
+  (services through the Unit of Work), `tests/integration/` (adapters, e.g. `LocalPhotoStorage` on a tmp dir), `tests/bot/` (the real dispatcher with a stubbed
   Telegram session), and root-level tests for settings, migrations, error translation, layers.
   `tests/conftest.py` has `make_uow`; `tests/helpers.py` seeds users, catalogs and receipts;
   `tests/domain/builders.py` builds `Parse` and `Photo` values.

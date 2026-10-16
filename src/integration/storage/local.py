@@ -53,6 +53,8 @@ class LocalPhotoStorage:
         target = self._resolve(relative_path, self._root / TRASH_DIR)
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():  # never overwrite an earlier trashed photo
+                target = target.with_name(f"{target.name}.{secrets.token_hex(4)}")
             os.replace(source, target)
         except OSError as exc:
             raise StorageError(f"could not trash {relative_path}") from exc

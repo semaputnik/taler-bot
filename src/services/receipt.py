@@ -69,10 +69,11 @@ class ReceiptService:
                     Receipt.start(user_id, Photo(path=path, **photo.model_dump()))
                 )
                 await uow.commit()
-                return await _card(uow, receipt)
         except Exception:
             logger.warning("Receipt was not saved; photo file left on disk: %s", path)
             raise
+        async with self._uow_factory() as uow:
+            return await _card(uow, receipt)
 
     # --- changes to a receipt ----------------------------------------------------------
 
