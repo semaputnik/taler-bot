@@ -1,9 +1,10 @@
 """`ReceiptRepository` through the Unit of Work on real Postgres: whole-aggregate round trips,
 lookups and the schema constraints, which must reach callers as app exceptions."""
 
-from datetime import UTC, date, datetime, timedelta
+from dataclasses import replace
 from decimal import Decimal
 from enum import StrEnum
+from itertools import count
 
 import pytest
 from sqlalchemy import text
@@ -39,11 +40,10 @@ async def load(make_uow: MakeUow, receipt_id: int | None) -> Receipt:
     return loaded
 
 
-async def test_a_receipt_with_photos_parses_an_edit_and_an_issue_round_trips(make_uow):
-    first = parse(MILK, BREAD)
-    second = parse(
+async def test_a_receipt_with_a_photo_parse_items_issue_and_edit_round_trips(make_uow):
+    one = parse(
         MILK,
-        total=Decimal("1.20"),
+        BREAD,
         issues=(
             ParsedIssue(
                 issue_type="missing_total", severity=IssueSeverity.HIGH, message="No total"
@@ -51,26 +51,26 @@ async def test_a_receipt_with_photos_parses_an_edit_and_an_issue_round_trips(mak
         ),
     )
     await add_user(make_uow)
-    await seed_catalog(make_uow, first, second)
+    await seed_catalog(make_uow, one)
     receipt = Receipt.start(1, photo("u1"))
-    receipt.attach_photo(photo("u2"))
-    receipt.apply_parse(first)
-    receipt.apply_parse(second)
+    receipt.apply_parse(one)
     receipt.record_edit(Edit(target=EditTarget.RECEIPT, field="total", value="9.50"))
 
     added = await persist(make_uow, receipt)
 
     assert added is receipt
     assert added.id is not None
-    assert all(p.id is not None for p in added.photos)
-    assert all(p.id is not None for p in added.parses)
+    assert added.photo.id is not None
+    assert added.parse is not None
+    assert added.parse.id is not None
     assert all(i.id is not None for i in added.issues)
     assert all(e.id is not None for e in added.edits)
+    assert not added.parse_changed
     assert await load(make_uow, added.id) == added
 
 
 async def seeded_receipt(make_uow: MakeUow, *parses) -> Receipt:
-    """A stored receipt with one photo and the given parses applied in order."""
+    """A stored receipt with one photo and the given parses applied in order (re-parses)."""
     await add_user(make_uow)
     await seed_catalog(make_uow, *parses)
     receipt = Receipt.start(1, photo("u1"))
@@ -89,43 +89,61 @@ async def change(make_uow: MakeUow, receipt_id: int | None, act) -> Receipt:
     return receipt
 
 
-async def test_a_new_parse_replaces_the_items_and_the_active_issues_only(make_uow):
-    doubt = ParsedIssue(issue_type="blurry", message="Blurry")
-    first = parse(MILK, BREAD, issues=(doubt,))
-    second = parse(BREAD, issues=(ParsedIssue(issue_type="odd", message="Odd total"),))
+async def test_a_re_parse_keeps_one_parse_row_and_replaces_items_and_issues(make_uow):
+    first = parse(MILK, BREAD, issues=(ParsedIssue(issue_type="blurry", message="Blurry"),))
+    second = parse(
+        BREAD,
+        parser_version="2026-11-01.1",
+        issues=(ParsedIssue(issue_type="odd", message="Odd total"),),
+    )
     saved = await seeded_receipt(make_uow, first)
+    await seed_catalog(make_uow, second)
+    await change(
+        make_uow,
+        saved.id,
+        lambda r: r.record_edit(Edit(target=EditTarget.RECEIPT, field="currency", value="USD")),
+    )
     before = await load(make_uow, saved.id)
 
-    def refine(receipt):
-        receipt.attach_photo(photo("u2"))
-        receipt.apply_parse(second)
-
-    receipt = await change(make_uow, saved.id, refine)
+    receipt = await change(make_uow, saved.id, lambda r: r.apply_parse(second))
 
     after = await load(make_uow, saved.id)
     assert after == receipt
+    assert after.parse.id == before.parse.id
+    assert after.parse == replace(second, id=before.parse.id)
     assert [i.product_key for i in after.items] == ["mercadona::pan"]
-    assert [i.issue_type for i in after.issues] == ["odd"]
-    assert after.photos[0] == before.photos[0]
-    assert after.parses[0] == before.parses[0]
-    assert len(after.photos) == 2
-    assert len(after.parses) == 2
-    assert after.current_parse == after.parses[1]
+    assert [i.issue_type for i in after.issues] == ["odd", "edit_conflict"]
+    assert after.photo == before.photo
+    assert after.edits == before.edits
 
 
-async def test_undo_restores_the_earlier_parse_items_and_issues(make_uow):
-    first = parse(MILK, BREAD, issues=(ParsedIssue(issue_type="blurry", message="Blurry"),))
-    second = parse(BREAD)
-    saved = await seeded_receipt(make_uow, first, second)
-    first_id = saved.parses[0].id
+async def test_a_re_parse_to_not_a_receipt_clears_the_items(make_uow):
+    saved = await seeded_receipt(make_uow, parse(MILK))
 
-    receipt = await change(make_uow, saved.id, lambda r: r.undo_to(first_id))
+    receipt = await change(
+        make_uow, saved.id, lambda r: r.apply_parse(parse(is_receipt=False, items=()))
+    )
 
     loaded = await load(make_uow, saved.id)
     assert loaded == receipt
-    assert loaded.current_parse.id == first_id
-    assert [i.product_key for i in loaded.items] == ["mercadona::leche", "mercadona::pan"]
-    assert [i.issue_type for i in loaded.issues] == ["blurry"]
+    assert loaded.status is ReceiptStatus.NOT_RECEIPT
+    assert loaded.items == []
+
+
+async def test_the_first_parse_of_a_stored_receipt_inserts_the_parse_row(make_uow):
+    one = parse(MILK)
+    await add_user(make_uow)
+    await seed_catalog(make_uow, one)
+    saved = await persist(make_uow, Receipt.start(1, photo("u1")))
+    assert saved.parse is None
+
+    receipt = await change(make_uow, saved.id, lambda r: r.apply_parse(one))
+
+    loaded = await load(make_uow, saved.id)
+    assert loaded == receipt
+    assert loaded.parse is not None
+    assert loaded.parse.id is not None
+    assert [i.product_key for i in loaded.items] == ["mercadona::leche"]
 
 
 async def test_an_item_edit_replaces_the_items_but_keeps_issue_resolutions(make_uow):
@@ -225,7 +243,7 @@ async def test_get_runs_a_bounded_number_of_queries(make_uow, statements):
 
     await load(make_uow, saved.id)
 
-    # One per table: receipts, photos, parses, items (+ products), issues, edits.
+    # One per table: receipts (+ store), photo, parse, items (+ products), issues, edits.
     assert len([s for s in statements if s.startswith("SELECT")]) == 6
 
 
@@ -262,86 +280,30 @@ async def test_find_by_key_returns_the_parsed_receipt_and_ignores_deleted_ones(m
         assert (await uow.receipts.get(saved.id)).deleted_at is not None
 
 
+async def test_find_by_key_ignores_duplicate_receipts(make_uow):
+    await add_user(make_uow)
+    original = await parsed_receipt(make_uow)
+    # Same key as `original`, so it cannot stay `parsed`: it becomes a duplicate of it.
+    again = Receipt.start(1, photo("again"))
+    again.apply_parse(parse(MILK, receipt_key=KEY))
+    again.mark_duplicate(original.id)
+    repeat = await persist(make_uow, again)
+
+    async with make_uow() as uow:
+        found = await uow.receipts.find_by_key(1, KEY)
+        assert found is not None
+        assert found.id == original.id
+        loaded = await uow.receipts.get(repeat.id)
+    assert loaded.status is ReceiptStatus.DUPLICATE
+    assert loaded.duplicate_of_id == original.id
+
+
 async def test_find_by_key_ignores_receipts_that_are_not_parsed(make_uow):
     await add_user(make_uow)
-    saved = await parsed_receipt(make_uow)
-    await change(make_uow, saved.id, lambda r: r.mark_awaiting_match())
+    await persist(make_uow, keyed(ReceiptStatus.PENDING))
 
     async with make_uow() as uow:
         assert await uow.receipts.find_by_key(1, KEY) is None
-
-
-async def test_find_near_lists_the_same_stores_receipts_of_that_day(make_uow):
-    await add_user(make_uow)
-    same_day = await parsed_receipt(make_uow, receipt_number="1")
-    await change(make_uow, same_day.id, lambda r: r.mark_awaiting_match())
-    other_day = parse(
-        MILK,
-        receipt_key="mercadona|2|2026-10-15|1",
-        purchased_at=WHEN + timedelta(days=1),
-    )
-    receipt = Receipt.start(1, photo("later"))
-    receipt.apply_parse(other_day)
-    await persist(make_uow, receipt)
-
-    async with make_uow() as uow:
-        near = await uow.receipts.find_near(1, "mercadona", WHEN.date())
-        assert [r.id for r in near] == [same_day.id]
-        assert await uow.receipts.find_near(1, "lidl", WHEN.date()) == []
-        assert await uow.receipts.find_near(2, "mercadona", WHEN.date()) == []
-
-
-async def test_find_near_ignores_deleted_and_merged_receipts(make_uow):
-    await add_user(make_uow)
-    deleted = await parsed_receipt(make_uow, receipt_number="1")
-    await change(make_uow, deleted.id, lambda r: r.mark_awaiting_match())
-    merged = await parsed_receipt(make_uow, receipt_number="2", seed=False)
-    await change(make_uow, merged.id, lambda r: r.mark_awaiting_match())
-    target = await parsed_receipt(make_uow, receipt_number="3", seed=False)
-    await change(make_uow, deleted.id, lambda r: r.soft_delete())
-    await change(make_uow, merged.id, lambda r: r.merge_into(target.id))
-
-    async with make_uow() as uow:
-        near = await uow.receipts.find_near(1, "mercadona", WHEN.date())
-    assert [r.id for r in near] == [target.id]
-
-
-async def test_find_near_uses_the_users_calendar_day(make_uow):
-    # 23:30 UTC on the 14th is already the 15th in Madrid (UTC+2 in October).
-    late = datetime(2026, 10, 14, 23, 30, tzinfo=UTC)
-    await add_user(make_uow)
-    saved = await parsed_receipt(make_uow, purchased_at=late)
-
-    async with make_uow() as uow:
-        assert [r.id for r in await uow.receipts.find_near(1, "mercadona", date(2026, 10, 15))] == [
-            saved.id
-        ]
-        assert await uow.receipts.find_near(1, "mercadona", date(2026, 10, 14)) == []
-
-
-async def test_find_by_message_returns_the_linked_receipt(make_uow):
-    await add_user(make_uow)
-    saved = await parsed_receipt(make_uow)
-    async with make_uow() as uow:
-        await uow.receipts.link_message(saved.id, 1, 77)
-        await uow.commit()
-
-    async with make_uow() as uow:
-        assert (await uow.receipts.find_by_message(1, 77)) == saved
-        assert await uow.receipts.find_by_message(1, 78) is None
-        assert await uow.receipts.find_by_message(2, 77) is None
-
-
-async def test_linking_the_same_message_twice_is_a_unique_violation(make_uow):
-    await add_user(make_uow)
-    saved = await parsed_receipt(make_uow)
-    async with make_uow() as uow:
-        await uow.receipts.link_message(saved.id, 1, 77)
-        await uow.commit()
-
-    async with make_uow() as uow:
-        with pytest.raises(UniqueViolationError):
-            await uow.receipts.link_message(saved.id, 1, 77)
 
 
 async def test_photo_exists_only_for_the_same_user(make_uow):
@@ -361,26 +323,38 @@ async def test_photo_exists_only_for_the_same_user(make_uow):
 class Rogue(StrEnum):
     """Values the domain enums lack, to prove the CHECKs hold when the aggregate is bypassed."""
 
-    DUPLICATE = "duplicate"
+    MERGED = "merged"
     USER = "user"
     CRITICAL = "critical"
     IGNORED = "ignored"
     STORE = "store"
 
 
-def keyed(status: ReceiptStatus, **fields) -> Receipt:
-    return Receipt(user_id=1, status=status, header=Header(receipt_key=KEY), **fields)
+_unique = count(1)
+
+
+def keyed(status: ReceiptStatus, *, user_id: int = 1, **fields) -> Receipt:
+    return Receipt(
+        user_id=user_id,
+        status=status,
+        header=Header(receipt_key=KEY),
+        photo=photo(f"k{next(_unique)}"),
+        **fields,
+    )
+
+
+def bare(status: ReceiptStatus = ReceiptStatus.PENDING, **fields) -> Receipt:
+    return Receipt(user_id=1, status=status, photo=photo(f"b{next(_unique)}"), **fields)
 
 
 async def test_parsed_receipt_key_is_unique_per_user(make_uow):
     await add_user(make_uow, 1)
     await add_user(make_uow, 2)
-    await persist(make_uow, keyed(ReceiptStatus.PARSED))
+    first = await persist(make_uow, keyed(ReceiptStatus.PARSED))
 
-    await persist(
-        make_uow, Receipt(user_id=2, status=ReceiptStatus.PARSED, header=Header(receipt_key=KEY))
-    )
-    await persist(make_uow, keyed(ReceiptStatus.AWAITING_MATCH))
+    await persist(make_uow, keyed(ReceiptStatus.PARSED, user_id=2))
+    await persist(make_uow, keyed(ReceiptStatus.PENDING))
+    await persist(make_uow, keyed(ReceiptStatus.DUPLICATE, duplicate_of_id=first.id))
     await persist(make_uow, keyed(ReceiptStatus.PARSED, deleted_at=WHEN))
     with pytest.raises(UniqueViolationError):
         await persist(make_uow, keyed(ReceiptStatus.PARSED))
@@ -390,35 +364,31 @@ async def test_parsed_receipt_key_is_unique_per_user(make_uow):
 async def test_card_last4_is_exactly_four_digits(make_uow, value):
     await add_user(make_uow)
     with pytest.raises(CheckViolationError):
-        await persist(make_uow, Receipt(user_id=1, header=Header(card_last4=value)))
+        await persist(make_uow, bare(header=Header(card_last4=value)))
 
 
 async def test_card_last4_longer_than_four_characters_is_rejected(make_uow):
     await add_user(make_uow)
     with pytest.raises(DataViolationError):
-        await persist(make_uow, Receipt(user_id=1, header=Header(card_last4="12345")))
+        await persist(make_uow, bare(header=Header(card_last4="12345")))
 
 
-async def test_merged_receipt_needs_a_target_and_only_merged_may_have_one(make_uow):
+async def test_duplicate_status_goes_with_duplicate_of_id_both_ways(make_uow):
     await add_user(make_uow)
-    target = await persist(make_uow, Receipt(user_id=1, status=ReceiptStatus.PARSED))
+    original = await persist(make_uow, bare(ReceiptStatus.PARSED))
 
-    merged = await persist(
-        make_uow, Receipt(user_id=1, status=ReceiptStatus.MERGED, merged_into_id=target.id)
-    )
-    assert (await load(make_uow, merged.id)).merged_into_id == target.id
+    repeat = await persist(make_uow, bare(ReceiptStatus.DUPLICATE, duplicate_of_id=original.id))
+    assert (await load(make_uow, repeat.id)).duplicate_of_id == original.id
     with pytest.raises(CheckViolationError):
-        await persist(make_uow, Receipt(user_id=1, status=ReceiptStatus.MERGED))
+        await persist(make_uow, bare(ReceiptStatus.DUPLICATE))
     with pytest.raises(CheckViolationError):
-        await persist(
-            make_uow, Receipt(user_id=1, status=ReceiptStatus.PARSED, merged_into_id=target.id)
-        )
+        await persist(make_uow, bare(ReceiptStatus.PARSED, duplicate_of_id=original.id))
 
 
 async def test_unknown_receipt_status_is_rejected(make_uow):
     await add_user(make_uow)
     with pytest.raises(CheckViolationError):
-        await persist(make_uow, Receipt(user_id=1, status=Rogue.DUPLICATE))
+        await persist(make_uow, bare(Rogue.MERGED))
 
 
 @pytest.mark.parametrize(
@@ -491,15 +461,43 @@ async def test_the_same_telegram_photo_is_rejected_for_the_same_user_only(make_u
 
 async def test_photos_without_a_telegram_id_never_collide(make_uow):
     await add_user(make_uow)
-    receipt = Receipt.start(1, photo("x"))
-    receipt.photos[0].telegram_file_unique_id = None
-    second = photo("y")
+    first, second = photo("x"), photo("y")
+    first.telegram_file_unique_id = None
     second.telegram_file_unique_id = None
-    receipt.attach_photo(second)
+    await persist(make_uow, Receipt.start(1, first))
 
-    saved = await persist(make_uow, receipt)
+    saved = await persist(make_uow, Receipt.start(1, second))
 
     assert await load(make_uow, saved.id) == saved
+
+
+async def test_a_second_photo_row_for_a_receipt_is_rejected(make_uow):
+    await add_user(make_uow)
+    saved = await persist(make_uow, Receipt.start(1, photo("u1")))
+
+    async with make_uow() as uow:
+        with pytest.raises(UniqueViolationError):
+            await uow._session.execute(  # noqa: SLF001  the aggregate cannot hold two photos
+                text(
+                    "INSERT INTO receipt_photos (receipt_id, user_id, path, received_at)"
+                    " VALUES (:r, 1, 'p.jpg', now())"
+                ),
+                {"r": saved.id},
+            )
+
+
+async def test_a_second_parse_row_for_a_receipt_is_rejected(make_uow):
+    saved = await seeded_receipt(make_uow, parse(MILK))
+
+    async with make_uow() as uow:
+        with pytest.raises(UniqueViolationError):
+            await uow._session.execute(  # noqa: SLF001  the aggregate cannot hold two parses
+                text(
+                    "INSERT INTO receipt_parses (receipt_id, status, parser_version)"
+                    " VALUES (:r, 'ok', 'v2')"
+                ),
+                {"r": saved.id},
+            )
 
 
 async def test_items_need_their_products_in_the_catalog(make_uow):
@@ -511,20 +509,6 @@ async def test_items_need_their_products_in_the_catalog(make_uow):
         await persist(make_uow, receipt)
 
 
-async def test_deleting_the_current_parse_row_clears_the_pointer_and_keeps_the_receipt(make_uow):
-    saved = await seeded_receipt(make_uow, parse(MILK))
-    async with make_uow() as uow:
-        await uow._session.execute(  # noqa: SLF001  no repository deletes parses
-            text("DELETE FROM receipt_parses WHERE id = :id"), {"id": saved.current_parse.id}
-        )
-        await uow.commit()
-
-    kept = await load(make_uow, saved.id)
-    assert kept.current_parse is None
-    assert kept.parses == []
-    assert kept.header == saved.header
-
-
 async def test_deleting_a_user_removes_their_receipts(make_uow):
     saved = await seeded_receipt(make_uow, parse(MILK, issues=(ParsedIssue(message="Doubt"),)))
     async with make_uow() as uow:
@@ -533,3 +517,20 @@ async def test_deleting_a_user_removes_their_receipts(make_uow):
 
     async with make_uow() as uow:
         assert await uow.receipts.get(saved.id) is None
+
+
+async def test_marking_a_stored_receipt_as_a_duplicate_is_saved(make_uow):
+    await add_user(make_uow)
+    original = await parsed_receipt(make_uow)
+    one = parse(MILK, receipt_key=KEY)
+    pending = await persist(make_uow, Receipt.start(1, photo("again")))
+
+    def repeat(receipt):
+        receipt.apply_parse(one)
+        receipt.mark_duplicate(original.id)
+
+    receipt = await change(make_uow, pending.id, repeat)
+
+    loaded = await load(make_uow, pending.id)
+    assert loaded == receipt
+    assert (loaded.status, loaded.duplicate_of_id) == (ReceiptStatus.DUPLICATE, original.id)

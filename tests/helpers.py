@@ -42,7 +42,7 @@ async def add_receipt(
 ) -> Receipt:
     """Add a receipt (given, or built from `fields`) in its own Unit of Work: a rejected row
     poisons the transaction."""
-    receipt = receipt or Receipt(user_id=user_id, **fields)
+    receipt = receipt or Receipt(user_id=user_id, photo=fields.pop("photo", photo()), **fields)
     async with make_uow() as uow:
         receipt = await uow.receipts.add(receipt)
         await uow.commit()
