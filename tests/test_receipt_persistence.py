@@ -67,3 +67,14 @@ async def test_unknown_receipt_status_is_rejected(make_uow):
     await add_user(make_uow)
     with pytest.raises(CheckViolationError):
         await add_receipt(make_uow, status="duplicate")
+
+
+async def test_deleting_a_user_removes_their_receipts_and_items(make_uow: MakeUow) -> None:
+    _, _, receipt, item_id = await seed_purchase(make_uow)
+    async with make_uow() as uow:
+        await uow.users.delete(1)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        assert await uow.receipts.get(receipt.id) is None
+        assert await uow.items.get(item_id) is None
