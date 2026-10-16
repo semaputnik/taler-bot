@@ -14,6 +14,10 @@ async def ask_delete(query: CallbackQuery, button: Button, manager: DialogManage
     await manager.switch_to(ReceiptCardSG.delete_confirm)
 
 
+async def show_photo(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(ReceiptCardSG.photo)
+
+
 async def back_to_main(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(ReceiptCardSG.main)
 

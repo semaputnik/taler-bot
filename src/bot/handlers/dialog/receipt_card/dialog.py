@@ -1,12 +1,13 @@
 from aiogram.enums import ParseMode
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.kbd import Button, Row
-from aiogram_dialog.widgets.text import Format
+from aiogram_dialog.widgets.media import DynamicMedia
+from aiogram_dialog.widgets.text import Const, Format
 
 from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.handlers.dialog.receipt_card import click_event
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewDataKeys
-from src.bot.handlers.dialog.receipt_card.getters import main_getter
+from src.bot.handlers.dialog.receipt_card.getters import main_getter, photo_getter
 from src.bot.handlers.dialog.widgets import I18nText
 from src.bot.states.receipt_card import ReceiptCardSG
 
@@ -21,6 +22,7 @@ def create_receipt_card_dialog() -> Dialog:
         Window(
             Format(f"{{{PreviewDataKeys.TEXT}}}"),
             Row(
+                Button(I18nText("button-photo"), id="photo", on_click=click_event.show_photo),
                 Button(
                     I18nText("button-delete"),
                     id="delete",
@@ -32,6 +34,13 @@ def create_receipt_card_dialog() -> Dialog:
             getter=main_getter,
             state=ReceiptCardSG.main,
             parse_mode=ParseMode.HTML,
+        ),
+        Window(
+            Const(""),
+            DynamicMedia(PreviewDataKeys.PHOTO),
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_main),
+            getter=photo_getter,
+            state=ReceiptCardSG.photo,
         ),
         Window(
             I18nText("card-delete-confirm"),

@@ -5,3 +5,4 @@ class DialogDataKeys:
 class PreviewDataKeys:
     TEXT = "text"
     CAN_DELETE = "can_delete"
+    PHOTO = "photo"

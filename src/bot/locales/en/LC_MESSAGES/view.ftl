@@ -38,3 +38,5 @@ card-received = Photo received: { $date }
 card-repeats = Repeats <b>{ $store }</b>, { $date }, { $amount }
 card-delete-confirm = Delete this receipt? The photo is kept in the trash.
 card-cannot-delete-parsing = This receipt is still being read. Try again in a moment.
+
+card-photo-unavailable = The photo could not be loaded.

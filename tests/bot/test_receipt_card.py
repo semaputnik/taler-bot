@@ -10,6 +10,7 @@ from src.integration.llm import LLMError
 from tests.stubs import fixture, output_of
 
 USER = 7
+PHOTO = "🖼 Photo"
 DELETE = "🗑 Delete"
 
 i18n = create_translator_hub().get_translator_by_locale(DEFAULT_LOCALE)
@@ -50,10 +51,10 @@ def last_text(harness) -> str:
     raise AssertionError("nothing sent")
 
 
-async def test_the_parse_reply_carries_a_delete_button(harness):
+async def test_the_parse_reply_carries_photo_and_delete_buttons(harness):
     await parsed(harness)
 
-    assert harness.button_texts() == [DELETE]
+    assert harness.button_texts() == [PHOTO, DELETE]
 
 
 @pytest.mark.parametrize("outcome", ["not_receipt", "failed"])
@@ -66,7 +67,7 @@ async def test_every_parse_outcome_carries_the_keyboard(harness, outcome):
 
     await parsed(harness)
 
-    assert harness.button_texts() == [DELETE]
+    assert harness.button_texts() == [PHOTO, DELETE]
 
 
 async def test_the_duplicate_reply_carries_the_keyboard(harness):
@@ -74,7 +75,7 @@ async def test_the_duplicate_reply_carries_the_keyboard(harness):
     await parsed(harness, file_id="b")
 
     assert harness.sent_messages[-1].text.startswith("♻️")
-    assert harness.button_texts() == [DELETE]
+    assert harness.button_texts() == [PHOTO, DELETE]
 
 
 async def test_delete_opens_a_confirmation_as_a_new_message(harness):
@@ -98,7 +99,7 @@ async def test_back_returns_to_the_card(harness):
     await harness.tap(USER, "◀ Back")
 
     assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [DELETE, "✖ Close"]
+    assert harness.button_texts() == [PHOTO, DELETE, "✖ Close"]
 
 
 async def test_confirming_deletes_the_receipt_and_trashes_the_photo(

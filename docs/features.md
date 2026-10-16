@@ -24,7 +24,7 @@ failures, the same photo sent twice and the same receipt photographed twice.
 
 **Stage 1: working with a receipt after parsing**
 1. **Receipt card.** Inline buttons under the summary: `Items`, `Photo`, `Delete`
-   (`Review` comes with the issue-review spec). Delete is done; Items and Photo follow.
+   (`Review` comes with the issue-review spec). Delete and Photo are done; Items follows.
 2. **Issue review.** Walk through high/medium issues one at a time. For each, confirm the
    assumed value or enter the right one (date, total, card last 4, lines that don't add up).
 3. **Item edit.** Name, category, quantity/price. Name and category are saved to
