@@ -323,7 +323,7 @@ async def test_photo_exists_only_for_the_same_user(make_uow):
 class Rogue(StrEnum):
     """Values the domain enums lack, to prove the CHECKs hold when the aggregate is bypassed."""
 
-    MERGED = "merged"
+    BOGUS = "bogus"
     USER = "user"
     CRITICAL = "critical"
     IGNORED = "ignored"
@@ -388,7 +388,7 @@ async def test_duplicate_status_goes_with_duplicate_of_id_both_ways(make_uow):
 async def test_unknown_receipt_status_is_rejected(make_uow):
     await add_user(make_uow)
     with pytest.raises(CheckViolationError):
-        await persist(make_uow, bare(Rogue.MERGED))
+        await persist(make_uow, bare(Rogue.BOGUS))
 
 
 @pytest.mark.parametrize(

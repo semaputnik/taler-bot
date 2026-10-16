@@ -67,12 +67,15 @@ class SqlAlchemyReceiptRepository:
             .order_by(ReceiptItem.position)
             .execution_options(**fresh)
         )
-        issues = await self._session.scalars(
-            select(ReceiptIssue)
-            .where(ReceiptIssue.parse_id == (parse.id if parse is not None else None))
-            .order_by(ReceiptIssue.id)
-            .execution_options(**fresh)
-        )
+        issues = []
+        if parse is not None:
+            found_issues = await self._session.scalars(
+                select(ReceiptIssue)
+                .where(ReceiptIssue.parse_id == parse.id)
+                .order_by(ReceiptIssue.id)
+                .execution_options(**fresh)
+            )
+            issues = found_issues.all()
         edits = await self._session.scalars(
             select(ReceiptEdit)
             .where(ReceiptEdit.receipt_id == receipt_id)
@@ -85,7 +88,7 @@ class SqlAlchemyReceiptRepository:
             photo,
             parse,
             [(item, product) for item, product in items.all()],
-            issues.all(),
+            issues,
             edits.all(),
         )
 
