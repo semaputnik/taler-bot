@@ -30,10 +30,13 @@ Read it before working on any user-facing flow. Key decisions:
 | deploy | **docker compose**: `bot` + `postgres` + `redis`, plus volumes for photos, the DB and Redis |
 | dev tools | pytest, pytest-asyncio, ruff |
 
+`fluentogram` was added with the user's agreement (issue #4).
 Add a new dependency only after asking the user. Record each decision here.
 
-> **Status:** the code is in the target layout (`src/`, `alembic/`) and config is the nested
-> `src/config/` settings; the bot, usecases, DTOs and repositories do not exist yet.
+> **Status:** the code is in the target layout (`src/`, `alembic/`), config is the nested
+> `src/config/` settings, and the walking skeleton works: `App`, access middleware,
+> `EnsureUser`, the Unit of Work with a `users` repository, and `/start`. Repositories for the
+> other tables are not written yet.
 
 ```bash
 cp src/config/envs/.env.template src/config/envs/.env   # fill in BOT__TOKEN and LLM__API_KEY

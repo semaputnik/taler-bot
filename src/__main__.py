@@ -1,12 +1,32 @@
+import asyncio
 import logging
+import sys
+
+from pydantic import ValidationError
+
+from src.bot.app import App
+from src.config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
 
-def main() -> None:
+def main() -> int:
     logging.basicConfig(level=logging.INFO)
-    logger.info("taler-bot: the bot is not implemented yet")
+    try:
+        settings = Settings()  # pyright: ignore[reportCallIssue]
+    except ValidationError as error:
+        missing = ", ".join(".".join(map(str, e["loc"])).upper() for e in error.errors())
+        logger.error("Invalid configuration, check these settings: %s", missing)
+        return 1
+    if not settings.bot.token.get_secret_value():
+        logger.error("BOT__TOKEN is empty: set it in the environment or src/config/envs/.env")
+        return 1
+    try:
+        asyncio.run(App(settings).run())
+    except KeyboardInterrupt:
+        pass
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -1,4 +1,4 @@
-# Dev services. The bot itself runs on the host with `uv run taler-bot` for now.
+# Dev services. The bot itself runs on the host with `uv run python -m src`.
 services:
   postgres:
     image: postgres:18
