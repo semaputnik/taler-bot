@@ -1,10 +1,12 @@
 """DB fixtures: a separate `<db>_test` database, migrated once, with each test rolled back."""
 
 import asyncio
+import os
 from collections.abc import AsyncIterator, Callable
 
 import asyncpg
 import pytest
+from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
@@ -14,15 +16,17 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from alembic import command
-from src.config.settings import DatabaseSettings
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
 from tests.helpers import MakeUow
 
+# Tests never read the app's env file, so a fresh clone (or CI) runs them as is.
+# Point TEST_DATABASE_URL at another server to override; the database name is only a prefix.
+DEFAULT_TEST_DATABASE_URL = "postgresql+asyncpg://taler:taler@localhost:5447/taler"
+
 
 def scratch_url(suffix: str = "test") -> str:
-    """URL of a throwaway database named `<db>_<suffix>` next to the dev database."""
-    url = make_url(str(DatabaseSettings().database.url))  # pyright: ignore[reportCallIssue]
+    """URL of a throwaway database named `<db>_<suffix>` on the test server."""
+    url = make_url(os.environ.get("TEST_DATABASE_URL", DEFAULT_TEST_DATABASE_URL))
     return url.set(database=f"{url.database}_{suffix}").render_as_string(hide_password=False)
 
 

@@ -17,6 +17,7 @@ async def test_lifespan_closes_the_bot_session_on_exit():
 
     session.close = close
     settings = Settings(
+        _env_file=None,
         bot=BotConfig(token="123456:TEST"),
         database=DatabaseConfig(url="postgresql+asyncpg://u:p@localhost:1/db"),
         llm=LLMConfig(api_key="x"),
@@ -38,6 +39,7 @@ async def test_lifespan_closes_storage_and_engine_even_if_the_bot_session_fails(
 
     session.close = failing_close
     settings = Settings(
+        _env_file=None,
         bot=BotConfig(token="123456:TEST"),
         database=DatabaseConfig(url="postgresql+asyncpg://u:p@localhost:1/db"),
         llm=LLMConfig(api_key="x"),
