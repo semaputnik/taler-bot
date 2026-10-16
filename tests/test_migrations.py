@@ -2,13 +2,13 @@
 
 import asyncio
 
+from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import inspect
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from alembic import command
 from src.database.models import Base
 from tests.conftest import alembic_config, recreate_database, scratch_url
 
