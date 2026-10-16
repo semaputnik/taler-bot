@@ -22,5 +22,37 @@ class DataViolationError(DatabaseException):
     """A value does not fit its column (too long, out of range, malformed)."""
 
 
+class DomainException(AppException):
+    """A receipt rule was violated; raised by the aggregates, never by the database."""
+
+
+class InvalidReceiptTransition(DomainException):
+    """The receipt's status does not allow this action (for example parsing a merged receipt)."""
+
+
+class DuplicatePhoto(DomainException):
+    """The receipt already has a photo with this Telegram unique id."""
+
+
+class UnknownParse(DomainException):
+    """The receipt has no stored parse with this id."""
+
+
+class UnknownIssue(DomainException):
+    """The issue is not an active issue of the receipt."""
+
+
+class InvalidIssueResolution(DomainException):
+    """An issue can only be resolved as confirmed, corrected or skipped."""
+
+
+class InvalidEdit(DomainException):
+    """An edit names a field that cannot be edited, or carries a value of the wrong kind."""
+
+
+class InvalidReceiptData(DomainException):
+    """A value breaks a model invariant (for example a naive datetime)."""
+
+
 class IntegrationException(AppException):
     """An external system (LLM, storage, ...) failed."""
