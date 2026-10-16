@@ -34,7 +34,7 @@ class Product:
     name: str
     category: Category = Category.OTHER
     unit: str = "pcs"
-    # Lets a refinement remove products that only a misread of this receipt created.
+    # Lets a re-parse remove products that only a misread of this receipt created.
     created_by_receipt_id: int | None = None
     id: int | None = None
 
