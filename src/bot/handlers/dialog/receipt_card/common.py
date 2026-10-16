@@ -8,3 +8,4 @@ class PreviewDataKeys:
     CAN_DELETE = "can_delete"
     HAS_ITEMS = "has_items"
     ITEMS = "items"
+    PHOTO = "photo"

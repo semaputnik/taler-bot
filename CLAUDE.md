@@ -73,8 +73,8 @@ src/
       command/             # one module per command (only /start so far), each exposes register_xxx(dp)
       callback/            # taps on the summary keyboard: receipt.py opens the ReceiptCard dialog
       message/photo.py     # photo intake: save, reply with the keyboard, parse in the background; catch-all "send me a photo"
-      dialog/              # common.py (TransferKeys), widgets.py (I18nText), one folder per dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py (main, delete_confirm)
+      dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py (main, photo, delete_confirm)
     keyboards/receipt.py   # inline keyboard under the parse reply, ReceiptCallback (prefix "receipt")
     render.py              # receipt texts shared by the parse reply and the dialog
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
@@ -206,6 +206,10 @@ As in paper-work-bot, each dialog is a folder in `bot/handlers/dialog/<name>/`:
 Keys passed between dialogs through `start_data` live in one shared `TransferKeys`
 class. State groups live in `bot/states/`. Every text comes from `.ftl`, and there are
 no string literals in windows.
+
+A window that shows a stored receipt photo uses `DynamicMedia` with a `StoredPhoto` (by Telegram
+file id). `StoredPhotoMessageManager`, passed to `setup_dialogs`, uploads the bytes only when Telegram
+refuses the id, and shows a notice if the bytes are unreadable.
 
 ### Tests
 

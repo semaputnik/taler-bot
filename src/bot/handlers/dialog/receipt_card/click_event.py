@@ -39,6 +39,10 @@ async def select_item(
     await manager.switch_to(ReceiptCardSG.item)
 
 
+async def show_photo(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(ReceiptCardSG.photo)
+
+
 async def back_to_main(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(ReceiptCardSG.main)
 

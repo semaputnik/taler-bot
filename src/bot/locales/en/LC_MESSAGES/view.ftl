@@ -69,3 +69,4 @@ category-personal-care = Personal care
 category-baby = Baby
 category-pet = Pet
 category-other = Other
+card-photo-unavailable = The photo could not be loaded.

@@ -5,7 +5,8 @@ from aiogram_dialog import DialogManager
 from fluentogram import TranslatorRunner
 
 from src.bot import render
-from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys
+from src.bot.handlers.dialog.media import StoredPhoto
+from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewDataKeys
 from src.bot.handlers.dialog.receipt_card.model import (
     ItemChoice,
     ItemPreview,
@@ -107,6 +108,25 @@ def _item_text(row: ItemRow, i18n: TranslatorRunner) -> str:
         else None,
     ]
     return "\n".join(line for line in lines if line is not None)
+
+
+async def photo_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The photo by its Telegram file id. The bytes are loaded only if Telegram refuses it."""
+    receipt_id = dialog_manager.dialog_data[DialogDataKeys.RECEIPT_ID]
+    ref = await services.receipts.photo(user.id, receipt_id)
+    return {
+        PreviewDataKeys.PHOTO: StoredPhoto(
+            ref.telegram_file_id,
+            lambda: services.receipts.photo_bytes(user.id, receipt_id),
+            i18n.get("card-photo-unavailable"),
+        )
+    }
 
 
 def _text(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
