@@ -33,7 +33,7 @@ from src.exception import (
 )
 from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
-from src.services.results import IssueLine, NewPhoto, ParseResult, ReceiptCard
+from src.services.results import IssueLine, NewPhoto, ParseResult, PhotoRef, ReceiptCard
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +235,21 @@ class ReceiptService:
             if original is None:
                 return card
             return card.model_copy(update={"duplicate_of": await _card(uow, original)})
+
+    async def photo(self, user_id: int, receipt_id: int) -> PhotoRef:
+        """The receipt photo's Telegram file id and type (a deleted receipt's too)."""
+        async with self._uow_factory() as uow:
+            receipt = await _load(uow, user_id, receipt_id)
+            photo = receipt.photo
+            return PhotoRef(telegram_file_id=photo.telegram_file_id, mime_type=photo.mime_type)
+
+    async def photo_bytes(self, user_id: int, receipt_id: int) -> bytes:
+        """The stored file's bytes, read with no transaction open. `StorageError` if unreadable."""
+        async with self._uow_factory() as uow:
+            path = (await _load(uow, user_id, receipt_id)).photo.path
+        if path is None:
+            raise StorageError(f"receipt {receipt_id} has no stored photo")
+        return await self._storage.read(path)
 
     async def _edit(self, user_id: int, receipt_id: int, edit: Edit) -> ReceiptCard:
         async with self._uow_factory() as uow:

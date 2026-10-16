@@ -55,6 +55,15 @@ class ReceiptCard(BaseModel):
     duplicate_of: ReceiptCard | None = None  # set by `ReceiptService.card` for a duplicate
 
 
+class PhotoRef(BaseModel):
+    """What Telegram knows of a receipt's photo: enough to show it without reading the disk."""
+
+    model_config = ConfigDict(frozen=True)
+
+    telegram_file_id: str | None
+    mime_type: str | None
+
+
 class IssueLine(BaseModel):
     """One doubt for the summary: which item it is about (if any) and what it says."""
 

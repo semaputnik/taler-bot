@@ -336,3 +336,40 @@ async def test_the_card_of_a_duplicate_names_the_original(service, make_uow):
     )
     assert card.duplicate_of.duplicate_of is None
     assert (await service.card(1, original.id)).duplicate_of is None
+
+
+# --- the stored photo ----------------------------------------------------------------------
+
+
+async def test_photo_returns_the_stored_telegram_ids(service):
+    card = await service.save_photo(
+        1, b"img", new_photo(telegram_file_id="tg-file", mime_type="image/png")
+    )
+
+    ref = await service.photo(1, card.receipt_id)
+
+    assert (ref.telegram_file_id, ref.mime_type) == ("tg-file", "image/png")
+
+
+async def test_photo_bytes_returns_the_saved_bytes(service):
+    card = await service.save_photo(1, b"the-bytes", new_photo())
+
+    assert await service.photo_bytes(1, card.receipt_id) == b"the-bytes"
+
+
+async def test_photo_bytes_of_a_vanished_file_is_a_storage_error(service, tmp_storage):
+    card = await service.save_photo(1, b"img", new_photo())
+    (path,) = stored_files(tmp_storage)
+    (tmp_storage._root / path).unlink()
+
+    with pytest.raises(StorageError):
+        await service.photo_bytes(1, card.receipt_id)
+
+
+async def test_another_users_photo_is_not_found(service, make_uow):
+    await add_allowed_user(make_uow, 2)
+    mine = await service.save_photo(1, b"img", new_photo())
+
+    for call in (service.photo(2, mine.receipt_id), service.photo_bytes(2, mine.receipt_id)):
+        with pytest.raises(ReceiptNotFound):
+            await call
