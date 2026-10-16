@@ -7,10 +7,8 @@ class ReceiptStatus(StrEnum):
     PARSED = "parsed"
     FAILED = "failed"
     NOT_RECEIPT = "not_receipt"
-    # Parsed alone, looks like a known receipt but the key differs; waiting for the user.
-    AWAITING_MATCH = "awaiting_match"
-    # Turned out to be another photo of `merged_into_id`; its photo and parse moved there.
-    MERGED = "merged"
+    # Same receipt key as an earlier parsed receipt, `duplicate_of_id`.
+    DUPLICATE = "duplicate"
 
 
 class ParseStatus(StrEnum):
@@ -39,7 +37,7 @@ class Category(StrEnum):
 class IssueSource(StrEnum):
     MODEL = "model"
     WORKFLOW = "workflow"
-    # Photos of one receipt disagree, or a re-parse disagrees with a user edit.
+    # A re-parse disagrees with a user edit (the value "merge" is kept for stored rows).
     MERGE = "merge"
 
 

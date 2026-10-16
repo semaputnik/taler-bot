@@ -27,15 +27,11 @@ class DomainException(AppException):
 
 
 class InvalidReceiptTransition(DomainException):
-    """The receipt's status does not allow this action (for example parsing a merged receipt)."""
+    """The receipt's status does not allow this action (for example parsing a duplicate receipt)."""
 
 
 class DuplicatePhoto(DomainException):
-    """The receipt already has a photo with this Telegram unique id."""
-
-
-class UnknownParse(DomainException):
-    """The receipt has no stored parse with this id."""
+    """The user already sent a photo with this Telegram unique id."""
 
 
 class UnknownIssue(DomainException):

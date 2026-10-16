@@ -1,4 +1,4 @@
-"""`Parse`: one normalized reading of a receipt's photos (what `normalize` produces).
+"""`Parse`: one normalized reading of a receipt's photo (what `normalize` produces).
 
 Mirrors the return value of `docs/n8n-reference/normalize_receipt.js`. A value object: frozen,
 compared by value, except for the optional `id` the repository assigns once it is stored.
@@ -45,7 +45,7 @@ class ParsedIssue:
 
 @dataclass(frozen=True, kw_only=True)
 class Parse:
-    id: int | None = None  # None until the repository has stored it (parses are append-only)
+    id: int | None = None  # None until the repository has stored it (a receipt has one parse row)
     is_receipt: bool = True
 
     store_key: str | None = None
@@ -72,7 +72,6 @@ class Parse:
     raw_output: dict[str, Any] | None = None
     model: str | None = None
     parser_version: str
-    photo_ids: tuple[int, ...] = ()  # the photos this parse was made from
 
     def __post_init__(self) -> None:
         if self.purchased_at is not None and self.purchased_at.tzinfo is None:
@@ -88,5 +87,5 @@ class ParseOutcome:
     """Which catalog products a parse change touches, for `Catalog` to act on."""
 
     product_keys_used: frozenset[str]
-    # Used by the previous current parse, not by the new one: candidates for removal.
+    # Used by the previous parse, not by the new one: candidates for removal.
     product_keys_released: frozenset[str]

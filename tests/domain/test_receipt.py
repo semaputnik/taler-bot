@@ -6,13 +6,11 @@ import pytest
 from src.domain.enums import EditTarget, IssueResolution, IssueSource, ReceiptStatus
 from src.domain.receipt import Edit, Issue, ParsedIssue, Photo, Receipt
 from src.exception import (
-    DuplicatePhoto,
     InvalidEdit,
     InvalidIssueResolution,
     InvalidReceiptData,
     InvalidReceiptTransition,
     UnknownIssue,
-    UnknownParse,
 )
 from tests.domain.builders import WHEN, parse, photo, product
 
@@ -21,10 +19,11 @@ def started() -> Receipt:
     return Receipt.start(user_id=1, photo=photo())
 
 
-def test_a_started_receipt_is_pending_with_its_first_photo():
+def test_a_started_receipt_is_pending_with_its_photo_and_no_parse():
     receipt = started()
     assert receipt.status is ReceiptStatus.PENDING
-    assert [p.telegram_file_unique_id for p in receipt.photos] == ["u1"]
+    assert receipt.photo.telegram_file_unique_id == "u1"
+    assert receipt.parse is None
 
 
 def test_applying_a_parse_fills_header_items_and_status():
@@ -122,52 +121,15 @@ def test_an_invalid_edit_is_rejected(edit):
         Edit(**edit)
 
 
-# --- undo -------------------------------------------------------------------------------
-
-
-def test_undo_restores_the_previous_header_and_items_and_keeps_all_edits():
-    receipt = started()
-    receipt.apply_parse(parse(product("mercadona::leche"), id=1))
-    receipt.record_edit(total_edit("50"))
-    receipt.apply_parse(parse(product("mercadona::pan"), id=2, total=Decimal("60")))
-
-    receipt.undo_to(1)
-
-    assert [i.ref for i in receipt.items] == ["mercadona::leche#1"]
-    assert receipt.current_parse.id == 1
-    assert receipt.header.total == Decimal("50")  # the edit is still on top
-    assert len(receipt.edits) == 1
-    assert len(receipt.parses) == 2
-
-
-def test_undo_to_an_unknown_parse_is_rejected():
-    receipt = started()
-    receipt.apply_parse(parse(id=1))
-    with pytest.raises(UnknownParse):
-        receipt.undo_to(99)
-
-
 # --- guards -----------------------------------------------------------------------------
 
 
-def test_a_merged_receipt_refuses_apply_parse():
+def test_a_duplicate_receipt_refuses_apply_parse():
     receipt = started()
-    receipt.merge_into(7)
-    assert (receipt.status, receipt.merged_into_id) == (ReceiptStatus.MERGED, 7)
+    receipt.apply_parse(parse())
+    receipt.mark_duplicate(7)
     with pytest.raises(InvalidReceiptTransition):
         receipt.apply_parse(parse())
-
-
-def test_a_pending_receipt_refuses_undo_to():
-    with pytest.raises(InvalidReceiptTransition):
-        started().undo_to(1)
-
-
-def test_a_receipt_cannot_be_merged_into_itself():
-    receipt = Receipt.start(1, photo())
-    receipt.id = 5
-    with pytest.raises(InvalidReceiptTransition):
-        receipt.merge_into(5)
 
 
 def test_soft_delete_sets_deleted_at_and_freezes_the_receipt():
@@ -178,9 +140,25 @@ def test_soft_delete_sets_deleted_at_and_freezes_the_receipt():
         receipt.apply_parse(parse())
     with pytest.raises(InvalidReceiptTransition):
         receipt.soft_delete()
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.mark_failed("x")
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.mark_not_receipt()
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.resolve_issue(1, IssueResolution.SKIPPED)
 
 
-def test_failure_and_match_transitions_are_guarded():
+def test_a_deleted_parsed_receipt_refuses_edits_and_duplicate_marking():
+    receipt = started()
+    receipt.apply_parse(parse())
+    receipt.soft_delete(at=WHEN)
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.record_edit(total_edit())
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.mark_duplicate(7)
+
+
+def test_failure_transitions_are_guarded():
     receipt = started()
     receipt.mark_failed("timeout")
     assert (receipt.status, receipt.error_message) == (ReceiptStatus.FAILED, "timeout")
@@ -188,8 +166,6 @@ def test_failure_and_match_transitions_are_guarded():
     assert receipt.error_message is None
     with pytest.raises(InvalidReceiptTransition):
         receipt.mark_failed("late")
-    receipt.mark_awaiting_match()
-    assert receipt.status is ReceiptStatus.AWAITING_MATCH
     with pytest.raises(InvalidReceiptTransition):
         receipt.mark_not_receipt()
 
@@ -201,15 +177,7 @@ def test_mark_not_receipt_clears_the_items():
     assert receipt.items == []
 
 
-# --- photos -----------------------------------------------------------------------------
-
-
-def test_attach_photo_rejects_a_repeated_telegram_unique_id():
-    receipt = started()
-    receipt.attach_photo(photo("u2"))
-    with pytest.raises(DuplicatePhoto):
-        receipt.attach_photo(photo("u1"))
-    assert len(receipt.photos) == 2
+# --- photo -----------------------------------------------------------------------------
 
 
 def test_a_photo_must_have_a_timezone_aware_time():
@@ -229,10 +197,6 @@ def test_parse_outcome_lists_used_and_released_product_keys_across_two_parses():
     second = receipt.apply_parse(parse(product("m::leche"), product("m::miel"), id=2))
     assert second.product_keys_used == {"m::leche", "m::miel"}
     assert second.product_keys_released == {"m::pan"}
-
-    undone = receipt.undo_to(1)
-    assert undone.product_keys_used == {"m::leche", "m::pan"}
-    assert undone.product_keys_released == {"m::miel"}
 
 
 # --- issues -----------------------------------------------------------------------------
@@ -268,12 +232,10 @@ def test_an_issue_cannot_be_resolved_as_open():
         with_issue().resolve_issue(10, IssueResolution.OPEN)
 
 
-def test_active_issues_are_the_current_parses_and_follow_undo():
+def test_issues_are_the_parses_and_a_reparse_replaces_them():
     receipt = with_issue()
     receipt.apply_parse(parse(id=2))
     assert receipt.issues == []
-    receipt.undo_to(1)
-    assert [i.issue_type for i in receipt.issues] == ["ambiguous"]
 
 
 # --- not a receipt ----------------------------------------------------------------------
@@ -294,29 +256,28 @@ def test_a_parse_that_is_not_a_receipt_sets_not_receipt_and_no_items():
 
 def test_the_receipt_reports_what_the_repository_must_rewrite():
     receipt = started()
-    assert not receipt.current_parse_changed
+    assert not receipt.parse_changed
     receipt.apply_parse(parse(id=1))
-    assert receipt.current_parse_changed  # implies: replace items and issues
+    assert receipt.parse_changed  # implies: replace the parse row, items and issues
     receipt.mark_saved()
-    assert not receipt.current_parse_changed and not receipt.items_changed
+    assert not receipt.parse_changed and not receipt.items_changed
 
     receipt.record_edit(total_edit())  # header only: items and issues stay as stored
-    assert not receipt.current_parse_changed and not receipt.items_changed
+    assert not receipt.parse_changed and not receipt.items_changed
 
     receipt.record_edit(
         Edit(target=EditTarget.ITEM, item_ref="mercadona::leche#1", field="unit", value="kg")
     )
-    assert receipt.items_changed and not receipt.current_parse_changed
+    assert receipt.items_changed and not receipt.parse_changed
 
 
-def test_assign_parse_id_replaces_the_stored_parse_and_the_current_reference():
+def test_a_second_parse_replaces_the_first_and_nothing_is_kept_of_it():
     receipt = started()
-    new = parse()
-    receipt.apply_parse(new)
-    stored = receipt.assign_parse_id(new, 5)
-    assert stored.id == 5
-    assert receipt.current_parse is stored and receipt.parses == [stored]
-    receipt.undo_to(5)
+    receipt.apply_parse(parse(product("m::leche"), id=1))
+    second = parse(product("m::pan"), id=2)
+    receipt.apply_parse(second)
+    assert receipt.parse is second
+    assert [i.ref for i in receipt.items] == ["m::pan#1"]
 
 
 # --- review follow-ups -------------------------------------------------------------------
@@ -347,17 +308,6 @@ def test_money_within_two_cents_is_not_a_disagreement():
     assert len(merge_issues(receipt)) == 1
 
 
-def test_undo_keeps_awaiting_match_but_a_new_parse_refines_it_to_parsed():
-    receipt = started()
-    receipt.apply_parse(parse(id=1))
-    receipt.apply_parse(parse(id=2))
-    receipt.mark_awaiting_match()
-    receipt.undo_to(1)
-    assert receipt.status is ReceiptStatus.AWAITING_MATCH
-    receipt.apply_parse(parse(id=3))
-    assert receipt.status is ReceiptStatus.PARSED
-
-
 def test_keys_of_a_parse_that_was_not_a_receipt_are_not_released():
     receipt = started()
     receipt.apply_parse(parse(id=1, is_receipt=False))
@@ -365,8 +315,52 @@ def test_keys_of_a_parse_that_was_not_a_receipt_are_not_released():
     assert outcome.product_keys_released == frozenset()
 
 
-def test_only_a_pending_parsed_or_awaiting_receipt_can_be_merged():
+# --- duplicates -------------------------------------------------------------------------
+
+
+def test_a_parsed_receipt_can_be_marked_a_duplicate_of_another():
     receipt = started()
-    receipt.mark_failed("x")
+    receipt.apply_parse(parse())
+    receipt.mark_duplicate(7)
+    assert (receipt.status, receipt.duplicate_of_id) == (ReceiptStatus.DUPLICATE, 7)
+
+
+@pytest.mark.parametrize("setup", ["pending", "failed", "not_receipt", "duplicate"])
+def test_mark_duplicate_is_only_allowed_from_parsed(setup):
+    receipt = started()
+    if setup == "failed":
+        receipt.mark_failed("x")
+    elif setup == "not_receipt":
+        receipt.mark_not_receipt()
+    elif setup == "duplicate":
+        receipt.apply_parse(parse())
+        receipt.mark_duplicate(7)
     with pytest.raises(InvalidReceiptTransition):
-        receipt.merge_into(7)
+        receipt.mark_duplicate(8)
+    assert receipt.duplicate_of_id == (7 if setup == "duplicate" else None)
+
+
+def test_a_receipt_cannot_be_a_duplicate_of_itself():
+    receipt = started()
+    receipt.id = 5
+    receipt.apply_parse(parse())
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.mark_duplicate(5)
+
+
+# --- apply_parse from every parseable status --------------------------------------------
+
+
+@pytest.mark.parametrize("setup", ["pending", "parsing", "parsed", "failed", "not_receipt"])
+def test_apply_parse_is_allowed_from_every_status_but_duplicate(setup):
+    receipt = started()
+    if setup == "parsing":
+        receipt.status = ReceiptStatus.PARSING
+    elif setup == "parsed":
+        receipt.apply_parse(parse())
+    elif setup == "failed":
+        receipt.mark_failed("x")
+    elif setup == "not_receipt":
+        receipt.mark_not_receipt()
+    receipt.apply_parse(parse())
+    assert receipt.status is ReceiptStatus.PARSED
