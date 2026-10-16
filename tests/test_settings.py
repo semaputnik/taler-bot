@@ -117,8 +117,8 @@ def test_database_settings_read_the_env_file_and_ignore_other_keys(tmp_path: Pat
     assert str(DatabaseSettings(_env_file=env_file).database.url) == DB_URL
 
 
-def test_default_env_file_lives_in_the_config_package() -> None:
-    assert ENV_FILE == Path("src/config/envs/.env").resolve()
+def test_default_env_file_lives_at_the_repo_root() -> None:
+    assert ENV_FILE == Path(__file__).resolve().parents[1] / ".env"
 
 
 def test_env_template_has_every_key_and_no_secrets(monkeypatch: pytest.MonkeyPatch) -> None:

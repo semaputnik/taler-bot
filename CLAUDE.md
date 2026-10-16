@@ -34,7 +34,7 @@ Read it before working on any user-facing flow. Key decisions:
 Add a new dependency only after asking the user. Record each decision here.
 
 ```bash
-cp src/config/envs/.env.template src/config/envs/.env   # fill in BOT__TOKEN and LLM__API_KEY
+cp .env.template .env           # fill in BOT__TOKEN and LLM__API_KEY
 docker compose up -d --wait     # postgres on localhost:5447, redis on localhost:6390
 uv sync
 uv run alembic upgrade head
@@ -55,7 +55,7 @@ src/
   __main__.py              # App(settings).run()
   exception.py             # AppException → DatabaseException, IntegrationException, …
   config/                  # settings.py (root Settings) + bot.py, database.py, redis.py,
-                           # llm.py, storage.py (nested models); standalone DatabaseSettings for Alembic; envs/.env.template, envs/.env
+                           # llm.py, storage.py (nested models); standalone DatabaseSettings for Alembic
   bot/                     # everything that knows about aiogram
     app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, usecases, lifespan
     middlewares/           # access (users.is_allowed), i18n, usecases injection
@@ -82,6 +82,7 @@ src/
     llm/                   # ReceiptParser: pydantic-ai agent, schema models, prompt
     storage/               # PhotoStorage: RECEIPTS_DIR, atomic writes, .trash
 alembic/                   # migrations (alembic.ini at the repo root)
+.env.template, .env        # settings template (committed) and local values (git-ignored)
 tests/
 ```
 
@@ -307,8 +308,8 @@ through the n8n MCP server (`get_workflow_details`).
 - Timezone is `Europe/Madrid`. Default currency is `EUR`.
 - Money: round to 2 decimals for comparisons and use a 0.02 tolerance. Keep 4 decimals
   for unit prices.
-- Never log or store full card numbers, tokens or API keys. Secrets come from env / `src/config/envs/.env`
-  (git-ignored) through pydantic-settings. Keep `src/config/envs/.env.template` up to date.
+- Never log or store full card numbers, tokens or API keys. Secrets come from env / the repo-root `.env`
+  (git-ignored) through pydantic-settings. Keep `.env.template` up to date.
 - One Telegram bot token has one webhook. Do not reuse the Casa Receipts or Casa Mail bot
   tokens while the n8n workflows are active. Use a separate dev bot.
 - Normalization should be pure functions with unit tests that use real receipt JSON

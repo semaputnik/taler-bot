@@ -20,7 +20,7 @@ def main() -> int:
         logger.error("Invalid configuration, check these settings: %s", missing)
         return 1
     if not settings.bot.token.get_secret_value():
-        logger.error("BOT__TOKEN is empty: set it in the environment or src/config/envs/.env")
+        logger.error("BOT__TOKEN is empty: set it in the environment or .env")
         return 1
     try:
         asyncio.run(App(settings).run())

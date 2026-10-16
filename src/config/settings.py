@@ -12,7 +12,7 @@ from src.config.redis import RedisConfig
 from src.config.storage import StorageConfig
 
 # Environment variables win over this file (see `.env.template` next to it).
-ENV_FILE = Path(__file__).parent / "envs" / ".env"
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class _BaseSettings(BaseSettings):
