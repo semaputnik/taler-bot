@@ -7,8 +7,9 @@ from typing import Any
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
+from aiogram.exceptions import TelegramNetworkError
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.methods import GetFile, GetMe, SendMessage, TelegramMethod
+from aiogram.methods import GetFile, GetMe, SendChatAction, SendMessage, TelegramMethod
 from aiogram.types import (
     Chat,
     Document,
@@ -35,6 +36,7 @@ class RecordingSession(BaseSession):
         super().__init__()
         self.calls: list[TelegramMethod[Any]] = []
         self.files: dict[str, bytes] = {}  # file_id -> bytes served by `download_file`
+        self.chat_action_fails = False  # make every `sendChatAction` raise
 
     async def make_request(self, bot: Bot, method: TelegramMethod[Any], timeout: int | None = None):  # noqa: ASYNC109
         if isinstance(method, GetMe):
@@ -47,6 +49,10 @@ class RecordingSession(BaseSession):
                 file_path=f"photos/{method.file_id}.jpg",
                 file_size=len(self.files.get(method.file_id, b"")),
             )
+        if isinstance(method, SendChatAction):
+            if self.chat_action_fails:
+                raise TelegramNetworkError(method=method, message="boom")
+            return True
         if isinstance(method, SendMessage):
             return Message(
                 message_id=1,
@@ -151,6 +157,10 @@ class BotHarness:
     @property
     def sent_messages(self) -> list[SendMessage]:
         return [call for call in self.session.calls if isinstance(call, SendMessage)]
+
+    @property
+    def chat_actions(self) -> list[SendChatAction]:
+        return [call for call in self.session.calls if isinstance(call, SendChatAction)]
 
     @property
     def get_file_calls(self) -> list[GetFile]:
