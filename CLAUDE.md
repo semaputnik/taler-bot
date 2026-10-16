@@ -69,6 +69,7 @@ src/
     states/                # StatesGroup classes
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
   database/
+    engine.py              # create_engine / create_sessionmaker
     models/                # SQLAlchemy ORM; never leaves database/
     dto/                   # pydantic DTOs: the only thing repositories return
     interfaces/            # Protocols for repositories and the UoW (typing)

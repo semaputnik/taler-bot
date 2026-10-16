@@ -35,12 +35,17 @@ async def recreate_database(url: str) -> None:
         await admin.close()
 
 
+def alembic_config(url: str) -> Config:
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", url)
+    return config
+
+
 @pytest.fixture(scope="session")
 async def engine() -> AsyncIterator[AsyncEngine]:
     url = scratch_url()
     await recreate_database(url)
-    config = Config("alembic.ini")
-    config.set_main_option("sqlalchemy.url", url)
+    config = alembic_config(url)
     # env.py calls asyncio.run, which cannot nest inside the test loop.
     await asyncio.to_thread(command.upgrade, config, "head")
 
