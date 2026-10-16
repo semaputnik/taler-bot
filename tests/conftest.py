@@ -2,12 +2,13 @@
 
 import asyncio
 import os
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 
 import asyncpg
 import pytest
 from alembic import command
 from alembic.config import Config
+from sqlalchemy import event
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
@@ -91,3 +92,16 @@ def session_factory(connection: AsyncConnection) -> Callable[[], AsyncSession]:
 @pytest.fixture
 def make_uow(session_factory: Callable[[], AsyncSession]) -> MakeUow:
     return lambda: SqlAlchemyUnitOfWork(session_factory)
+
+
+@pytest.fixture
+def statements(connection: AsyncConnection) -> Iterator[list[str]]:
+    """Every SQL statement run on the test connection while the test holds the fixture."""
+    seen: list[str] = []
+
+    def record(conn, cursor, statement, parameters, context, executemany):
+        seen.append(statement)
+
+    event.listen(connection.sync_connection, "before_cursor_execute", record)
+    yield seen
+    event.remove(connection.sync_connection, "before_cursor_execute", record)

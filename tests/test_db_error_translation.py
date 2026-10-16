@@ -11,13 +11,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from src.database.dto.photo import NewReceiptPhotoDTO
 from src.database.engine import create_engine, install_error_translation
 from src.database.errors import translate_db_error
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
+from src.domain.receipt import Receipt
 from src.exception import DatabaseException, UniqueViolationError
 from tests.conftest import scratch_url
-from tests.helpers import NOW, MakeUow, add_receipt, add_user
+from tests.domain.builders import photo
+from tests.helpers import MakeUow, add_receipt, add_user
 
 
 async def test_a_driver_error_on_a_read_is_an_app_exception(make_uow: MakeUow):
@@ -30,21 +31,10 @@ async def test_a_driver_error_on_a_read_is_an_app_exception(make_uow: MakeUow):
 
 async def test_a_unique_violation_on_a_write_is_an_app_exception(make_uow: MakeUow):
     await add_user(make_uow)
-    receipt = await add_receipt(make_uow)
-    photo = NewReceiptPhotoDTO(
-        receipt_id=receipt.id,
-        user_id=1,
-        received_at=NOW,
-        path="2026/10/a.jpg",
-        telegram_file_unique_id="AQADabc",
-    )
-    async with make_uow() as uow:
-        await uow.photos.add(photo)
-        await uow.commit()
+    await add_receipt(make_uow, Receipt.start(1, photo("AQADabc")))
 
-    async with make_uow() as uow:
-        with pytest.raises(UniqueViolationError) as caught:
-            await uow.photos.add(photo)
+    with pytest.raises(UniqueViolationError) as caught:
+        await add_receipt(make_uow, Receipt.start(1, photo("AQADabc")))
     assert not isinstance(caught.value, SQLAlchemyError)
 
 
