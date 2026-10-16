@@ -8,10 +8,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.database.dto.parse import NewReceiptParseDTO, ReceiptParseDTO
-from src.database.dto.receipt import NewReceiptDTO, ReceiptDTO
+from src.database.dto.receipt import NewReceiptDTO, NewReceiptItemDTO, ReceiptDTO
 from src.database.dto.user import NewUserDTO
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
-from src.domain.enums import ReceiptStatus
+from src.domain.catalog import Product, Store
+from src.domain.enums import Category, ReceiptStatus
 
 NOW = datetime(2026, 10, 14, 18, 32, tzinfo=UTC)
 
@@ -57,3 +58,33 @@ async def add_parsed_receipt(make_uow: MakeUow) -> tuple[ReceiptDTO, ReceiptPars
         )
         await uow.commit()
     return receipt, parse
+
+
+async def seed_purchase(
+    make_uow: MakeUow, **receipt_fields: Any
+) -> tuple[Store, Product, ReceiptDTO, int]:
+    """A user (id 1) with a catalog (store, product) and a receipt whose only item uses it.
+
+    Returns the store, the product, the receipt and the item id.
+    """
+    await add_user(make_uow)
+    async with make_uow() as uow:
+        catalog = await uow.catalog.get(1)
+        store = catalog.ensure_store("lidl", "Lidl")
+        product = catalog.ensure_product("lidl", "lidl::pan", "PAN", "Pan", Category.BAKERY, "pcs")
+        await uow.catalog.save(catalog)
+        receipt = await uow.receipts.add(
+            NewReceiptDTO(user_id=1, store_id=store.id, **receipt_fields)
+        )
+        item = await uow.items.add(
+            NewReceiptItemDTO(
+                receipt_id=receipt.id,
+                store_product_id=product.id,
+                position=0,
+                name_raw="PAN",
+                quantity=1,
+                unit="pcs",
+            )
+        )
+        await uow.commit()
+    return store, product, receipt, item.id
