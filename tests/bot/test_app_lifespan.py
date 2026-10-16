@@ -74,3 +74,32 @@ async def test_lifespan_closes_the_receipt_parser():
         assert not app.receipt_parser._client.is_closed()
 
     assert app.receipt_parser._client.is_closed()
+
+
+async def test_lifespan_with_a_pending_task_finishes_within_the_timeout(monkeypatch):
+    import asyncio
+
+    from src.bot import app as app_module
+
+    monkeypatch.setattr(app_module, "TASK_SHUTDOWN_TIMEOUT", 0.05)
+    settings = Settings(
+        _env_file=None,
+        bot=BotConfig(token="123456:TEST"),
+        database=DatabaseConfig(url="postgresql+asyncpg://u:p@localhost:1/db"),
+        llm=LLMConfig(api_key="x"),
+    )
+    app = App(settings, bot_session=RecordingSession())
+    cancelled = []
+
+    async def forever() -> None:
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            cancelled.append(True)
+            raise
+
+    async with app.lifespan():
+        app.tasks.spawn(forever(), name="forever")
+        await asyncio.sleep(0)
+
+    assert cancelled == [True]

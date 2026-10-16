@@ -67,9 +67,11 @@ src/
   bot/                     # everything that knows about aiogram
     app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, Services, lifespan
     dispatcher.py          # create_dispatcher: middlewares + handlers
-    middlewares/           # services injection, access (ensures the user, drops strangers), i18n
+    tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
+    middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (only /start so far), each exposes register_xxx(dp)
+      message/photo.py     # photo intake: save, reply, parse in the background; catch-all "send me a photo"
       dialog/              # one folder per aiogram-dialog dialog (none yet, see Dialogs)
     states/                # StatesGroup classes
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
@@ -101,8 +103,8 @@ alembic/                   # migrations (alembic.ini at the repo root)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```
 
-Not built yet (each arrives with its feature): `domain/matching.py` (a domain service), the
-bot's photo intake (handler and background task) and the dialogs.
+Not built yet (each arrives with its feature): `domain/matching.py` (a domain service) and
+the dialogs.
 
 ### Layers and dependencies
 
@@ -149,6 +151,12 @@ bot's photo intake (handler and background task) and the dialogs.
 - **bot**:
   - Handlers and getters only call services and render the results through i18n. `bot`
     never imports `domain`; it uses the services' result types.
+  - Texts: call `i18n.get("receipt-saved", **vars)` with the `.ftl` key. The attribute form
+    (`i18n.receipt.saved()`) cannot reach keys with more than one dash segment, and a failed
+    lookup leaves the translator's chain polluted.
+  - `App` owns one `TaskRegistry` (handler data key `tasks`, put there by `TasksMiddleware`);
+    `lifespan` awaits pending parses for up to `TASK_SHUTDOWN_TIMEOUT`, cancels the rest, then
+    closes the bot session. The photo router is included last: it holds a catch-all.
   - `App` builds the services once (`Services` in `services/container.py`, handler data key `services`), and a
     middleware puts them into handler data, so getters receive them as arguments. There
     is no DI library.
@@ -265,6 +273,9 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
 - Never delete photos. A deleted receipt's photo moves to `RECEIPTS_DIR/.trash/`.
 
 ## What the n8n workflow does (the spec for parity)
+
+Steps 2 to 8 are done in taler-bot (stage 0, `handlers/message/photo.py`); step 1 is the
+access middleware.
 
 Trigger: a Telegram `message` update to the **Casa Receipts bot**.
 
