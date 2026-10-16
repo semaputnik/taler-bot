@@ -32,12 +32,12 @@ Read it before working on any user-facing flow. Key decisions:
 
 Add a new dependency only after asking the user. Record each decision here.
 
-> **Status:** the code written so far (`src/taler_bot/`, `migrations/`) still uses the
-> old layout and is waiting to be moved into the structure below. Don't add new code
-> to the old layout.
+> **Status:** the code is in the target layout (`src/`, `alembic/`). Config is still
+> the flat root `.env` / `.env.example` (nested `src/config/` settings and `envs/` come with
+> ticket #3); the bot, usecases, DTOs and repositories do not exist yet.
 
 ```bash
-cp src/config/envs/.env.template src/config/envs/.env   # fill in the bot token and the OpenAI key
+cp .env.example .env            # fill in the bot token and the OpenAI key (moves to src/config/envs/ in #3)
 docker compose up -d --wait     # postgres on localhost:5447, redis on localhost:6390
 uv sync
 uv run alembic upgrade head

@@ -5,20 +5,21 @@ from collections.abc import AsyncIterator
 
 import asyncpg
 import pytest
-from alembic import command
 from alembic.config import Config
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
-from taler_bot.settings import DatabaseSettings
+from alembic import command
+from src.config.settings import DatabaseSettings
 
 
-def _test_url() -> str:
+def scratch_url(suffix: str = "test") -> str:
+    """URL of a throwaway database named `<db>_<suffix>` next to the dev database."""
     url = make_url(str(DatabaseSettings().database_url))  # pyright: ignore[reportCallIssue]
-    return url.set(database=f"{url.database}_test").render_as_string(hide_password=False)
+    return url.set(database=f"{url.database}_{suffix}").render_as_string(hide_password=False)
 
 
-async def _recreate_database(url: str) -> None:
+async def recreate_database(url: str) -> None:
     target = make_url(url)
     admin = await asyncpg.connect(
         user=target.username,
@@ -36,8 +37,8 @@ async def _recreate_database(url: str) -> None:
 
 @pytest.fixture(scope="session")
 async def engine() -> AsyncIterator[AsyncEngine]:
-    url = _test_url()
-    await _recreate_database(url)
+    url = scratch_url()
+    await recreate_database(url)
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", url)
     # env.py calls asyncio.run, which cannot nest inside the test loop.

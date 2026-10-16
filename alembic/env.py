@@ -1,13 +1,13 @@
 import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from taler_bot.db.models import Base
-from taler_bot.settings import DatabaseSettings
+from alembic import context
+from src.config.settings import DatabaseSettings
+from src.database.models import Base
 
 config = context.config
 

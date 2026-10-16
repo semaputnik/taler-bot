@@ -1,8 +1,8 @@
 from sqlalchemy import ForeignKey, Identity, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
-from taler_bot.db.base import Base, Timestamps, enum_check
-from taler_bot.domain.enums import Category
+from src.database.models.base import Base, Timestamps, enum_check
+from src.domain.enums import Category
 
 
 class Store(Timestamps, Base):

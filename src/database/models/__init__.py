@@ -1,5 +1,5 @@
-from taler_bot.db.base import Base
-from taler_bot.db.models.receipt import (
+from src.database.models.base import Base
+from src.database.models.receipt import (
     Receipt,
     ReceiptEdit,
     ReceiptIssue,
@@ -8,8 +8,8 @@ from taler_bot.db.models.receipt import (
     ReceiptParse,
     ReceiptPhoto,
 )
-from taler_bot.db.models.store import Store, StoreProduct
-from taler_bot.db.models.user import User
+from src.database.models.store import Store, StoreProduct
+from src.database.models.user import User
 
 __all__ = [
     "Base",

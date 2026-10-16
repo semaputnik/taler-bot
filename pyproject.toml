@@ -19,13 +19,6 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.1.4",
 ]
 
-[project.scripts]
-taler-bot = "taler_bot:main"
-
-[build-system]
-requires = ["uv_build>=0.12.6,<0.13.0"]
-build-backend = "uv_build"
-
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
@@ -38,6 +31,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
@@ -47,4 +41,4 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.ruff.lint.per-file-ignores]
 # Generated; long CHECK expressions are fine there.
-"migrations/versions/*" = ["E501"]
+"alembic/versions/*" = ["E501"]

@@ -1,7 +1,7 @@
 from sqlalchemy import CHAR, text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from taler_bot.db.base import Base, Timestamps
+from src.database.models.base import Base, Timestamps
 
 
 class User(Timestamps, Base):

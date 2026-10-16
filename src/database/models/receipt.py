@@ -18,8 +18,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from taler_bot.db.base import Base, CreatedAt, Money, Quantity, Timestamps, enum_check
-from taler_bot.domain.enums import (
+from src.database.models.base import Base, CreatedAt, Money, Quantity, Timestamps, enum_check
+from src.domain.enums import (
     EditTarget,
     IssueResolution,
     IssueSeverity,

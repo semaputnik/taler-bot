@@ -5,7 +5,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from taler_bot.db.models import (
+from src.database.models import (
     Receipt,
     ReceiptItem,
     ReceiptParse,
@@ -14,7 +14,7 @@ from taler_bot.db.models import (
     StoreProduct,
     User,
 )
-from taler_bot.domain.enums import ParseStatus, ReceiptStatus
+from src.domain.enums import ParseStatus, ReceiptStatus
 
 NOW = datetime(2026, 10, 14, 18, 32, tzinfo=UTC)
 

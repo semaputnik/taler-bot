@@ -1297,7 +1297,7 @@ asyncio = [
 [[package]]
 name = "taler-bot"
 version = "0.1.0"
-source = { editable = "." }
+source = { virtual = "." }
 dependencies = [
     { name = "aiogram" },
     { name = "aiogram-dialog" },
