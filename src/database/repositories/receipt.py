@@ -260,6 +260,19 @@ class SqlAlchemyReceiptRepository:
         )
         return await self._get_or_none(receipt_id)
 
+    async def known_card_last4(self, user_id: int) -> set[str]:
+        found = await self._session.scalars(
+            select(ReceiptRow.card_last4)
+            .where(
+                ReceiptRow.user_id == user_id,
+                ReceiptRow.status == ReceiptStatus.PARSED.value,
+                ReceiptRow.deleted_at.is_(None),
+                ReceiptRow.card_last4.is_not(None),
+            )
+            .distinct()
+        )
+        return set(found)
+
     async def product_keys_in_items_elsewhere(
         self, user_id: int, product_keys: set[str], excluding_receipt_id: int
     ) -> set[str]:

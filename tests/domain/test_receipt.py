@@ -364,3 +364,54 @@ def test_apply_parse_is_allowed_from_every_status_but_duplicate(setup):
         receipt.mark_not_receipt()
     receipt.apply_parse(parse())
     assert receipt.status is ReceiptStatus.PARSED
+
+
+# --- mark_parsing -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("setup", ["pending", "failed"])
+def test_mark_parsing_is_allowed_from_pending_and_failed_and_clears_the_error(setup):
+    receipt = started()
+    if setup == "failed":
+        receipt.mark_failed("timeout")
+    receipt.mark_parsing()
+    assert (receipt.status, receipt.error_message) == (ReceiptStatus.PARSING, None)
+
+
+@pytest.mark.parametrize("setup", ["parsing", "parsed", "not_receipt", "duplicate"])
+def test_mark_parsing_is_refused_from_every_other_status(setup):
+    receipt = started()
+    if setup == "parsing":
+        receipt.mark_parsing()
+    elif setup in ("parsed", "duplicate"):
+        receipt.apply_parse(parse())
+        if setup == "duplicate":
+            receipt.mark_duplicate(99)
+    else:
+        receipt.mark_not_receipt()
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.mark_parsing()
+
+
+def test_a_parsing_receipt_can_be_marked_failed_and_gets_its_parse_applied():
+    receipt = started()
+    receipt.mark_parsing()
+    receipt.mark_failed("model down")
+    assert receipt.status is ReceiptStatus.FAILED
+    receipt.mark_parsing()
+    receipt.apply_parse(parse())
+    assert receipt.status is ReceiptStatus.PARSED
+
+
+def test_the_parse_carries_usage_and_duration():
+    from dataclasses import replace
+
+    stamped = replace(parse(), input_tokens=100, output_tokens=20, duration_ms=1500)
+    receipt = started()
+    receipt.mark_parsing()
+    receipt.apply_parse(stamped)
+    assert (receipt.parse.input_tokens, receipt.parse.output_tokens, receipt.parse.duration_ms) == (
+        100,
+        20,
+        1500,
+    )

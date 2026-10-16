@@ -195,6 +195,10 @@ class Receipt:
 
     # --- status transitions ------------------------------------------------------------
 
+    def mark_parsing(self) -> None:
+        """The photo is being read: a parse has started for a pending or failed receipt."""
+        self._transition({S.PENDING, S.FAILED}, S.PARSING)
+
     def mark_duplicate(self, of_receipt_id: int) -> None:
         """Another parsed receipt of the user has the same receipt key."""
         if self.id is not None and of_receipt_id == self.id:

@@ -534,3 +534,36 @@ async def test_marking_a_stored_receipt_as_a_duplicate_is_saved(make_uow):
     loaded = await load(make_uow, pending.id)
     assert loaded == receipt
     assert (loaded.status, loaded.duplicate_of_id) == (ReceiptStatus.DUPLICATE, original.id)
+
+
+async def test_usage_and_duration_round_trip_on_the_parse_row(make_uow):
+    stamped = replace(parse(MILK), input_tokens=1200, output_tokens=340, duration_ms=8123)
+    await add_user(make_uow)
+    await seed_catalog(make_uow, stamped)
+    receipt = Receipt.start(1, photo("usage"))
+    receipt.apply_parse(stamped)
+
+    loaded = await load(make_uow, (await persist(make_uow, receipt)).id)
+
+    assert (loaded.parse.input_tokens, loaded.parse.output_tokens, loaded.parse.duration_ms) == (
+        1200,
+        340,
+        8123,
+    )
+
+
+async def test_known_card_last4_lists_the_users_parsed_receipts_cards_only(make_uow):
+    await add_user(make_uow)
+    await add_user(make_uow, 2)
+    for i, (user_id, last4) in enumerate([(1, "1111"), (1, "1111"), (2, "2222")]):
+        bought = replace(parse(MILK, receipt_key=f"k{i}"), card_last4=last4)
+        await seed_catalog(make_uow, bought, user_id=user_id)
+        receipt = Receipt.start(user_id, photo(f"c{i}"))
+        receipt.apply_parse(bought)
+        await persist(make_uow, receipt)
+    await persist(make_uow, bare())  # pending, no card
+
+    async with make_uow() as uow:
+        assert await uow.receipts.known_card_last4(1) == {"1111"}
+        assert await uow.receipts.known_card_last4(2) == {"2222"}
+        assert await uow.receipts.known_card_last4(3) == set()
