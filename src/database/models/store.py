@@ -42,7 +42,7 @@ class StoreProduct(Timestamps, Base):
     name_raw: Mapped[str]
     category: Mapped[str] = mapped_column(server_default=Category.OTHER.value)
     unit: Mapped[str] = mapped_column(server_default="pcs")
-    # Lets a refinement delete products that only a misread of this receipt created.
+    # Lets a re-parse delete products that only a misread of this receipt created.
     created_by_receipt_id: Mapped[int | None] = mapped_column(
         ForeignKey("receipts.id", ondelete="SET NULL")
     )

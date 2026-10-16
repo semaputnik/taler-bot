@@ -13,7 +13,7 @@ from src.bot.i18n import create_translator_hub
 from src.config.settings import Settings
 from src.database.engine import create_engine, create_sessionmaker
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
-from src.usecases.container import UseCases
+from src.services.container import Services
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +34,9 @@ class App:
             str(settings.redis.url), key_builder=DefaultKeyBuilder(with_destiny=True)
         )
         self.translator_hub = create_translator_hub()
-        self.usecases = UseCases.build(lambda: SqlAlchemyUnitOfWork(session_factory))
+        self.services = Services.build(lambda: SqlAlchemyUnitOfWork(session_factory))
         self.dispatcher = create_dispatcher(
-            storage=self.storage, usecases=self.usecases, translator_hub=self.translator_hub
+            storage=self.storage, services=self.services, translator_hub=self.translator_hub
         )
 
     @asynccontextmanager

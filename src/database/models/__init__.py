@@ -4,7 +4,6 @@ from src.database.models.receipt import (
     ReceiptEdit,
     ReceiptIssue,
     ReceiptItem,
-    ReceiptMessage,
     ReceiptParse,
     ReceiptPhoto,
 )
@@ -17,7 +16,6 @@ __all__ = [
     "ReceiptEdit",
     "ReceiptIssue",
     "ReceiptItem",
-    "ReceiptMessage",
     "ReceiptParse",
     "ReceiptPhoto",
     "Store",

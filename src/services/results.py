@@ -1,0 +1,52 @@
+"""The services' own types: what the bot passes in and gets back (no domain, no database types)."""
+
+from datetime import datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict
+
+
+class CurrentUser(BaseModel):
+    """The user an update comes from, as the bot layer sees them."""
+
+    model_config = ConfigDict(from_attributes=True, frozen=True)
+
+    id: int
+    username: str | None
+    first_name: str | None
+    is_allowed: bool
+    is_admin: bool
+    timezone: str
+    default_currency: str
+
+
+class NewPhoto(BaseModel):
+    """A received photo: Telegram's ids and where its bytes were stored (relative path)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    received_at: datetime
+    telegram_file_unique_id: str | None = None
+    telegram_file_id: str | None = None
+    telegram_message_id: int | None = None
+    mime_type: str | None = None
+    size_bytes: int | None = None
+
+
+class ReceiptCard(BaseModel):
+    """What the summary message of a receipt shows."""
+
+    model_config = ConfigDict(frozen=True)
+
+    receipt_id: int
+    status: str
+    store_name: str | None
+    purchased_at: datetime | None
+    currency: str | None
+    total: Decimal | None
+    payment_method: str | None
+    card_brand: str | None
+    card_last4: str | None
+    item_count: int
+    open_issue_count: int

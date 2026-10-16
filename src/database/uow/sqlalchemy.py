@@ -4,20 +4,8 @@ from typing import Self
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.errors import translate_db_errors
-from src.database.repositories.edit import SqlAlchemyReceiptEditRepository
-from src.database.repositories.issue import SqlAlchemyReceiptIssueRepository
-from src.database.repositories.message import SqlAlchemyReceiptMessageRepository
-from src.database.repositories.parse import SqlAlchemyReceiptParseRepository
-from src.database.repositories.photo import SqlAlchemyReceiptPhotoRepository
-from src.database.repositories.receipt import (
-    SqlAlchemyReceiptItemRepository,
-    SqlAlchemyReceiptRepository,
-)
-from src.database.repositories.store import (
-    SqlAlchemyStoreProductRepository,
-    SqlAlchemyStoreRepository,
-)
+from src.database.repositories.catalog import SqlAlchemyCatalogRepository
+from src.database.repositories.receipt import SqlAlchemyReceiptRepository
 from src.database.repositories.user import SqlAlchemyUserRepository
 
 
@@ -34,15 +22,8 @@ class SqlAlchemyUnitOfWork:
     async def __aenter__(self) -> Self:
         self._session = self._session_factory()
         self.users = SqlAlchemyUserRepository(self._session)
-        self.stores = SqlAlchemyStoreRepository(self._session)
-        self.products = SqlAlchemyStoreProductRepository(self._session)
+        self.catalog = SqlAlchemyCatalogRepository(self._session)
         self.receipts = SqlAlchemyReceiptRepository(self._session)
-        self.items = SqlAlchemyReceiptItemRepository(self._session)
-        self.photos = SqlAlchemyReceiptPhotoRepository(self._session)
-        self.parses = SqlAlchemyReceiptParseRepository(self._session)
-        self.issues = SqlAlchemyReceiptIssueRepository(self._session)
-        self.edits = SqlAlchemyReceiptEditRepository(self._session)
-        self.messages = SqlAlchemyReceiptMessageRepository(self._session)
         return self
 
     async def __aexit__(
@@ -60,5 +41,4 @@ class SqlAlchemyUnitOfWork:
 
     async def commit(self) -> None:
         assert self._session is not None
-        with translate_db_errors():
-            await self._session.commit()
+        await self._session.commit()

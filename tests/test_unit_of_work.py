@@ -1,15 +1,6 @@
-from collections.abc import Callable
-
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.dto.user import NewUserDTO
-from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
-
-
-@pytest.fixture
-def make_uow(session_factory: Callable[[], AsyncSession]) -> Callable[[], SqlAlchemyUnitOfWork]:
-    return lambda: SqlAlchemyUnitOfWork(session_factory)
 
 
 async def test_writes_without_commit_are_not_visible_to_a_new_unit_of_work(make_uow):

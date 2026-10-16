@@ -6,58 +6,45 @@ bought, where and for how much.
 ## Language
 
 **Receipt**:
-One purchase, as a whole: its photos, every parse made of them, the items, the issues
-and the user's edits. The unit that must stay consistent when anything changes.
+One purchase, as a whole: its photo, the parse made of it, the items, the issues and the
+user's edits. The unit that must stay consistent when anything changes.
 _Avoid_: payment (n8n name), ticket, check
 
 **Photo**:
-One image of a receipt. A receipt may have several, for example a second shot that
-refines the first or the two halves of a long receipt.
+The one image a receipt was read from. A bad photo is not replaced: the user deletes the
+receipt and sends a new one.
 
 **Parse**:
-One reading of a receipt's photos by the LLM, normalized. A receipt keeps every parse
-it ever had and points at the current one.
+The reading of a receipt's photo by the LLM, normalized. A receipt has at most one; a
+re-parse (for example with a newer parser version) replaces it.
 _Avoid_: extraction, OCR result
 
-**Current parse**:
-The parse the receipt's header and items are built from. Undo switches it back to an
-earlier parse.
-
 **Header**:
-The receipt-level facts: store, purchase time, totals, payment, card. Always the
-current parse with the edits applied.
+The receipt-level facts: store, purchase time, totals, payment, card. Always the parse
+with the edits applied.
 
 **Item**:
-One product line of the current parse: quantity, unit, price, line total.
+One product line of the parse: quantity, unit, price, line total.
 _Avoid_: line, price row, product_price (n8n name)
 
 **Issue**:
-A doubt noted while reading a receipt: by the model, by normalization, or by a
-disagreement between photos or with an edit. The user confirms, corrects or skips it.
+A doubt noted while reading a receipt: by the model, by normalization, or because a
+re-parse disagrees with an edit. The user confirms, corrects or skips it.
 _Avoid_: warning, error, problem
 
 **Edit**:
 A value the user corrected by hand on a receipt or one of its items. Edits always win
-over any parse.
+over any parse, including a later re-parse.
 _Avoid_: override, correction
 
-**Refine**:
-Re-parse a receipt from all of its photos after a new one arrives, then apply the result
-at once. The user can undo it.
-_Avoid_: re-parse (the mechanism, not the action), update, merge (that is for two receipts)
-
-**Merge**:
-Attach a photo that arrived as its own receipt to the receipt it belongs to. The
-source receipt stays, marked `merged`, pointing at the target.
-_Avoid_: deduplicate, duplicate
-
-**Near match**:
-A receipt from the same store on the same day whose number or total differs from a new
-one. The bot asks the user whether they are the same receipt.
+**Re-parse**:
+Read the same photo again, for example with a newer parser version, and replace the
+parse. Edits stay on top.
+_Avoid_: refine, refresh
 
 **Receipt key**:
-The text that identifies a receipt for matching: store, receipt number, day and total.
-Two parsed receipts of one user never share it.
+The text that identifies a receipt: store, receipt number, day and total. Two parsed
+receipts of one user never share it, so the same receipt photographed twice is refused.
 
 **Store**:
 A shop, identified per user by the slug of its trading name.

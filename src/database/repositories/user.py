@@ -3,7 +3,6 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.dto.user import NewUserDTO, UserDTO
-from src.database.errors import translate_db_errors
 from src.database.models import User
 
 
@@ -31,8 +30,7 @@ class SqlAlchemyUserRepository:
             .returning(User)
             .execution_options(populate_existing=True)
         )
-        with translate_db_errors():
-            user = (await self._session.execute(stmt)).scalar_one()
+        user = (await self._session.execute(stmt)).scalar_one()
         return UserDTO.model_validate(user)
 
     async def set_allowed(self, user_id: int, allowed: bool) -> UserDTO | None:
@@ -43,10 +41,8 @@ class SqlAlchemyUserRepository:
             .returning(User)
             .execution_options(populate_existing=True)
         )
-        with translate_db_errors():
-            user = (await self._session.execute(stmt)).scalar_one_or_none()
+        user = (await self._session.execute(stmt)).scalar_one_or_none()
         return UserDTO.model_validate(user) if user else None
 
     async def delete(self, user_id: int) -> None:
-        with translate_db_errors():
-            await self._session.execute(delete(User).where(User.id == user_id))
+        await self._session.execute(delete(User).where(User.id == user_id))
