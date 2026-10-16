@@ -41,6 +41,8 @@ class ReceiptCard(BaseModel):
 
     receipt_id: int
     status: str
+    received_at: datetime
+    deleted: bool
     store_name: str | None
     purchased_at: datetime | None
     currency: str | None
@@ -50,6 +52,7 @@ class ReceiptCard(BaseModel):
     card_last4: str | None
     item_count: int
     open_issue_count: int
+    duplicate_of: ReceiptCard | None = None  # set by `ReceiptService.card` for a duplicate
 
 
 class IssueLine(BaseModel):

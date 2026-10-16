@@ -32,7 +32,7 @@ from src.exception import (
     UserNotFound,
 )
 from src.integration.llm import ParserOutput, ReceiptParser
-from src.integration.storage import PhotoStorage
+from src.integration.storage import PhotoStorage, StorageError
 from src.services.results import IssueLine, NewPhoto, ParseResult, ReceiptCard
 
 logger = logging.getLogger(__name__)
@@ -206,15 +206,35 @@ class ReceiptService:
             return await _card(uow, receipt)
 
     async def soft_delete(self, user_id: int, receipt_id: int) -> None:
+        """Delete the receipt, then move its photo to the trash.
+
+        The file moves after the commit and outside any transaction. If the move fails the
+        receipt stays deleted and the photo stays where it was (photos are never erased).
+        """
         async with self._uow_factory() as uow:
             receipt = await _load(uow, user_id, receipt_id)
             receipt.soft_delete()
             await uow.receipts.save(receipt)
             await uow.commit()
+            path = receipt.photo.path
+        if path is None:
+            return
+        try:
+            await self._storage.trash(path)
+        except StorageError:
+            logger.warning("Photo of deleted receipt %s was not moved to the trash", receipt_id)
 
     async def card(self, user_id: int, receipt_id: int) -> ReceiptCard:
+        """The receipt's card; for a `duplicate` it carries the receipt it repeats."""
         async with self._uow_factory() as uow:
-            return await _card(uow, await _load(uow, user_id, receipt_id))
+            receipt = await _load(uow, user_id, receipt_id)
+            card = await _card(uow, receipt)
+            if receipt.duplicate_of_id is None:
+                return card
+            original = await uow.receipts.get(receipt.duplicate_of_id)
+            if original is None:
+                return card
+            return card.model_copy(update={"duplicate_of": await _card(uow, original)})
 
     async def _edit(self, user_id: int, receipt_id: int, edit: Edit) -> ReceiptCard:
         async with self._uow_factory() as uow:
@@ -327,6 +347,8 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
     return ReceiptCard(
         receipt_id=receipt.id,
         status=str(receipt.status),
+        received_at=receipt.photo.received_at,
+        deleted=receipt.deleted_at is not None,
         store_name=store_name,
         purchased_at=header.purchased_at,
         currency=header.currency,

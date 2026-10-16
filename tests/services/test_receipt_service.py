@@ -1,5 +1,6 @@
 """ReceiptService through the Unit of Work on real Postgres. No LLM: parses are seeded by hand."""
 
+import logging
 from decimal import Decimal
 
 import pytest
@@ -8,7 +9,13 @@ from sqlalchemy import text
 from src.domain.enums import IssueResolution
 from src.domain.parse import Parse, ParsedIssue
 from src.domain.receipt import Receipt
-from src.exception import DatabaseException, DuplicatePhoto, ReceiptNotFound
+from src.exception import (
+    DatabaseException,
+    DuplicatePhoto,
+    InvalidReceiptTransition,
+    ReceiptNotFound,
+)
+from src.integration.storage import StorageError
 from src.services.receipt import ReceiptService, _apply_parse
 from src.services.results import NewPhoto
 from tests.domain.builders import WHEN, parse, photo, product
@@ -240,3 +247,92 @@ async def test_a_reparse_keeps_a_product_another_receipt_also_uses(service, make
     await reparse(make_uow, receipt.id, parse(MILK))
 
     assert "mercadona::pan" in await product_keys(make_uow)
+
+
+# --- soft_delete and the card of a deleted or duplicate receipt ---------------------------
+
+
+async def stored_receipt(service, storage) -> int:
+    """A receipt saved through the service, so its photo really is in the storage."""
+    card = await service.save_photo(1, b"img", new_photo())
+    return card.receipt_id
+
+
+async def test_soft_delete_sets_deleted_at_and_trashes_the_file(service, tmp_storage, make_uow):
+    receipt_id = await stored_receipt(service, tmp_storage)
+    (path,) = stored_files(tmp_storage)
+    async with make_uow() as uow:
+        receipt = await uow.receipts.get(receipt_id)
+        receipt.mark_failed("x")
+        await uow.receipts.save(receipt)
+        await uow.commit()
+
+    await service.soft_delete(1, receipt_id)
+
+    assert (await load(make_uow, receipt_id)).deleted_at is not None
+    assert stored_files(tmp_storage) == [f".trash/{path}"]
+
+
+async def test_a_failing_trash_still_leaves_the_receipt_deleted(
+    service, tmp_storage, make_uow, caplog
+):
+    receipt_id = await stored_receipt(service, tmp_storage)
+
+    async def broken(relative_path: str) -> None:
+        raise StorageError("disk full")
+
+    tmp_storage.trash = broken
+    with caplog.at_level(logging.WARNING):
+        await service.soft_delete(1, receipt_id)
+
+    assert (await load(make_uow, receipt_id)).deleted_at is not None
+    assert any(r.levelno == logging.WARNING for r in caplog.records)
+    assert len(stored_files(tmp_storage)) == 1
+
+
+async def test_a_parsing_receipt_cannot_be_deleted(service, tmp_storage, make_uow):
+    receipt_id = await stored_receipt(service, tmp_storage)
+    async with make_uow() as uow:
+        receipt = await uow.receipts.get(receipt_id)
+        receipt.mark_parsing()
+        await uow.receipts.save(receipt)
+        await uow.commit()
+
+    with pytest.raises(InvalidReceiptTransition):
+        await service.soft_delete(1, receipt_id)
+
+    assert (await load(make_uow, receipt_id)).deleted_at is None
+    assert not any(p.startswith(".trash") for p in stored_files(tmp_storage))
+
+
+async def test_the_card_of_a_deleted_receipt_says_so(service, make_uow):
+    receipt = await parsed_receipt(make_uow, parse(MILK))
+    assert (await service.card(1, receipt.id)).deleted is False
+
+    await service.soft_delete(1, receipt.id)
+
+    assert (await service.card(1, receipt.id)).deleted is True
+
+
+async def test_the_card_carries_the_photo_time(service):
+    card = await service.save_photo(1, b"img", new_photo())
+
+    assert card.received_at == WHEN
+
+
+async def test_the_card_of_a_duplicate_names_the_original(service, make_uow):
+    original = await parsed_receipt(make_uow, parse(MILK))
+    again = Receipt.start(1, photo("seed-again"))
+    again.apply_parse(parse(MILK), same_key_as=original.id)
+    again = await add_receipt(make_uow, again)
+
+    card = await service.card(1, again.id)
+
+    assert card.status == "duplicate"
+    assert card.duplicate_of is not None
+    assert (card.duplicate_of.receipt_id, card.duplicate_of.store_name) == (
+        original.id,
+        "Mercadona",
+    )
+    assert card.duplicate_of.duplicate_of is None
+    assert (await service.card(1, original.id)).duplicate_of is None

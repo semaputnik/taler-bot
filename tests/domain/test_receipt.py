@@ -154,6 +154,14 @@ def test_soft_delete_sets_deleted_at_and_freezes_the_receipt():
         receipt.resolve_issue(1, IssueResolution.SKIPPED)
 
 
+def test_a_parsing_receipt_cannot_be_deleted():
+    receipt = started()
+    receipt.mark_parsing()
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.soft_delete()
+    assert receipt.deleted_at is None
+
+
 def test_a_deleted_parsed_receipt_refuses_edits_and_duplicate_marking():
     receipt = started()
     receipt.apply_parse(parse())

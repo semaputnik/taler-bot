@@ -230,6 +230,8 @@ class Receipt:
     def soft_delete(self, at: datetime | None = None) -> None:
         if self.deleted_at is not None:
             raise InvalidReceiptTransition("the receipt is already deleted")
+        if self.status is S.PARSING:
+            raise InvalidReceiptTransition("the receipt is being read; wait for the result")
         self.deleted_at = at or datetime.now(UTC)
 
     # --- for the repository ------------------------------------------------------------
