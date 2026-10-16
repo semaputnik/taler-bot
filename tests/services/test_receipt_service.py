@@ -246,3 +246,20 @@ async def test_undo_removes_a_product_only_the_undone_parse_introduced(
     async with make_uow() as uow:
         products = set((await uow.catalog.get(1)).products)
     assert products == {"mercadona::leche"}
+
+
+async def test_undo_keeps_a_product_another_receipt_also_uses(service, make_uow, connection):
+    receipt = await seeded_receipt(make_uow, parse(MILK), parse(MILK, BREAD, receipt_key="k2"))
+    await connection.execute(
+        text("update store_products set created_by_receipt_id = :r where product_key = :k"),
+        {"r": receipt.id, "k": "mercadona::pan"},
+    )
+    other = Receipt.start(1, photo("other"))
+    other.apply_parse(parse(BREAD, receipt_key="k3"))
+    await add_receipt(make_uow, other)
+    first_id = (await load(make_uow, receipt.id)).parses[0].id
+
+    await service.undo(1, receipt.id, first_id)
+
+    async with make_uow() as uow:
+        assert "mercadona::pan" in (await uow.catalog.get(1)).products

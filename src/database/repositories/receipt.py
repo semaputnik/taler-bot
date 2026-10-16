@@ -287,6 +287,23 @@ class SqlAlchemyReceiptRepository:
             )
         )
 
+    async def product_keys_in_items_elsewhere(
+        self, user_id: int, product_keys: set[str], excluding_receipt_id: int
+    ) -> set[str]:
+        if not product_keys:
+            return set()
+        found = await self._session.scalars(
+            select(StoreProduct.product_key)
+            .join(ReceiptItem, ReceiptItem.store_product_id == StoreProduct.id)
+            .where(
+                StoreProduct.user_id == user_id,
+                StoreProduct.product_key.in_(product_keys),
+                ReceiptItem.receipt_id != excluding_receipt_id,
+            )
+            .distinct()
+        )
+        return set(found)
+
     async def photo_exists(self, user_id: int, telegram_file_unique_id: str) -> bool:
         return bool(
             await self._session.scalar(

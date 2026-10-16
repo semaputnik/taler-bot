@@ -188,13 +188,17 @@ async def _save_with_catalog(uow: UnitOfWork, receipt: Receipt, outcome: ParseOu
     await uow.catalog.save(catalog)
     await uow.receipts.save(receipt)
 
-    # Only products this receipt introduced are candidates: another receipt may use the rest.
-    released = {
+    # Only products this receipt introduced and no other receipt uses are removed.
+    candidates = {
         key
         for key in outcome.product_keys_released
         if (product := catalog.products.get(key)) is not None
         and product.created_by_receipt_id == receipt.id
     }
+    assert receipt.id is not None
+    released = candidates - await uow.receipts.product_keys_in_items_elsewhere(
+        receipt.user_id, candidates, receipt.id
+    )
     if released:
         catalog.remove_unreferenced(released)
         await uow.catalog.save(catalog)

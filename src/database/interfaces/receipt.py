@@ -31,4 +31,10 @@ class ReceiptRepository(Protocol):
 
     async def link_message(self, receipt_id: int, user_id: int, message_id: int) -> None: ...
 
+    async def product_keys_in_items_elsewhere(
+        self, user_id: int, product_keys: set[str], excluding_receipt_id: int
+    ) -> set[str]:
+        """Of `product_keys`, those that items of any other receipt (deleted ones too) use."""
+        ...
+
     async def photo_exists(self, user_id: int, telegram_file_unique_id: str) -> bool: ...
