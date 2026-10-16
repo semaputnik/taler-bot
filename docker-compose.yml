@@ -1,0 +1,35 @@
+# Dev services. The bot itself runs on the host with `uv run taler-bot` for now.
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: taler
+      POSTGRES_PASSWORD: taler
+      POSTGRES_DB: taler
+    ports:
+      # Uncommon host ports: other local projects already use the defaults.
+      - "127.0.0.1:${POSTGRES_PORT:-5447}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taler -d taler"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:8
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6390}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  postgres-data:
+  redis-data:

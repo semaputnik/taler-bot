@@ -1,0 +1,438 @@
+{
+  "type": "object",
+  "properties": {
+    "is_receipt": {
+      "type": "boolean",
+      "description": "false if the image is not a purchase receipt or is unreadable"
+    },
+    "store": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Brand / trading name, e.g. Mercadona"
+        },
+        "legal_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "city": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "country": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "ISO 3166-1 alpha-2"
+        },
+        "tax_id": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "NIF/CIF/VAT/INN"
+        },
+        "phone": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "legal_name",
+        "address",
+        "city",
+        "country",
+        "tax_id",
+        "phone"
+      ]
+    },
+    "receipt": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "purchased_at": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Local date-time as printed, ISO 8601 without offset: YYYY-MM-DDTHH:mm:ss"
+        },
+        "cashier": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "register": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "number",
+        "purchased_at",
+        "cashier",
+        "register"
+      ]
+    },
+    "currency": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ISO 4217, e.g. EUR"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name_raw": {
+            "type": "string",
+            "description": "Line text exactly as printed"
+          },
+          "name_normalized": {
+            "type": "string",
+            "description": "Clean readable product name: abbreviations expanded, brand and pack size kept, no prices or codes"
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One of: produce, meat, fish, dairy, bakery, drinks, alcohol, snacks, frozen, pantry, household, personal_care, baby, pet, other"
+          },
+          "quantity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Count of units or weight/volume bought"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "pcs, kg, g, l or ml"
+          },
+          "unit_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Price for one unit of `unit`"
+          },
+          "reference_price": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Printed price per kg / per l if present"
+          },
+          "reference_unit": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "kg or l, for reference_price"
+          },
+          "discount": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Discount applied to this line, positive number"
+          },
+          "line_total": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Amount charged for the line after line discount"
+          },
+          "vat_rate": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "VAT percent, e.g. 10"
+          },
+          "barcode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name_raw",
+          "name_normalized",
+          "category",
+          "quantity",
+          "unit",
+          "unit_price",
+          "reference_price",
+          "reference_unit",
+          "discount",
+          "line_total",
+          "vat_rate",
+          "barcode"
+        ]
+      }
+    },
+    "totals": {
+      "type": "object",
+      "properties": {
+        "subtotal": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "discount_total": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "tax_total": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "total": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "Final amount paid"
+        },
+        "taxes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "rate": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "base": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "amount": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "rate",
+              "base",
+              "amount"
+            ]
+          }
+        }
+      },
+      "required": [
+        "subtotal",
+        "discount_total",
+        "tax_total",
+        "total",
+        "taxes"
+      ]
+    },
+    "payment": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "card, cash, mixed or other"
+        },
+        "card_brand": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "VISA, MASTERCARD, AMEX, ..."
+        },
+        "card_last4": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Last 4 digits of the masked card number"
+        },
+        "amount_paid": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "change": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "auth_code": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "terminal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "method",
+        "card_brand",
+        "card_last4",
+        "amount_paid",
+        "change",
+        "auth_code",
+        "terminal"
+      ]
+    },
+    "loyalty": {
+      "type": "object",
+      "properties": {
+        "program": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "card_number_masked": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "points_earned": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "savings": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "program",
+        "card_number_masked",
+        "points_earned",
+        "savings"
+      ]
+    },
+    "issues": {
+      "type": "array",
+      "description": "Every problem met while reading this receipt; empty if none",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "unreadable",
+              "ambiguous",
+              "totals_mismatch",
+              "missing_field",
+              "unknown_abbreviation",
+              "layout",
+              "other"
+            ]
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "description": "high = a stored value is probably wrong"
+          },
+          "field": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Schema path the issue concerns, e.g. items.unit_price or payment.card_last4"
+          },
+          "item_name_raw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "name_raw of the affected line, if the issue is about one line"
+          },
+          "message": {
+            "type": "string",
+            "description": "What is wrong and what you assumed instead"
+          }
+        },
+        "required": [
+          "type",
+          "severity",
+          "field",
+          "item_name_raw",
+          "message"
+        ]
+      }
+    }
+  },
+  "required": [
+    "is_receipt",
+    "store",
+    "receipt",
+    "currency",
+    "items",
+    "totals",
+    "payment",
+    "loyalty",
+    "issues"
+  ]
+}
