@@ -3,15 +3,12 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import (
-    ARRAY,
     CHAR,
-    BigInteger,
     CheckConstraint,
     ForeignKey,
     Identity,
     Index,
     Numeric,
-    PrimaryKeyConstraint,
     UniqueConstraint,
     text,
 )
@@ -30,19 +27,22 @@ from src.domain.enums import (
 
 
 class Receipt(Timestamps, Base):
-    """One purchase receipt, which may have several photos. Replaces n8n `receipt_payments`.
+    """One purchase receipt with one photo and at most one parse (ADR-0002). Replaces n8n
+    `receipt_payments`.
 
-    The header columns (store_id … card_last4) are a denormalized copy of the current parse
-    with the user's edits applied, so lists and stats never read JSON.
+    The header columns (store_id … card_last4) are a denormalized copy of the parse with the
+    user's edits applied, so lists and stats never read JSON.
     """
 
     __tablename__ = "receipts"
     __table_args__ = (
         enum_check("status", ReceiptStatus),
         CheckConstraint(r"card_last4 ~ '^\d{4}$'", name="card_last4"),
-        CheckConstraint("(status = 'merged') = (merged_into_id IS NOT NULL)", name="merged_into"),
+        CheckConstraint(
+            "(status = 'duplicate') = (duplicate_of_id IS NOT NULL)", name="duplicate_of"
+        ),
         UniqueConstraint("source_ref"),
-        # The dedupe key n8n checked by hand; a re-sent receipt now refines this row instead.
+        # The dedupe key n8n checked by hand; a repeat is marked `duplicate`, so it never collides.
         Index(
             "uq_receipts_user_id_receipt_key_parsed",
             "user_id",
@@ -51,19 +51,15 @@ class Receipt(Timestamps, Base):
             postgresql_where=text("status = 'parsed' AND deleted_at IS NULL"),
         ),
         Index("ix_receipts_user_id_purchased_at", "user_id", "purchased_at"),
-        # Near-match lookup: same store, same day.
         Index("ix_receipts_user_id_store_id_purchased_at", "user_id", "store_id", "purchased_at"),
     )
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     status: Mapped[str] = mapped_column(server_default=ReceiptStatus.PENDING.value)
-    current_parse_id: Mapped[int | None] = mapped_column(
-        # receipt_parses also points back here, so this FK is added after both tables exist.
-        ForeignKey("receipt_parses.id", ondelete="SET NULL", use_alter=True)
-    )
-    merged_into_id: Mapped[int | None] = mapped_column(
-        ForeignKey("receipts.id", ondelete="CASCADE")
+    # The earlier receipt this one repeats; set exactly when status is 'duplicate'.
+    duplicate_of_id: Mapped[int | None] = mapped_column(
+        ForeignKey("receipts.id", ondelete="SET NULL")
     )
 
     store_id: Mapped[int | None] = mapped_column(ForeignKey("stores.id", ondelete="SET NULL"))
@@ -86,6 +82,8 @@ class Receipt(Timestamps, Base):
 
 
 class ReceiptPhoto(CreatedAt, Base):
+    """The one photo of a receipt."""
+
     __tablename__ = "receipt_photos"
     __table_args__ = (
         # The same image sent twice is answered without an LLM call.
@@ -96,11 +94,10 @@ class ReceiptPhoto(CreatedAt, Base):
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     receipt_id: Mapped[int] = mapped_column(
-        ForeignKey("receipts.id", ondelete="CASCADE"), index=True
+        ForeignKey("receipts.id", ondelete="CASCADE"), unique=True
     )
     # Denormalized from the receipt for the unique index above.
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    position: Mapped[int] = mapped_column(server_default=text("0"))
     # Relative to RECEIPTS_DIR.
     path: Mapped[str | None]
     mime_type: Mapped[str | None]
@@ -114,21 +111,20 @@ class ReceiptPhoto(CreatedAt, Base):
 
 
 class ReceiptParse(CreatedAt, Base):
-    """One LLM call over one or more photos of a receipt. The receipt points at its current one."""
+    """The reading of a receipt's photo. A re-parse replaces the row."""
 
     __tablename__ = "receipt_parses"
     __table_args__ = (enum_check("status", ParseStatus),)
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     receipt_id: Mapped[int] = mapped_column(
-        ForeignKey("receipts.id", ondelete="CASCADE"), index=True
+        ForeignKey("receipts.id", ondelete="CASCADE"), unique=True
     )
     status: Mapped[str]
     parser_version: Mapped[str]
     model: Mapped[str | None]
-    photo_ids: Mapped[list[int]] = mapped_column(ARRAY(BigInteger))
     raw_output: Mapped[dict[str, Any] | None]
-    # Normalize output before user edits; undo and item rebuilds use it without calling the LLM.
+    # Normalize output before user edits; item rebuilds use it without calling the LLM.
     normalized: Mapped[dict[str, Any] | None]
     error: Mapped[str | None]
     input_tokens: Mapped[int | None]
@@ -137,7 +133,7 @@ class ReceiptParse(CreatedAt, Base):
 
 
 class ReceiptItem(Base):
-    """A line of the current parse. Replaces n8n `product_prices`; rebuilt on parse change."""
+    """A line of the parse. Replaces n8n `product_prices`; rebuilt on parse change."""
 
     __tablename__ = "receipt_items"
 
@@ -162,7 +158,7 @@ class ReceiptItem(Base):
 
 
 class ReceiptIssue(CreatedAt, Base):
-    """A problem noted while reading a receipt. The active issues are those of the current parse."""
+    """A problem noted while reading a receipt, belonging to its parse."""
 
     __tablename__ = "receipt_issues"
     __table_args__ = (
@@ -208,17 +204,4 @@ class ReceiptEdit(CreatedAt, Base):
     value: Mapped[Any] = mapped_column(JSONB)
     issue_id: Mapped[int | None] = mapped_column(
         ForeignKey("receipt_issues.id", ondelete="SET NULL")
-    )
-
-
-class ReceiptMessage(CreatedAt, Base):
-    """A bot message about a receipt, so a photo sent as a reply to it attaches to that receipt."""
-
-    __tablename__ = "receipt_messages"
-    __table_args__ = (PrimaryKeyConstraint("user_id", "message_id"),)
-
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    message_id: Mapped[int]
-    receipt_id: Mapped[int] = mapped_column(
-        ForeignKey("receipts.id", ondelete="CASCADE"), index=True
     )

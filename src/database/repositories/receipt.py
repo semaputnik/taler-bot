@@ -11,7 +11,6 @@ from src.database.models import (
     ReceiptEdit,
     ReceiptIssue,
     ReceiptItem,
-    ReceiptMessage,
     ReceiptParse,
     ReceiptPhoto,
     Store,
@@ -270,22 +269,6 @@ class SqlAlchemyReceiptRepository:
         )
         receipts = [await self._get_or_none(receipt_id) for receipt_id in ids.all()]
         return [r for r in receipts if r is not None]
-
-    async def find_by_message(self, user_id: int, message_id: int) -> Receipt | None:
-        """The receipt a bot message was linked to (soft-deleted included, like `get`)."""
-        receipt_id = await self._session.scalar(
-            select(ReceiptMessage.receipt_id).where(
-                ReceiptMessage.user_id == user_id, ReceiptMessage.message_id == message_id
-            )
-        )
-        return await self._get_or_none(receipt_id)
-
-    async def link_message(self, receipt_id: int, user_id: int, message_id: int) -> None:
-        await self._session.execute(
-            insert(ReceiptMessage).values(
-                receipt_id=receipt_id, user_id=user_id, message_id=message_id
-            )
-        )
 
     async def product_keys_in_items_elsewhere(
         self, user_id: int, product_keys: set[str], excluding_receipt_id: int
