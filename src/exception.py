@@ -18,5 +18,9 @@ class CheckViolationError(DatabaseException):
     pass
 
 
+class DataViolationError(DatabaseException):
+    """A value does not fit its column (too long, out of range, malformed)."""
+
+
 class IntegrationException(AppException):
     """An external system (LLM, storage, ...) failed."""

@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 import pytest
 from sqlalchemy import delete
 from sqlalchemy.exc import IntegrityError
@@ -12,8 +10,7 @@ from src.database.models import (
     User,
 )
 from src.domain.enums import ParseStatus
-
-NOW = datetime(2026, 10, 14, 18, 32, tzinfo=UTC)
+from tests.helpers import NOW
 
 
 async def make_user(session: AsyncSession, user_id: int = 1) -> User:

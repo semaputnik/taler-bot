@@ -1,10 +1,11 @@
 import pytest
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import DataError, IntegrityError, OperationalError
 
 from src.database.errors import translate_db_errors
 from src.exception import (
     CheckViolationError,
     DatabaseException,
+    DataViolationError,
     ForeignKeyViolationError,
     UniqueViolationError,
 )
@@ -14,6 +15,20 @@ class FakeDriverError(Exception):
     def __init__(self, sqlstate: str) -> None:
         super().__init__(sqlstate)
         self.sqlstate = sqlstate
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (DataError("stmt", {}, FakeDriverError("22001")), DataViolationError),
+        (OperationalError("stmt", {}, FakeDriverError("08006")), DatabaseException),
+    ],
+)
+def test_other_database_errors_become_app_exceptions(error, expected):
+    with pytest.raises(expected) as caught:
+        with translate_db_errors():
+            raise error
+    assert type(caught.value) is expected
 
 
 @pytest.mark.parametrize(

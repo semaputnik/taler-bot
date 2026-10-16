@@ -35,8 +35,9 @@ Add a new dependency only after asking the user. Record each decision here.
 
 > **Status:** the code is in the target layout (`src/`, `alembic/`), config is the nested
 > `src/config/` settings, and the walking skeleton works: `App`, access middleware,
-> `EnsureUser`, the Unit of Work with a `users` repository, and `/start`. Repositories for the
-> other tables are not written yet.
+> `EnsureUser`, the Unit of Work with `users`, `stores`, `products`, `receipts` and `items`
+> repositories (add/get and the few lookups tests need), and `/start`. Repositories for the other
+> tables (photos, parses, issues, edits, messages) are not written yet.
 
 ```bash
 cp src/config/envs/.env.template src/config/envs/.env   # fill in BOT__TOKEN and LLM__API_KEY
@@ -194,6 +195,11 @@ rationale is in `docs/features.md` (multi-photo).
   indexes and CHECKs must be checked too. Run `alembic check` and a down/up round trip.
 - DB tests run against a real Postgres. Each test is rolled back (`tests/conftest.py`).
   Add a constraint test for every new constraint.
+- By-id lookups (`get(id)`) return soft-deleted receipts too, because undo and restore need
+  them. Only list, stats and uniqueness queries filter `deleted_at IS NULL`.
+- Database errors never leave `src/database` as SQLAlchemy errors: `translate_db_errors` maps
+  them to `UniqueViolationError`, `ForeignKeyViolationError` (also RESTRICT),
+  `CheckViolationError`, `DataViolationError` (SQLSTATE class 22) or `DatabaseException`.
 
 ### Photo storage
 
