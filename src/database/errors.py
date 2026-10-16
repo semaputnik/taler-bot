@@ -14,6 +14,8 @@ from src.exception import (
 _BY_SQLSTATE: dict[str, type[DatabaseException]] = {
     "23505": UniqueViolationError,
     "23503": ForeignKeyViolationError,
+    # ON DELETE RESTRICT reports its own code, but it is the same kind of failure.
+    "23001": ForeignKeyViolationError,
     "23514": CheckViolationError,
 }
 

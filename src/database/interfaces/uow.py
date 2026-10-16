@@ -1,6 +1,8 @@
 from types import TracebackType
 from typing import Protocol, Self
 
+from src.database.interfaces.receipt import ReceiptItemRepository, ReceiptRepository
+from src.database.interfaces.store import StoreProductRepository, StoreRepository
 from src.database.interfaces.user import UserRepository
 
 
@@ -8,6 +10,10 @@ class UnitOfWork(Protocol):
     """One transaction. Nothing is persisted unless `commit()` is called."""
 
     users: UserRepository
+    stores: StoreRepository
+    products: StoreProductRepository
+    receipts: ReceiptRepository
+    items: ReceiptItemRepository
 
     async def __aenter__(self) -> Self: ...
 

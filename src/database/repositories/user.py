@@ -1,4 +1,4 @@
-from sqlalchemy import func, update
+from sqlalchemy import delete, func, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,3 +46,7 @@ class SqlAlchemyUserRepository:
         with translate_db_errors():
             user = (await self._session.execute(stmt)).scalar_one_or_none()
         return UserDTO.model_validate(user) if user else None
+
+    async def delete(self, user_id: int) -> None:
+        with translate_db_errors():
+            await self._session.execute(delete(User).where(User.id == user_id))

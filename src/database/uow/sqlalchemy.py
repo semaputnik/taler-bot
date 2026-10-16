@@ -5,6 +5,14 @@ from typing import Self
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.errors import translate_db_errors
+from src.database.repositories.receipt import (
+    SqlAlchemyReceiptItemRepository,
+    SqlAlchemyReceiptRepository,
+)
+from src.database.repositories.store import (
+    SqlAlchemyStoreProductRepository,
+    SqlAlchemyStoreRepository,
+)
 from src.database.repositories.user import SqlAlchemyUserRepository
 
 
@@ -21,6 +29,10 @@ class SqlAlchemyUnitOfWork:
     async def __aenter__(self) -> Self:
         self._session = self._session_factory()
         self.users = SqlAlchemyUserRepository(self._session)
+        self.stores = SqlAlchemyStoreRepository(self._session)
+        self.products = SqlAlchemyStoreProductRepository(self._session)
+        self.receipts = SqlAlchemyReceiptRepository(self._session)
+        self.items = SqlAlchemyReceiptItemRepository(self._session)
         return self
 
     async def __aexit__(
