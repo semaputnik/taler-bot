@@ -32,12 +32,11 @@ Read it before working on any user-facing flow. Key decisions:
 
 Add a new dependency only after asking the user. Record each decision here.
 
-> **Status:** the code is in the target layout (`src/`, `alembic/`). Config is still
-> the flat root `.env` / `.env.example` (nested `src/config/` settings and `envs/` come with
-> ticket #3); the bot, usecases, DTOs and repositories do not exist yet.
+> **Status:** the code is in the target layout (`src/`, `alembic/`) and config is the nested
+> `src/config/` settings; the bot, usecases, DTOs and repositories do not exist yet.
 
 ```bash
-cp .env.example .env            # fill in the bot token and the OpenAI key (moves to src/config/envs/ in #3)
+cp src/config/envs/.env.template src/config/envs/.env   # fill in BOT__TOKEN and LLM__API_KEY
 docker compose up -d --wait     # postgres on localhost:5447, redis on localhost:6390
 uv sync
 uv run alembic upgrade head
@@ -57,8 +56,8 @@ including the layered DB design that its CLAUDE.MD describes.
 src/
   __main__.py              # App(settings).run()
   exception.py             # AppException → DatabaseException, IntegrationException, …
-  config/                  # settings.py (root Settings) + database.py, redis.py, llm.py,
-                           # storage.py (nested models); envs/.env.template, envs/.env
+  config/                  # settings.py (root Settings) + bot.py, database.py, redis.py,
+                           # llm.py, storage.py (nested models); standalone DatabaseSettings for Alembic; envs/.env.template, envs/.env
   bot/                     # everything that knows about aiogram
     app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, usecases, lifespan
     middlewares/           # access (users.is_allowed), i18n, usecases injection
@@ -195,7 +194,7 @@ rationale is in `docs/features.md` (multi-photo).
 
 ### Photo storage
 
-- Root directory: the `RECEIPTS_DIR` setting, mounted as a docker volume.
+- Root directory: the `STORAGE__RECEIPTS_DIR` setting (`settings.storage.receipts_dir`), mounted as a docker volume.
 - Layout: `RECEIPTS_DIR/yyyy/mm/receipt_<yyyy-MM-dd_HH-mm-ss>_<message_id>.<ext>`. The
   DB stores the path relative to `RECEIPTS_DIR`.
 - Write to a temp file in the same directory, then rename it, so a crash never leaves a
@@ -290,7 +289,7 @@ through the n8n MCP server (`get_workflow_details`).
 - Timezone is `Europe/Madrid`. Default currency is `EUR`.
 - Money: round to 2 decimals for comparisons and use a 0.02 tolerance. Keep 4 decimals
   for unit prices.
-- Never log or store full card numbers, tokens or API keys. Secrets come from env / `.env`
+- Never log or store full card numbers, tokens or API keys. Secrets come from env / `src/config/envs/.env`
   (git-ignored) through pydantic-settings. Keep `src/config/envs/.env.template` up to date.
 - One Telegram bot token has one webhook. Do not reuse the Casa Receipts or Casa Mail bot
   tokens while the n8n workflows are active. Use a separate dev bot.

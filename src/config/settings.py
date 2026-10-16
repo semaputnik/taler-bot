@@ -1,26 +1,43 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import PostgresDsn, RedisDsn, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.config.bot import BotConfig
+from src.config.database import DatabaseConfig
+from src.config.llm import LLMConfig
+from src.config.redis import RedisConfig
+from src.config.storage import StorageConfig
 
-class DatabaseSettings(BaseSettings):
-    """The part of the config that migrations need, so Alembic runs without bot secrets."""
+# Environment variables win over this file (see `.env.template` next to it).
+ENV_FILE = Path(__file__).parent / "envs" / ".env"
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: PostgresDsn
+class _BaseSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
+        extra="ignore",
+        # Models named `model_*` are fine: `llm.model` is a plain field.
+        protected_namespaces=(),
+    )
+
+
+class DatabaseSettings(_BaseSettings):
+    """Only the database section, so Alembic and tests run without bot secrets.
+
+    Reads the same `DATABASE__URL` as `Settings.database`.
+    """
+
+    database: DatabaseConfig
 
 
 class Settings(DatabaseSettings):
-    bot_token: SecretStr
-    openai_api_key: SecretStr
-    redis_url: RedisDsn = RedisDsn("redis://localhost:6390/0")
-
-    receipts_dir: Path = Path("data/receipts")
-    llm_model: str = "openai:gpt-6-luna"
-    llm_timeout_s: float = 120
+    bot: BotConfig
+    redis: RedisConfig = RedisConfig()
+    llm: LLMConfig
+    storage: StorageConfig = StorageConfig()
 
 
 @lru_cache

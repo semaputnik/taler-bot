@@ -15,7 +15,7 @@ from src.config.settings import DatabaseSettings
 
 def scratch_url(suffix: str = "test") -> str:
     """URL of a throwaway database named `<db>_<suffix>` next to the dev database."""
-    url = make_url(str(DatabaseSettings().database_url))  # pyright: ignore[reportCallIssue]
+    url = make_url(str(DatabaseSettings().database.url))  # pyright: ignore[reportCallIssue]
     return url.set(database=f"{url.database}_{suffix}").render_as_string(hide_password=False)
 
 

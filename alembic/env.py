@@ -18,8 +18,8 @@ target_metadata = Base.metadata
 
 
 def database_url() -> str:
-    # Tests point Alembic at their own database through the config; otherwise use DATABASE_URL.
-    return config.get_main_option("sqlalchemy.url") or str(DatabaseSettings().database_url)  # pyright: ignore[reportCallIssue]
+    # Tests point Alembic at their own database through the config; otherwise use DATABASE__URL.
+    return config.get_main_option("sqlalchemy.url") or str(DatabaseSettings().database.url)  # pyright: ignore[reportCallIssue]
 
 
 def run_migrations_offline() -> None:
