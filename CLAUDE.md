@@ -74,7 +74,7 @@ src/
       callback/            # taps on the summary keyboard: receipt.py opens the ReceiptCard dialog
       message/photo.py     # photo intake: save, reply with the keyboard, parse in the background; catch-all "send me a photo"
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py (main, photo, delete_confirm)
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py (main, items, item, photo, delete_confirm)
     keyboards/receipt.py   # inline keyboard under the parse reply, ReceiptCallback (prefix "receipt")
     render.py              # receipt texts shared by the parse reply and the dialog
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
@@ -91,7 +91,7 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, soft_delete, card, items
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, soft_delete, card, items, photo, photo_bytes
     results.py             # CurrentUser, NewPhoto, ReceiptCard, ParseResult: the services' own pydantic types
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
