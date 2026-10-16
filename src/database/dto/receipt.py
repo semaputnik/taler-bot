@@ -23,6 +23,7 @@ class ReceiptDTO(BaseModel):
     id: int
     user_id: int
     status: str
+    current_parse_id: int | None
     store_id: int | None
     receipt_key: str | None
     merged_into_id: int | None

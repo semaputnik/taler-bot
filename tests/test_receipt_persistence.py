@@ -1,15 +1,11 @@
 """Schema constraints of stores, products, receipts and items, proven through the Unit of Work."""
 
-from collections.abc import Callable
 from typing import Any
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.dto.receipt import NewReceiptDTO, NewReceiptItemDTO, ReceiptDTO
+from src.database.dto.receipt import NewReceiptDTO, NewReceiptItemDTO
 from src.database.dto.store import NewStoreDTO, NewStoreProductDTO
-from src.database.dto.user import NewUserDTO
-from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
 from src.domain.enums import ReceiptStatus
 from src.exception import (
     CheckViolationError,
@@ -17,30 +13,9 @@ from src.exception import (
     ForeignKeyViolationError,
     UniqueViolationError,
 )
-from tests.helpers import NOW
+from tests.helpers import NOW, MakeUow, add_receipt, add_user
 
 KEY = "mercadona|A-123|2026-10-14|47.85"
-
-MakeUow = Callable[[], SqlAlchemyUnitOfWork]
-
-
-@pytest.fixture
-def make_uow(session_factory: Callable[[], AsyncSession]) -> MakeUow:
-    return lambda: SqlAlchemyUnitOfWork(session_factory)
-
-
-async def add_user(make_uow: MakeUow, user_id: int = 1) -> None:
-    async with make_uow() as uow:
-        await uow.users.upsert(NewUserDTO(id=user_id, username=None, first_name=None))
-        await uow.commit()
-
-
-async def add_receipt(make_uow: MakeUow, user_id: int = 1, **fields: Any) -> ReceiptDTO:
-    """Add a receipt in its own Unit of Work: a rejected row poisons the transaction."""
-    async with make_uow() as uow:
-        receipt = await uow.receipts.add(NewReceiptDTO(user_id=user_id, **fields))
-        await uow.commit()
-    return receipt
 
 
 async def test_stores_and_products_round_trip_as_dtos(make_uow):

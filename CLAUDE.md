@@ -33,12 +33,6 @@ Read it before working on any user-facing flow. Key decisions:
 `fluentogram` was added with the user's agreement (issue #4).
 Add a new dependency only after asking the user. Record each decision here.
 
-> **Status:** the code is in the target layout (`src/`, `alembic/`), config is the nested
-> `src/config/` settings, and the walking skeleton works: `App`, access middleware,
-> `EnsureUser`, the Unit of Work with `users`, `stores`, `products`, `receipts` and `items`
-> repositories (add/get and the few lookups tests need), and `/start`. Repositories for the other
-> tables (photos, parses, issues, edits, messages) are not written yet.
-
 ```bash
 cp src/config/envs/.env.template src/config/envs/.env   # fill in BOT__TOKEN and LLM__API_KEY
 docker compose up -d --wait     # postgres on localhost:5447, redis on localhost:6390
@@ -167,6 +161,12 @@ no string literals in windows.
   fixtures.
 
 ### Database
+
+Every table is reached through the Unit of Work (`async with uow:`) and its repositories:
+`uow.users`, `stores`, `products`, `receipts`, `items`, `photos`, `parses`, `issues`, `edits`
+and `messages` (Protocols in `src/database/interfaces/`, implementations in
+`src/database/repositories/`, DTOs in `src/database/dto/`). Repositories have only the methods
+the code and tests need today; add more when a usecase needs them. Tests never import ORM models.
 
 Models: `src/database/models/`. Enums: `src/domain/enums.py`. The design
 rationale is in `docs/features.md` (multi-photo).

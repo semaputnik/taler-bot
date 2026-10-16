@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import (
 
 from alembic import command
 from src.config.settings import DatabaseSettings
+from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
+from tests.helpers import MakeUow
 
 
 def scratch_url(suffix: str = "test") -> str:
@@ -81,6 +83,5 @@ def session_factory(connection: AsyncConnection) -> Callable[[], AsyncSession]:
 
 
 @pytest.fixture
-async def session(session_factory: Callable[[], AsyncSession]) -> AsyncIterator[AsyncSession]:
-    async with session_factory() as session:
-        yield session
+def make_uow(session_factory: Callable[[], AsyncSession]) -> MakeUow:
+    return lambda: SqlAlchemyUnitOfWork(session_factory)

@@ -1,4 +1,4 @@
-from sqlalchemy import insert
+from sqlalchemy import insert, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.dto.receipt import NewReceiptDTO, NewReceiptItemDTO, ReceiptDTO, ReceiptItemDTO
@@ -17,8 +17,14 @@ class SqlAlchemyReceiptRepository:
         return ReceiptDTO.model_validate(receipt)
 
     async def get(self, receipt_id: int) -> ReceiptDTO | None:
-        receipt = await self._session.get(Receipt, receipt_id)
+        # Refresh a row this session already loaded: bulk updates and DB cascades bypass it.
+        receipt = await self._session.get(Receipt, receipt_id, populate_existing=True)
         return ReceiptDTO.model_validate(receipt) if receipt else None
+
+    async def set_current_parse(self, receipt_id: int, parse_id: int | None) -> None:
+        stmt = update(Receipt).where(Receipt.id == receipt_id).values(current_parse_id=parse_id)
+        with translate_db_errors():
+            await self._session.execute(stmt)
 
 
 class SqlAlchemyReceiptItemRepository:
