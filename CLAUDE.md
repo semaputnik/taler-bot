@@ -50,6 +50,16 @@ uv run alembic check
 The layout follows the user's earlier project `~/Documents/Projects/paper-work-bot`,
 including the layered DB design that its CLAUDE.MD describes.
 
+**The reference for every architecture discussion is Percival & Gregory, *Architecture
+Patterns with Python* (free at https://www.cosmicpython.com/book/).** Before proposing a
+structural change, check what the book says (domain model ch. 1, repository ch. 2, service
+layer ch. 4, Unit of Work ch. 6, aggregates ch. 7) and cite it. Decisions already taken are
+in `docs/adr/`; the project vocabulary is in `GLOSSARY.md`. Use those terms in code names.
+
+> **Status (2026-10-16):** the code written so far has per-table repositories for the
+> receipt parts and a `usecases/` package. ADR-0001 replaces both with the shape below.
+> The tree shows the target; the migration is a separate ticket.
+
 ```
 src/
   __main__.py              # App(settings).run()
@@ -57,8 +67,8 @@ src/
   config/                  # settings.py (root Settings) + bot.py, database.py, redis.py,
                            # llm.py, storage.py (nested models); standalone DatabaseSettings for Alembic
   bot/                     # everything that knows about aiogram
-    app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, usecases, lifespan
-    middlewares/           # access (users.is_allowed), i18n, usecases injection
+    app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, services, lifespan
+    middlewares/           # access (users.is_allowed), i18n, services injection
     handlers/
       command/             # one module per command, each exposes register_xxx(dp)
       message/photo.py     # photo intake, works in any state
@@ -68,16 +78,20 @@ src/
   database/
     engine.py              # create_engine / create_sessionmaker
     models/                # SQLAlchemy ORM; never leaves database/
-    dto/                   # pydantic DTOs: the only thing repositories return
     interfaces/            # Protocols for repositories and the UoW (typing)
-    repositories/          # SQLAlchemy implementations
+    repositories/          # one per aggregate: ReceiptRepository, CatalogRepository, UserRepository
+    mapping/               # ORM rows ↔ domain aggregates (the only place both are known)
     uow/                   # SqlAlchemyUnitOfWork
-  usecases/                # one class per user action, no aiogram imports
-    container.py           # UseCases: every use case, built once by App
-    user/  receipt/
-  domain/                  # pure business rules, no I/O
+  services/                # application services: one class per entity, action methods
+    container.py           # Services: every service, built once by App
+    user.py                # UserService.ensure, .allow
+    receipt.py             # ReceiptService.save_photo, .parse, .refine, .undo, .edit_item, …
+  domain/                  # the model: aggregates with behaviour, value objects, domain services
     enums.py
-    normalize/             # port of n8n "Normalize Receipt"; also diff, edit overlay, near-match
+    receipt.py             # Receipt aggregate (+ Photo, Parse, Item, Issue, Edit inside it)
+    catalog.py             # Catalog aggregate: Store, Product
+    normalize.py           # domain service: raw LLM output → Parse (port of n8n "Normalize Receipt")
+    matching.py            # domain service: receipt key, near-match
   integration/             # adapters to external systems, behind interfaces
     llm/                   # ReceiptParser: pydantic-ai agent, schema models, prompt
     storage/               # PhotoStorage: RECEIPTS_DIR, atomic writes, .trash
@@ -88,48 +102,58 @@ tests/
 
 ### Layers and dependencies
 
-`bot → usecases → (domain, database via UoW, integration)`. Nothing imports `bot`, and
-`domain` imports nothing from the other layers.
+`bot → services → (domain, database via UoW, integration)`. Nothing imports `bot`, and
+`domain` imports nothing from the other layers. See ADR-0001.
 
-- **domain**: functions and value objects with no DB, network or filesystem access.
-  Normalization takes the raw LLM output plus context (message time, the user's known
-  products and cards) and returns a normalized receipt and issues. Test it with real
-  receipt JSON fixtures.
+- **domain** is the model, not a utils bag. Rules live on the objects they protect:
+  - **Aggregates** are classes with behaviour. `Receipt` owns its photos, parses, items,
+    issues and edits; `receipt.apply_parse(parse)` rebuilds the header, items and
+    issues, applies the edits and reports orphaned products. `undo_to`, `record_edit`,
+    `merge_into`, `mark_failed` keep the same invariants. Nothing outside the aggregate
+    changes its parts. `Catalog` (stores and products) is a second aggregate: it outlives
+    receipts and is edited by hand.
+  - **Domain services** are the few stateless operations that fit no entity: `normalize`
+    (raw LLM output → `Parse`) and near-matching across receipts.
+  - No DB, network or filesystem access. Tested with plain unit tests on the objects,
+    and `normalize` with real receipt JSON fixtures.
 - **integration**: one package per external system. It maps external errors to
-  `IntegrationException` subclasses. Usecases depend on its interfaces, so tests can stub
+  `IntegrationException` subclasses. Services depend on its interfaces, so tests can stub
   the LLM.
 - **database**:
-  - Use `async with uow:` to get repositories (`uow.receipts`, `uow.stores`,
-    `uow.products`, …).
+  - **One repository per aggregate**, never per table. `uow.receipts.get(id)` returns a
+    whole `Receipt`; `uow.receipts.save(receipt)` writes every table it spans. The
+    ORM ↔ aggregate mapping lives in `database/mapping/`.
+  - Use `async with uow:` to get repositories (`uow.receipts`, `uow.catalog`, `uow.users`).
   - Commit only explicitly with `await uow.commit()`. Leaving the block without a
     commit rolls back.
-  - Repositories never commit, and they return DTOs, never ORM objects.
-- **usecases**: a class per action (`SaveReceiptPhoto`, `ParseReceipt`, `RefineReceipt`,
-  `UndoRefinement`, `EditItem`, `ResolveIssue`, `ListReceipts`, `EnsureUser`, …).
+  - Repositories never commit and never return ORM objects.
+  - Read models for lists and stats (`ReceiptListRow`, …) are separate query methods
+    that return pydantic models shaped for the screen, not aggregates.
+- **services** are application services (one class per entity, action methods:
+  `ReceiptService.parse`, `.refine`, `.undo`, `.edit_item`; `UserService.ensure`).
+  - A method does: load the aggregate → call the LLM or storage outside any transaction
+    → call **one** aggregate method → save → commit. It contains no receipt rules; if a
+    rule is appearing in a service, move it to the aggregate.
   - Dependencies (UoW factory, `ReceiptParser`, `PhotoStorage`) come in through
-    `__init__`.
-  - It is called as `await usecase(input_dto) -> result_dto`.
-  - The bot passes in plain data (photo bytes, ids), never aiogram objects.
-  - Results are the use case's own pydantic types (e.g. `CurrentUser`), not database
-    DTOs, so the bot never depends on `database`.
+    `__init__`. The bot passes in plain data (photo bytes, ids), never aiogram objects.
+  - Results are the service's own pydantic types (e.g. `CurrentUser`, `ReceiptCard`),
+    so the bot never depends on `database` or `domain` internals.
 - **bot**:
-  - Handlers and getters only call usecases and render the results through i18n.
-  - `App` builds the usecases once (`UseCases` in `usecases/container.py`), and a
+  - Handlers and getters only call services and render the results through i18n.
+  - `App` builds the services once (`Services` in `services/container.py`), and a
     middleware puts them into handler data, so getters receive them as arguments. There
     is no DI library.
   - `bot/app.py` is the composition root: the only module in `bot` that may import
     `database` (to wire the SQLAlchemy Unit of Work). `tests/test_layers.py` enforces
     this and the other import rules.
-- **Business logic services** (a `services/` package) were considered and postponed. Use
-  `domain` + `usecases` for now.
 
 ### Code rules
 
 - **Never hold a DB transaction across an LLM call** (up to 120 s). Photo intake is two
-  usecases:
-  1. `SaveReceiptPhoto` saves the file and a `pending` row, commits, and the bot replies
-     "✅ Saved, reading…";
-  2. `ParseReceipt` runs as a background task (`asyncio.create_task`, with a reference
+  service calls:
+  1. `ReceiptService.save_photo` saves the file and a `pending` receipt, commits, and the
+     bot replies "✅ Saved, reading…";
+  2. `ReceiptService.parse` runs as a background task (`asyncio.create_task`, with a reference
      kept and errors logged). It calls the LLM with no transaction open, then writes the
      result in a new UoW and sends the summary.
 - Everything is async. Never block the event loop: no `time.sleep` (use `asyncio.sleep`),
@@ -151,7 +175,7 @@ As in paper-work-bot, each dialog is a folder in `bot/handlers/dialog/<name>/`:
 | file | contents |
 |---|---|
 | `dialog.py` | `Dialog(Window(...), ...)`, `on_start` |
-| `getters.py` | window data; calls usecases |
+| `getters.py` | window data; calls services |
 | `click_event.py` | button and input handlers |
 | `common.py` | key constants: `DialogDataKeys` (dialog_data), `PreviewDataKeys` (getter output) |
 | `model.py` | pydantic preview models for `Select`/`ScrollingGroup` items |
@@ -162,7 +186,7 @@ no string literals in windows.
 
 ### Tests
 
-- Repositories and usecases are tested against a real Postgres (a separate `<db>_test`
+- Repositories and services are tested against a real Postgres (a separate `<db>_test`
   database, each test rolled back). Tests never read the app's env file: the server is
   the dev Postgres by default, or `TEST_DATABASE_URL` (its database name is only a prefix
   for the scratch databases). There is no fake UoW: it would double the code and
@@ -172,11 +196,16 @@ no string literals in windows.
 
 ### Database
 
-Every table is reached through the Unit of Work (`async with uow:`) and its repositories:
-`uow.users`, `stores`, `products`, `receipts`, `items`, `photos`, `parses`, `issues`, `edits`
-and `messages` (Protocols in `src/database/interfaces/`, implementations in
-`src/database/repositories/`, DTOs in `src/database/dto/`). Repositories have only the methods
-the code and tests need today; add more when a usecase needs them. Tests never import ORM models.
+Every table is reached through the Unit of Work (`async with uow:`) and one repository per
+aggregate (ADR-0001): `uow.receipts` (receipt + photos, parses, items, issues, edits,
+bot messages), `uow.catalog` (stores, products), `uow.users`. Protocols in
+`src/database/interfaces/`, implementations in `src/database/repositories/`. Repositories
+have only the methods the code and tests need today; add more when a service needs them.
+Tests never import ORM models.
+
+> **Status (2026-10-16):** the code still has the per-table repositories (`uow.stores`,
+> `products`, `items`, `photos`, `parses`, `issues`, `edits`, `messages`) and DTOs from
+> tickets #5–#6. They are replaced by the aggregate repositories in the migration ticket.
 
 Models: `src/database/models/`. Enums: `src/domain/enums.py`. The design
 rationale is in `docs/features.md` (multi-photo).
@@ -189,7 +218,9 @@ rationale is in `docs/features.md` (multi-photo).
   - otherwise it ends up `parsed`.
 - Receipt header columns are the current parse (`current_parse_id`) with `receipt_edits`
   applied. `receipt_items` are rebuilt from `receipt_parses.normalized` whenever the
-  current parse changes. Active issues are those of the current parse.
+  current parse changes. Active issues are those of the current parse. **These rules are
+  enforced by the `Receipt` aggregate, not by repositories or services**; the DB
+  constraints are the second line of defence.
 - Product name and category edits go to `store_products`, never to `receipt_edits`.
   A parse never overwrites `store_products` or `stores.name`.
 - Deleting a receipt is soft (`deleted_at`). Every list, stats query and uniqueness check
@@ -327,4 +358,4 @@ Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root, created lazily. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root (ADR-0001: Receipt aggregate, services). See `docs/agents/domain.md`.
