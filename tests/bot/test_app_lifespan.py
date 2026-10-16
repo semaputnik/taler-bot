@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from src.bot.app import App
 from src.config.bot import BotConfig
 from src.config.database import DatabaseConfig
@@ -49,7 +51,7 @@ async def test_lifespan_closes_storage_and_engine_even_if_the_bot_session_fails(
         closed.append("engine")
 
     app.storage.close = record_storage
-    app.engine.dispose = record_engine
+    app.engine = SimpleNamespace(dispose=record_engine)
 
     async with app.lifespan():
         pass
