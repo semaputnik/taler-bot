@@ -10,9 +10,16 @@ from itertools import count
 import pytest
 from sqlalchemy import text
 
-from src.database.read_models import CurrencyTotal, HistoryPage, HistoryRow
+from src.database.read_models import (
+    Amount,
+    CurrencyBlock,
+    CurrencyTotal,
+    HistoryPage,
+    HistoryRow,
+    SpendingPeriod,
+)
 from src.domain.edits import Edit
-from src.domain.enums import EditTarget, IssueResolution, IssueSeverity, ReceiptStatus
+from src.domain.enums import Category, EditTarget, IssueResolution, IssueSeverity, ReceiptStatus
 from src.domain.parse import ParsedIssue
 from src.domain.receipt import Header, Photo, Receipt
 from src.exception import (
@@ -24,6 +31,7 @@ from src.exception import (
 from tests.domain.builders import WHEN, parse, photo, product
 from tests.helpers import MakeUow, add_user, seed_catalog
 
+SPENDING_STATEMENTS = 4  # totals, categories, stores, cards
 HISTORY_STATEMENTS = 4  # rows, aggregates, totals per currency, the month's stores
 MILK = product("mercadona::leche", total="1.20")
 BREAD = product("mercadona::pan", total="0.90")
@@ -979,3 +987,234 @@ async def test_a_reparse_rewrites_the_issues_with_the_carried_resolutions(make_u
     assert [(i.message, i.resolution, i.resolved_at) for i in stored.issues] == [
         ("Check it", IssueResolution.SKIPPED, WHEN)
     ]
+
+
+# --- spending --------------------------------------------------------------------------------
+
+D = Decimal
+
+
+async def spent(
+    make_uow: MakeUow,
+    purchased_at: datetime,
+    *lines: tuple[Category, str],
+    store: str = "mercadona",
+    total: str | None = None,
+    currency: str = "EUR",
+    card: tuple[str | None, str] | None = None,
+    deleted: bool = False,
+    duplicate_of: int | None = None,
+    user_id: int = 1,
+) -> Receipt:
+    """A stored receipt of the user whose item lines are `(category, amount)`; the total is the
+    lines' sum unless given."""
+    n = next(_history_ids)
+    items = tuple(
+        product(f"{store}::item{n}-{i}", total=amount, category=category)
+        for i, (category, amount) in enumerate(lines)
+    )
+    amount = total if total is not None else str(sum((D(a) for _, a in lines), D(0)))
+    one = parse(
+        *items,
+        store_key=store,
+        store_name=store.capitalize(),
+        purchased_at=purchased_at,
+        receipt_number=str(n),
+        receipt_key=f"{store}|{n}",
+        total=D(amount),
+        currency=currency,
+        card_brand=card[0] if card else None,
+        card_last4=card[1] if card else None,
+    )
+    await add_user(make_uow, user_id)
+    await seed_catalog(make_uow, one, user_id=user_id)
+    receipt = Receipt.start(user_id, photo(f"s{user_id}-{n}"))
+    receipt.apply_parse(one)
+    if duplicate_of is not None:
+        receipt.mark_duplicate(duplicate_of)
+    if deleted:
+        receipt.soft_delete()
+    return await persist(make_uow, receipt)
+
+
+async def october_spending(make_uow: MakeUow, *, user_id: int = 1, tz: str = MADRID):
+    async with make_uow() as uow:
+        return await uow.receipts.spending(user_id, date(2026, 10, 1), date(2026, 11, 1), tz)
+
+
+def only_block(period: SpendingPeriod) -> CurrencyBlock:
+    [block] = period.blocks
+    return block
+
+
+async def test_spending_membership_is_the_purchase_date_in_the_time_zone(make_uow):
+    await spent(make_uow, at(10), (Category.DAIRY, "5.00"))
+    # 23:30 UTC on the last day of October is already 00:30 on 1 November in Madrid.
+    await spent(make_uow, at(31, 23), (Category.DAIRY, "7.00"), store="late")
+    await spent(make_uow, datetime(2026, 10, 31, 23, 30, tzinfo=UTC), (Category.DAIRY, "9.00"))
+    # 23:30 UTC on 30 September is 01:30 on 1 October in Madrid (CEST, UTC+2).
+    await spent(
+        make_uow, datetime(2026, 9, 30, 23, 30, tzinfo=UTC), (Category.PANTRY, "3.00"), store="e"
+    )
+    await spent(make_uow, at(10, month=9), (Category.DAIRY, "100.00"))
+
+    block = only_block(await october_spending(make_uow))
+    assert (block.total, block.receipt_count) == (D("8.00"), 2)
+    assert [(a.key, a.value) for a in block.categories] == [
+        ("dairy", D("5.00")),
+        ("pantry", D("3.00")),
+    ]
+
+    async with make_uow() as uow:
+        utc = await uow.receipts.spending(1, date(2026, 10, 1), date(2026, 11, 1), "UTC")
+    assert only_block(utc).total == D("5.00") + D("7.00") + D("9.00")
+
+
+async def test_spending_counts_only_parsed_and_not_deleted_receipts(make_uow):
+    await spent(make_uow, at(2), (Category.DAIRY, "5.00"))
+    await spent(make_uow, at(3), (Category.DAIRY, "50.00"), deleted=True)
+    first = await spent(make_uow, at(4), (Category.DAIRY, "60.00"), store="dup")
+    assert first.id is not None
+    await spent(make_uow, at(5), (Category.DAIRY, "70.00"), duplicate_of=first.id)
+    await failed(make_uow, at(6))
+
+    block = only_block(await october_spending(make_uow))
+
+    assert (block.total, block.receipt_count) == (D("65.00"), 2)
+
+
+async def test_spending_has_one_block_per_currency_ordered_by_code(make_uow):
+    await spent(make_uow, at(2), (Category.DAIRY, "5.00"))
+    await spent(make_uow, at(3), (Category.MEAT, "40.00"), currency="USD", store="us")
+    await spent(make_uow, at(4), (Category.DAIRY, "6.00"))
+
+    period = await october_spending(make_uow)
+
+    assert [(b.currency, b.total, b.receipt_count) for b in period.blocks] == [
+        ("EUR", D("11.00"), 2),
+        ("USD", D("40.00"), 1),
+    ]
+    assert [a.key for a in period.blocks[1].categories] == ["meat"]
+    assert (period.start, period.end) == (date(2026, 10, 1), date(2026, 11, 1))
+
+
+async def test_spending_categories_come_from_item_lines_largest_first_and_not_itemised_is_the_rest(
+    make_uow,
+):
+    await spent(make_uow, at(2), (Category.DAIRY, "5.00"), (Category.MEAT, "12.50"))
+    await spent(make_uow, at(3), (Category.DAIRY, "4.00"), (Category.PANTRY, "0.00"), total="9.00")
+
+    block = only_block(await october_spending(make_uow))
+
+    assert [(a.key, a.value) for a in block.categories] == [
+        ("meat", D("12.50")),
+        ("dairy", D("9.00")),
+    ]
+    assert block.total == D("26.50")
+    assert block.not_itemised == D("5.00")
+    assert sum(a.value for a in block.categories) + block.not_itemised == block.total
+
+
+async def test_spending_categories_follow_the_catalog_at_query_time(make_uow):
+    await spent(make_uow, at(2), (Category.DAIRY, "5.00"))
+    async with make_uow() as uow:
+        catalog = await uow.catalog.get(1)
+        [key] = catalog.products
+        catalog.set_category(key, Category.PET)
+        await uow.catalog.save(catalog)
+        await uow.commit()
+
+    block = only_block(await october_spending(make_uow))
+
+    assert [a.key for a in block.categories] == ["pet"]
+
+
+async def test_spending_stores_are_summed_from_receipt_totals_largest_first(make_uow):
+    await spent(make_uow, at(2), (Category.DAIRY, "5.00"), store="consum")
+    await spent(make_uow, at(3), (Category.DAIRY, "4.00"), total="30.00", store="mercadona")
+    await spent(make_uow, at(4), (Category.DAIRY, "4.00"), store="consum")
+
+    block = only_block(await october_spending(make_uow))
+
+    assert [(a.label, a.value) for a in block.stores] == [
+        ("Mercadona", D("30.00")),
+        ("Consum", D("9.00")),
+    ]
+    assert len({a.key for a in block.stores}) == 2
+
+
+async def test_spending_cards_are_labelled_and_a_receipt_without_a_card_is_cash(make_uow):
+    await spent(make_uow, at(2), (Category.DAIRY, "5.00"), card=("VISA", "0848"))
+    await spent(make_uow, at(3), (Category.DAIRY, "6.00"), card=("VISA", "0848"))
+    await spent(make_uow, at(4), (Category.DAIRY, "20.00"), card=(None, "1111"))
+    await spent(make_uow, at(5), (Category.DAIRY, "1.00"))
+
+    block = only_block(await october_spending(make_uow))
+
+    assert block.cards == [
+        Amount(key="1111", label="•1111", value=D("20.00")),
+        Amount(key="0848", label="VISA •0848", value=D("11.00")),
+        Amount(key="cash", label="", value=D("1.00")),
+    ]
+
+
+async def test_spending_ignores_another_users_receipts(make_uow):
+    await spent(make_uow, at(2), (Category.DAIRY, "5.00"))
+    await spent(make_uow, at(3), (Category.DAIRY, "99.00"), user_id=2)
+
+    assert only_block(await october_spending(make_uow)).total == D("5.00")
+    assert only_block(await october_spending(make_uow, user_id=2)).total == D("99.00")
+
+
+async def test_an_empty_period_has_no_blocks(make_uow):
+    await add_user(make_uow)
+
+    period = await october_spending(make_uow)
+
+    assert period == SpendingPeriod(start=date(2026, 10, 1), end=date(2026, 11, 1), blocks=[])
+
+
+async def test_a_week_period_uses_the_same_bounds_rule(make_uow):
+    await spent(make_uow, at(12, 7), (Category.DAIRY, "5.00"))  # Monday 09:00 Madrid
+    await spent(make_uow, at(18, 21), (Category.DAIRY, "6.00"))  # Sunday 23:00 Madrid
+    await spent(make_uow, at(18, 22), (Category.DAIRY, "7.00"))  # Monday 00:00 Madrid
+    await spent(make_uow, at(11, 21), (Category.DAIRY, "8.00"))  # Saturday 23:00 Madrid
+
+    async with make_uow() as uow:
+        week = await uow.receipts.spending(1, date(2026, 10, 12), date(2026, 10, 19), MADRID)
+
+    assert only_block(week).total == D("11.00")
+
+
+@pytest.mark.parametrize("size", [3, 30])
+async def test_spending_runs_the_same_statements_whatever_the_size(make_uow, statements, size):
+    for n in range(size):
+        await spent(
+            make_uow,
+            at(1 + n % 28),
+            (Category.DAIRY, "2.00"),
+            (Category.MEAT, "3.00"),
+            store=f"shop{n % 4}",
+            card=("VISA", f"000{n % 3}") if n % 2 else None,
+            currency="EUR" if n % 5 else "USD",
+        )
+    statements.clear()
+
+    await october_spending(make_uow)
+
+    assert len([s for s in statements if s.startswith("SELECT")]) == SPENDING_STATEMENTS
+
+
+async def test_the_earliest_purchase_is_a_local_date_of_a_parsed_not_deleted_receipt(make_uow):
+    await add_user(make_uow)
+    async with make_uow() as uow:
+        assert await uow.receipts.earliest_purchase(1, MADRID) is None
+    await spent(make_uow, at(10, month=3), (Category.DAIRY, "5.00"), deleted=True)
+    await failed(make_uow, at(1, month=1))
+    await spent(make_uow, datetime(2026, 5, 31, 23, 30, tzinfo=UTC), (Category.DAIRY, "5.00"))
+    await spent(make_uow, at(9), (Category.DAIRY, "5.00"))
+    await spent(make_uow, at(1, month=1), (Category.DAIRY, "5.00"), user_id=2)
+
+    async with make_uow() as uow:
+        assert await uow.receipts.earliest_purchase(1, MADRID) == date(2026, 6, 1)
+        assert await uow.receipts.earliest_purchase(1, "UTC") == date(2026, 5, 31)

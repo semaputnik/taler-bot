@@ -7,16 +7,21 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from src.database.read_models import (
+    Amount,
+    CurrencyBlock,
     CurrencyTotal,
     HistoryPage,
     HistoryRow,
     ReparseCandidates,
+    SpendingPeriod,
     StoreOption,
 )
 
 __all__ = [
     "PAGE_SIZE",
+    "Amount",
     "BulkResult",
+    "CurrencyBlock",
     "CurrencyTotal",
     "CurrentUser",
     "HistoryPage",
@@ -31,6 +36,7 @@ __all__ = [
     "ReceiptCard",
     "ReparseCandidates",
     "ReparseSummary",
+    "SpendingPeriod",
     "StoreOption",
 ]
 

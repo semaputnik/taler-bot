@@ -74,3 +74,46 @@ class ReparseCandidates(BaseModel):
 
     failed_ids: list[int]
     outdated_ids: list[int]
+
+
+class Amount(BaseModel):
+    """One line of a breakdown: a category, a store or a card with what was spent on it.
+
+    `key` is stable across periods (a category value, a store id, a card ending, `cash`) so two
+    periods can be compared by it. `label` is the text to show; it is empty when the view owns
+    the text (the `cash` card and a receipt without a store).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str
+    label: str
+    value: Decimal
+
+
+class CurrencyBlock(BaseModel):
+    """One currency of a period. `total` and `receipt_count` are over parsed receipts;
+    `categories` come from item lines (non-zero only, largest first); `not_itemised` is what the
+    categories do not cover; `stores` and `cards` come from receipt totals, largest first (cards
+    without an ending are under key `cash`)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    currency: str
+    total: Decimal
+    receipt_count: int
+    categories: list[Amount]
+    not_itemised: Decimal
+    stores: list[Amount]
+    cards: list[Amount]
+
+
+class SpendingPeriod(BaseModel):
+    """The spending of the half-open local-date period `[start, end)`, one block per currency
+    ordered by currency code."""
+
+    model_config = ConfigDict(frozen=True)
+
+    start: date
+    end: date
+    blocks: list[CurrencyBlock]
