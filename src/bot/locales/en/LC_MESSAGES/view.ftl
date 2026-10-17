@@ -21,7 +21,8 @@ receipt-summary =
     { $date }
     Total: <b>{ $amount }</b>
     Payment: { $payment }
-    Items: { $items }
+receipt-category = Category: { $category }
+receipt-items = Items: { $items }
 receipt-store-tag = #{ $tag }
 receipt-unknown-store = Unknown store
 receipt-amount = { $total } { $currency }
@@ -75,6 +76,20 @@ category-baby = Baby
 category-pet = Pet
 category-other = Other
 category-current = ✓ { $name }
+expense-category-groceries = Groceries
+expense-category-restaurants = Restaurants
+expense-category-transport = Transport
+expense-category-rent = Rent
+expense-category-utilities = Utilities
+expense-category-health = Health
+expense-category-entertainment = Entertainment
+expense-category-subscriptions = Subscriptions
+expense-category-clothing = Clothing
+expense-category-travel = Travel
+expense-category-gifts = Gifts
+expense-category-other = Other
+expense-category-prompt = Pick the category of this expense
+category-not-possible = This receipt has no expense to categorise.
 item-category-prompt = Pick the category for { $name }
 item-input-prompt =
     Enter the { $field } ({ $hint })

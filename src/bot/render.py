@@ -72,8 +72,13 @@ def header(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
         date=date(card, tz),
         amount=amount(card, i18n),
         payment=payment(card, i18n),
-        items=str(card.item_count),
     )
+    if card.expense_category is not None:
+        text += "\n" + i18n.get(
+            "receipt-category",
+            category=i18n.get(f"expense-category-{card.expense_category.replace('_', '-')}"),
+        )
+    text += "\n" + i18n.get("receipt-items", items=str(card.item_count))
     if card.store_key:
         text += "\n\n" + i18n.get("receipt-store-tag", tag=store_tag(card.store_key))
     return text

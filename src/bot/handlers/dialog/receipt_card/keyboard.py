@@ -25,6 +25,7 @@ class CardKeyboard(Keyboard):
             item_count=1 if data[PreviewDataKeys.HAS_ITEMS] else 0,
             review_count=data[PreviewDataKeys.REVIEW_COUNT],
             can_reparse=data[PreviewDataKeys.CAN_REPARSE],
+            can_categorise=data[PreviewDataKeys.HAS_EXPENSE],
         )
         return markup.inline_keyboard
 

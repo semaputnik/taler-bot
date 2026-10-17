@@ -26,6 +26,7 @@ class PreviewDataKeys:
     CAN_RENAME = "can_rename"
     REVIEWED = "reviewed"
     HAS_ITEM = "has_item"
+    HAS_EXPENSE = "has_expense"
     CATEGORIES = "categories"
 
 
@@ -46,5 +47,23 @@ CATEGORIES = (
     "personal_care",
     "baby",
     "pet",
+    "other",
+)
+
+
+# The categories offered for a receipt's expense, in the order of the list. The service refuses
+# any other string; `tests/bot/test_expense_category.py` keeps this list equal to the domain's.
+EXPENSE_CATEGORIES = (
+    "groceries",
+    "restaurants",
+    "transport",
+    "rent",
+    "utilities",
+    "health",
+    "entertainment",
+    "subscriptions",
+    "clothing",
+    "travel",
+    "gifts",
     "other",
 )

@@ -11,6 +11,7 @@ from src.bot.handlers.dialog.media import StoredPhoto
 from src.bot.handlers.dialog.receipt_card.click_event import settle
 from src.bot.handlers.dialog.receipt_card.common import (
     CATEGORIES,
+    EXPENSE_CATEGORIES,
     DialogDataKeys,
     PreviewDataKeys,
 )
@@ -51,6 +52,7 @@ async def main_getter(
         has_items=card.status == "parsed" and card.item_count > 0 and not card.deleted,
         review_count=card.review_count if card.status == "parsed" and not card.deleted else 0,
         can_reparse=card.can_reparse,
+        has_expense=card.expense_id is not None and not card.deleted,
     ).to_data()
 
 
@@ -156,6 +158,28 @@ async def item_categories_getter(
     return CategoriesPreview(
         text=i18n.get("item-category-prompt", name=escape(row.readable_name)), categories=choices
     ).to_data()
+
+
+async def expense_categories_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The expense category list with the receipt's current category marked."""
+    card = await services.receipts.card(
+        user.id, dialog_manager.dialog_data[DialogDataKeys.RECEIPT_ID]
+    )
+    if card.deleted or card.expense_category is None:
+        return CategoriesPreview(text=i18n.get("card-deleted"), categories=[]).to_data()
+    choices = []
+    for category in EXPENSE_CATEGORIES:
+        label = i18n.get(f"expense-category-{category.replace('_', '-')}")
+        if category == card.expense_category:
+            label = i18n.get("category-current", name=label)
+        choices.append(CategoryChoice(id=category, text=label))
+    return CategoriesPreview(text=i18n.get("expense-category-prompt"), categories=choices).to_data()
 
 
 async def issue_getter(
