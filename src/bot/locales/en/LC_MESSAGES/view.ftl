@@ -7,6 +7,11 @@ photo-already-have = I already have this photo.
 receipt-saved = ✅ Saved, reading…
 reparse-started = 🔄 Reading again…
 reparse-not-possible = This receipt cannot be read again.
+reparse-summary = { $failed } failed · { $outdated } read by an older parser (now { $version })
+reparse-none = Nothing to re-parse: every receipt was read by the current parser.
+reparse-progress = 🔁 Re-parsing { $count } receipts…
+reparse-done = Re-parsed { $total }: { $ok } ok, { $failed } failed
+reparse-running = A re-parse is already running. I will report when it is done.
 receipt-not-a-receipt = 🤔 This does not look like a receipt. Nothing was recorded.
 receipt-duplicate = ♻️ Already recorded: <b>{ $store }</b>, { $date }, { $amount }
 

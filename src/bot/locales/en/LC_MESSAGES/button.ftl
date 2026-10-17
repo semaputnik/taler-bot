@@ -25,3 +25,5 @@ button-store = { $name }
 button-store-selected = ✓ { $name }
 button-prev-page = ◀
 button-next-page = ▶
+button-reparse-failed = 🔁 Re-parse failed ({ $count })
+button-reparse-outdated = 🔁 Re-parse outdated ({ $count })

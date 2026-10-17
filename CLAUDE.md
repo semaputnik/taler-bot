@@ -70,8 +70,8 @@ src/
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
     middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
-      command/             # one module per command (/start, /receipts), each exposes register_xxx(dp)
-      callback/            # taps on plain buttons: receipt.py edits the current card in place or sends a fresh one; history.py edits the history message in place
+      command/             # one module per command (/start, /receipts, /reparse), each exposes register_xxx(dp)
+      callback/            # taps on plain buttons: receipt.py edits the current card in place or sends a fresh one; history.py edits the history message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       parse_task.py        # read_and_show_card: the background read (typing, parse, fresh card) shared by photo intake and the card's Re-parse
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog

@@ -35,8 +35,12 @@ failures, the same photo sent twice and the same receipt photographed twice.
 4. **Receipt history** `/receipts`. Paginated, filtered by month and store; a row opens
    the card.
 5. **Reparse.** One receipt by hand, or in bulk for `failed` receipts and receipts with an
-   old `parser_version`. In progress: the services and the card's `🔄 Re-parse` button are
-   done; the bulk `/reparse` command is next.
+   old `parser_version`. Done. The card's `🔄 Re-parse` button reads one receipt again. The
+   `/reparse` command shows "N failed · M read by an older parser (now <version>)" with the
+   buttons `🔁 Re-parse failed (N)` and `🔁 Re-parse outdated (M)` (each only when its count is
+   above 0). A tap edits the message to "🔁 Re-parsing N receipts…", reads up to 50 receipts one
+   after the other in the background and replies "Re-parsed 12: 10 ok, 2 failed". A second tap
+   while a run is going answers an alert.
 
 **Stage 2: analytics**
 
