@@ -36,6 +36,43 @@ ITEM_FIELDS: dict[str, tuple[str, bool]] = {
 }
 
 
+@dataclass(frozen=True)
+class IssueField:
+    """The editable field an issue's `field` stands for, and the input the bot asks for.
+
+    `input_kind` is not the field's `kind` above: the issue screen also tells a currency code
+    apart from free text.
+    """
+
+    target: EditTarget
+    field: str
+    input_kind: str
+
+
+# Domain knowledge: which issue `field` (the model's and normalization's vocabulary) is which
+# editable field. An issue whose field is not here cannot be fixed by typing a value.
+ISSUE_FIELDS: dict[str, IssueField] = {
+    key: IssueField(target, field, kind)
+    for key, target, field, kind in [
+        ("receipt.purchased_at", EditTarget.RECEIPT, "purchased_at", "datetime"),
+        ("receipt.number", EditTarget.RECEIPT, "receipt_number", "text"),
+        ("currency", EditTarget.RECEIPT, "currency", "currency"),
+        ("totals.total", EditTarget.RECEIPT, "total", "money"),
+        ("totals.subtotal", EditTarget.RECEIPT, "subtotal", "money"),
+        ("totals.discount_total", EditTarget.RECEIPT, "discount_total", "money"),
+        ("totals.tax_total", EditTarget.RECEIPT, "tax_total", "money"),
+        ("payment.method", EditTarget.RECEIPT, "payment_method", "text"),
+        ("payment.card_last4", EditTarget.RECEIPT, "card_last4", "last4"),
+        ("items.quantity", EditTarget.ITEM, "quantity", "number"),
+        ("items.unit_price", EditTarget.ITEM, "unit_price", "number"),
+        ("items.reference_price", EditTarget.ITEM, "reference_price", "number"),
+        ("items.discount", EditTarget.ITEM, "discount", "money"),
+        ("items.line_total", EditTarget.ITEM, "line_total", "money"),
+        ("items.vat_rate", EditTarget.ITEM, "vat_rate", "number"),
+    ]
+}
+
+
 @dataclass(kw_only=True)
 class Edit:
     target: EditTarget

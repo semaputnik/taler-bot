@@ -34,6 +34,7 @@ from src.exception import (
 from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
 from src.services.results import (
+    IssueCard,
     IssueLine,
     ItemRow,
     NewPhoto,
@@ -212,6 +213,17 @@ class ReceiptService:
             await uow.commit()
             return await _card(uow, receipt)
 
+    async def correct_issue(
+        self, user_id: int, receipt_id: int, issue_id: int, value: Any
+    ) -> ReceiptCard:
+        """Answer an open issue with the right value: keep it as an edit and close the issue."""
+        async with self._uow_factory() as uow:
+            receipt = await _load(uow, user_id, receipt_id)
+            receipt.correct_issue(issue_id, value)
+            await uow.receipts.save(receipt)
+            await uow.commit()
+            return await _card(uow, receipt)
+
     async def soft_delete(self, user_id: int, receipt_id: int) -> None:
         """Delete the receipt, then move its photo to the trash.
 
@@ -265,6 +277,31 @@ class ReceiptService:
             )
             for i in receipt.items
         ]
+
+    async def review(self, user_id: int, receipt_id: int) -> list[IssueCard]:
+        """The issues worth a look, in walk order (high first, then parse order). One load."""
+        async with self._uow_factory() as uow:
+            receipt = await _load(uow, user_id, receipt_id)
+        cards = []
+        for issue in receipt.reviewable_issues():
+            assert issue.id is not None, "a stored issue has an id"
+            correction = receipt.issue_correction(issue)
+            item = receipt.item_of(issue)
+            cards.append(
+                IssueCard(
+                    issue_id=issue.id,
+                    severity=str(issue.severity),
+                    source=str(issue.source),
+                    issue_type=issue.issue_type,
+                    field=issue.field,
+                    item_name=item.readable_name if item is not None else issue.item_name,
+                    message=issue.message,
+                    editable=correction is not None,
+                    input_kind=correction.input_kind if correction is not None else None,
+                    current_value=receipt.current_value(issue),
+                )
+            )
+        return cards
 
     async def photo(self, user_id: int, receipt_id: int) -> PhotoRef:
         """The receipt photo's Telegram file id and type (a deleted receipt's too)."""
@@ -394,6 +431,7 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         status=str(receipt.status),
         received_at=receipt.photo.received_at,
         deleted=receipt.deleted_at is not None,
+        store_key=header.store_key,
         store_name=store_name,
         purchased_at=header.purchased_at,
         currency=header.currency,
@@ -403,4 +441,5 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         card_last4=header.card_last4,
         item_count=len(receipt.items),
         open_issue_count=sum(1 for i in receipt.issues if i.resolution is IssueResolution.OPEN),
+        review_count=len(receipt.reviewable_issues()),
     )

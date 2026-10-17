@@ -10,10 +10,12 @@ receipt-duplicate = ♻️ Already recorded: <b>{ $store }</b>, { $date }, { $am
 
 receipt-summary =
     🧾 <b>{ $store }</b>
+    { "" }
     { $date }
     Total: <b>{ $amount }</b>
     Payment: { $payment }
     Items: { $items }
+receipt-store-tag = #{ $tag }
 receipt-unknown-store = Unknown store
 receipt-amount = { $total } { $currency }
 receipt-amount-unknown = unknown
@@ -21,21 +23,12 @@ receipt-payment-card-brand = card { $brand } •{ $last4 }
 receipt-payment-card = card •{ $last4 }
 receipt-payment-method = { $method }
 receipt-payment-none = not specified
-receipt-issues = ⚠️ Issues ({ $count }):
-receipt-issue-line = • { $item }: { $message }
-receipt-issue-line-plain = • { $message }
-receipt-issues-more = …
 
 card-deleted-alert = This receipt was deleted.
 card-deleted = 🗑 This receipt was deleted.
-card-deleted-done = 🗑 Deleted
 card-status-pending = ⏳ Waiting to be read.
 card-status-parsing = ⏳ Being read…
-card-status-failed = ❌ Could not be read.
-card-status-not-receipt = 🤔 Not a receipt.
-card-status-duplicate = ♻️ Duplicate.
 card-received = Photo received: { $date }
-card-repeats = Repeats <b>{ $store }</b>, { $date }, { $amount }
 card-delete-confirm = Delete this receipt? The photo is kept in the trash.
 card-cannot-delete-parsing = This receipt is still being read. Try again in a moment.
 
@@ -73,3 +66,36 @@ category-baby = Baby
 category-pet = Pet
 category-other = Other
 card-photo-unavailable = The photo could not be loaded.
+
+issue-title = ⚠️ <b>Issue { $position } of { $total }</b> { $icon }
+issue-severity-high = 🔴
+issue-severity-medium = 🟡
+issue-item = <b>Item:</b> { $name }
+issue-current-value = <b>Current value:</b> { $value }
+issue-input-prompt = Enter the { $field } ({ $hint })
+issue-input-error = ❌ Not accepted. Send { $hint }.
+issue-input-gone = This issue is no longer open. Go back.
+
+field-purchased-at = date and time
+field-number = receipt number
+field-currency = currency
+field-total = total
+field-subtotal = subtotal
+field-discount-total = total discount
+field-tax-total = total tax
+field-method = payment method
+field-card-last4 = card ending
+field-quantity = quantity
+field-unit-price = unit price
+field-reference-price = reference price
+field-discount = discount
+field-line-total = line total
+field-vat-rate = VAT rate, %
+
+input-hint-datetime = dd.mm.yyyy hh:mm
+input-hint-money = a number with a point, like 12.50
+input-hint-number = a number with a point, like 1.5
+input-hint-last4 = four digits
+input-hint-currency = a 3-letter code, like EUR
+input-hint-text = free text
+review-done = { $reviewed } reviewed: { $corrected } corrected, { $confirmed } confirmed, { $skipped } skipped

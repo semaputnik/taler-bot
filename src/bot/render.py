@@ -1,5 +1,6 @@
 """Texts about a receipt that both the parse reply and the card dialog show."""
 
+import re
 from decimal import Decimal
 from html import escape
 from zoneinfo import ZoneInfo
@@ -22,11 +23,19 @@ def date(card: ReceiptCard, tz: ZoneInfo) -> str:
 def amount(card: ReceiptCard, i18n: TranslatorRunner) -> str:
     if card.total is None:
         return i18n.get("receipt-amount-unknown")
-    currency = escape(card.currency or "")
-    return i18n.get("receipt-amount", total=format(card.total, ".2f"), currency=currency)
+    return i18n.get(
+        "receipt-amount", total=format(card.total, ".2f"), currency=_sign(card.currency)
+    )
 
 
 _CURRENCY_SIGNS = {"EUR": "€", "USD": "$", "GBP": "£", "RUB": "₽", "UAH": "₴", "CHF": "CHF"}
+
+
+def _sign(currency: str | None) -> str:
+    """The currency sign (`€`), or the escaped code when there is no sign for it."""
+    if not currency:
+        return ""
+    return _CURRENCY_SIGNS.get(currency.upper(), escape(currency))
 
 
 def money(value: Decimal | None, i18n: TranslatorRunner, currency: str | None = None) -> str:
@@ -36,8 +45,7 @@ def money(value: Decimal | None, i18n: TranslatorRunner, currency: str | None = 
     amount = format(value, ".2f")
     if not currency:
         return amount
-    sign = _CURRENCY_SIGNS.get(currency.upper(), escape(currency))
-    return i18n.get("item-amount", amount=amount, sign=sign)
+    return i18n.get("item-amount", amount=amount, sign=_sign(currency))
 
 
 def quantity(value: Decimal) -> str:
@@ -57,8 +65,8 @@ def payment(card: ReceiptCard, i18n: TranslatorRunner) -> str:
 
 
 def header(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
-    """The summary's first lines: store, date, total, payment, item count."""
-    return i18n.get(
+    """The card's text: store, a blank line, the facts, a blank line, the store's hashtag."""
+    text = i18n.get(
         "receipt-summary",
         store=store(card, i18n),
         date=date(card, tz),
@@ -66,3 +74,11 @@ def header(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
         payment=payment(card, i18n),
         items=str(card.item_count),
     )
+    if card.store_key:
+        text += "\n\n" + i18n.get("receipt-store-tag", tag=store_tag(card.store_key))
+    return text
+
+
+def store_tag(store_key: str) -> str:
+    """A Telegram hashtag body from the store's slug: lower case, letters, digits, underscores."""
+    return re.sub(r"[^a-z0-9_]", "_", store_key.lower()).strip("_") or "store"

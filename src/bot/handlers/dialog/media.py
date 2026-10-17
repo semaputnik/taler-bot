@@ -4,10 +4,14 @@ aiogram-dialog lets a `TelegramBadRequest` on sending media escape. `StoredPhoto
 catches it for a `StoredPhoto` and retries once with the bytes the attachment can load, for that
 message only. If the bytes cannot be loaded either, the message shows the attachment's notice
 text instead of the photo.
+
+It also keeps the keyboards of older receipt cards when a new card is sent.
 """
 
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import replace
 
 from aiogram import Bot
@@ -16,9 +20,23 @@ from aiogram.types import BufferedInputFile, ContentType, InputFile, Message
 from aiogram_dialog.api.entities import MediaAttachment, MediaId, NewMessage, OldMessage
 from aiogram_dialog.manager.message_manager import MessageManager
 
+from src.bot.keyboards.receipt import is_card_markup
 from src.integration.storage import StorageError
 
 logger = logging.getLogger(__name__)
+
+_keep_previous_keyboard: ContextVar[bool] = ContextVar("keep_previous_keyboard", default=False)
+
+
+@contextmanager
+def keeping_previous_keyboard() -> Iterator[None]:
+    """While active, sending a dialog message leaves the previous message's keyboard alone."""
+    token = _keep_previous_keyboard.set(True)
+    try:
+        yield
+    finally:
+        _keep_previous_keyboard.reset(token)
+
 
 # Errors about the message being edited, not about the media; they are not a refused file id.
 _EDIT_ERRORS = ("message is not modified", "message can't be edited", "message to edit not found")
@@ -45,6 +63,18 @@ class StoredPhoto(MediaAttachment):
 
 
 class StoredPhotoMessageManager(MessageManager):
+    async def _remove_kbd(
+        self, bot: Bot, old_message: OldMessage | None, new_message: NewMessage | None
+    ) -> Message | None:
+        """aiogram-dialog strips the previous message's keyboard whenever it sends a new one.
+        A new receipt card, or a window opened from an older card, must not do that: the older
+        cards keep their buttons."""
+        if _keep_previous_keyboard.get() or (
+            new_message is not None and is_card_markup(new_message.reply_markup)
+        ):
+            return None
+        return await super()._remove_kbd(bot, old_message, new_message)
+
     async def get_media_source(self, media: MediaAttachment, bot: Bot) -> InputFile | str:
         if isinstance(media, StoredPhoto) and media.data is not None:
             return BufferedInputFile(media.data, filename="receipt.jpg")

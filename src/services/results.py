@@ -43,6 +43,7 @@ class ReceiptCard(BaseModel):
     status: str
     received_at: datetime
     deleted: bool
+    store_key: str | None  # the store's slug, e.g. `ametller-origen`; the card's hashtag
     store_name: str | None
     purchased_at: datetime | None
     currency: str | None
@@ -52,6 +53,7 @@ class ReceiptCard(BaseModel):
     card_last4: str | None
     item_count: int
     open_issue_count: int
+    review_count: int  # open issues of severity high or medium: what the review walk visits
     duplicate_of: ReceiptCard | None = None  # set by `ReceiptService.card` for a duplicate
 
 
@@ -91,6 +93,29 @@ class IssueLine(BaseModel):
 
     item_name: str | None
     message: str
+
+
+class IssueCard(BaseModel):
+    """One issue of the review walk, with what the user can do about it.
+
+    `editable` is true when a typed value can fix it; `input_kind` then says what to ask for
+    (`datetime`, `text`, `currency`, `money`, `number` or `last4`) and `current_value` is what
+    the receipt holds now (a `Decimal`, an aware `datetime` or a `str`; None when empty).
+    `item_name` is the readable name of the item the issue is about, else the issue's own text.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    issue_id: int
+    severity: str
+    source: str
+    issue_type: str
+    field: str | None
+    item_name: str | None
+    message: str
+    editable: bool
+    input_kind: str | None
+    current_value: Decimal | datetime | str | None
 
 
 class ParseResult(BaseModel):

@@ -21,8 +21,9 @@ the issues and their resolutions alone).
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any, NamedTuple
 
-from src.domain.edits import ITEM_FIELDS, RECEIPT_FIELDS, Edit
+from src.domain.edits import ISSUE_FIELDS, ITEM_FIELDS, RECEIPT_FIELDS, Edit
 from src.domain.enums import (
     EditTarget,
     IssueResolution,
@@ -43,6 +44,7 @@ __all__ = [
     "Edit",
     "Header",
     "Issue",
+    "IssueCorrection",
     "Item",
     "Parse",
     "ParseOutcome",
@@ -54,6 +56,7 @@ __all__ = [
 
 MONEY_TOLERANCE = Decimal("0.02")
 S = ReceiptStatus
+_AWAITING_REVIEW = frozenset({IssueResolution.OPEN, IssueResolution.SKIPPED})
 _SEVERITY_ORDER = {IssueSeverity.HIGH: 0, IssueSeverity.MEDIUM: 1, IssueSeverity.LOW: 2}
 # Statuses that may receive a parse (a first one, or a re-parse).
 _PARSEABLE = {S.PENDING, S.PARSING, S.PARSED, S.FAILED, S.NOT_RECEIPT}
@@ -124,6 +127,15 @@ class Issue:
         )
 
 
+class IssueCorrection(NamedTuple):
+    """Where a typed value for an issue goes: the edit target, its item (if any) and field."""
+
+    target: EditTarget
+    item_ref: str | None
+    field: str
+    input_kind: str
+
+
 @dataclass(kw_only=True)
 class Receipt:
     user_id: int
@@ -179,6 +191,44 @@ class Receipt:
         """The most severe issues, high first, in parse order within a severity."""
         return sorted(self.issues, key=lambda i: _SEVERITY_ORDER[i.severity])[:limit]
 
+    def reviewable_issues(self) -> list[Issue]:
+        """Issues of severity high or medium still waiting for the user, high first, in parse
+        order within each. A skipped issue waits for a later walk, so it stays in the list."""
+        waiting = [
+            i
+            for i in self.issues
+            if i.resolution in _AWAITING_REVIEW and i.severity is not IssueSeverity.LOW
+        ]
+        return sorted(waiting, key=lambda i: _SEVERITY_ORDER[i.severity])
+
+    def item_of(self, issue: Issue) -> Item | None:
+        """The item an `items.*` issue is about: the first whose printed name is the issue's."""
+        if issue.item_name is None or not (issue.field or "").startswith("items."):
+            return None
+        return next((i for i in self.items if i.printed_name == issue.item_name), None)
+
+    def issue_correction(self, issue: Issue) -> IssueCorrection | None:
+        """Which edit a typed value for this issue makes; None when it cannot be fixed by typing."""
+        mapped = ISSUE_FIELDS.get(issue.field or "")
+        if mapped is None:
+            return None
+        if mapped.target is EditTarget.RECEIPT:
+            return IssueCorrection(mapped.target, None, mapped.field, mapped.input_kind)
+        item = self.item_of(issue)
+        if item is None:
+            return None
+        return IssueCorrection(mapped.target, item.ref, mapped.field, mapped.input_kind)
+
+    def current_value(self, issue: Issue) -> Any:
+        """What the header or item holds now for the issue's field; None if not correctable."""
+        correction = self.issue_correction(issue)
+        if correction is None:
+            return None
+        if correction.target is EditTarget.RECEIPT:
+            return getattr(self.header, correction.field)
+        item = next(i for i in self.items if i.ref == correction.item_ref)
+        return getattr(item, correction.field)
+
     # --- edits and issues --------------------------------------------------------------
 
     def record_edit(self, edit: Edit) -> None:
@@ -204,6 +254,28 @@ class Receipt:
             raise UnknownIssue(issue_id)
         issue.resolution = resolution
         issue.resolved_at = at or datetime.now(UTC)
+
+    def correct_issue(self, issue_id: int, value: Any, at: datetime | None = None) -> None:
+        """Answer an open issue with the right value: record the edit, resolve it `corrected`."""
+        self._ensure_open()
+        issue = next((i for i in self.issues if i.id == issue_id), None)
+        if issue is None:
+            raise UnknownIssue(issue_id)
+        if issue.resolution not in _AWAITING_REVIEW:
+            raise InvalidIssueResolution(f"issue {issue_id} is already {issue.resolution}")
+        correction = self.issue_correction(issue)
+        if correction is None:
+            raise InvalidEdit(f"issue {issue_id} ({issue.field}) cannot be corrected by a value")
+        self.record_edit(
+            Edit(
+                target=correction.target,
+                item_ref=correction.item_ref,
+                field=correction.field,
+                value=value,
+                issue_id=issue_id,
+            )
+        )
+        self.resolve_issue(issue_id, IssueResolution.CORRECTED, at)
 
     # --- status transitions ------------------------------------------------------------
 

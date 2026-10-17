@@ -71,12 +71,12 @@ src/
     middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (only /start so far), each exposes register_xxx(dp)
-      callback/            # taps on the summary keyboard: receipt.py opens the ReceiptCard dialog
-      message/photo.py     # photo intake: save, reply with the keyboard, parse in the background; catch-all "send me a photo"
+      callback/            # taps on the card's plain buttons: receipt.py edits the current card in place or sends a fresh one
+      message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py (main, items, item, photo, delete_confirm)
-    keyboards/receipt.py   # inline keyboard under the parse reply, ReceiptCallback (prefix "receipt")
-    render.py              # receipt texts shared by the parse reply and the dialog
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, photo, delete_confirm, issue, issue_input, review_done)
+    keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
+    render.py              # receipt texts (currency sign, header) used by the card
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
   database/
@@ -91,8 +91,8 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, soft_delete, card, items, photo, photo_bytes
-    results.py             # CurrentUser, NewPhoto, ReceiptCard, ParseResult: the services' own pydantic types
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes
+    results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult: the services' own pydantic types
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
@@ -100,7 +100,7 @@ src/
     enums.py
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
     parse.py               # Parse, ParsedItem, ParsedIssue, ParseOutcome (value objects)
-    edits.py               # Edit and the editable fields
+    edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
     catalog.py             # Catalog aggregate: Store, Product
 alembic/                   # migrations (alembic.ini at the repo root)
 .env.template, .env        # settings template (committed) and local values (git-ignored)
@@ -108,7 +108,7 @@ tests/                     # domain/ database/ services/ bot/ + root conftest.py
 ```
 
 Not built yet (each arrives with its feature): `domain/matching.py` (a domain service) and
-the other dialogs (items, photo, issue review, history).
+the value entry of the issue review (`issue_input` is a placeholder) and the history dialog.
 
 ### Layers and dependencies
 
@@ -206,6 +206,22 @@ As in paper-work-bot, each dialog is a folder in `bot/handlers/dialog/<name>/`:
 Keys passed between dialogs through `start_data` live in one shared `TransferKeys`
 class. State groups live in `bot/states/`. Every text comes from `.ftl`, and there are
 no string literals in windows.
+
+The parse reply is the card: `_parse_and_reply` (photo handler) starts `ReceiptCardSG.main` with
+`dialog_manager.bg()` and `StartMode.RESET_STACK, ShowMode.SEND` after the parse (or its failure),
+and the `main` window's text covers every outcome. Its buttons are `CardKeyboard`, a custom
+`Keyboard` widget that renders plain `ReceiptCallback` buttons (no intent id, via
+`PlainKeyboardFactory`). `callback/receipt.py` handles them before the dialogs, so they work on any
+card, however old: a tap on the dialog's last message restarts the dialog with `ShowMode.EDIT`
+(in place), a tap on an older card with `ShowMode.SEND` and leaves that card's keyboard alone
+(`StoredPhotoMessageManager` skips aiogram-dialog's keyboard removal for those sends). **The card
+never calls `done()`**: it would strip the buttons. Every exit goes `switch_to(ReceiptCardSG.main)`,
+which is also where a deleted receipt ends. `✖ Close` (a plain card button) hides the buttons and keeps the text.
+
+The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
+`position`, `current_issue_id` and the counters, loaded once by `click_event.start_review`.
+`click_event.advance` moves on after any action that closes an issue; a skipped issue stays
+reviewable (domain `reviewable_issues`), so Skip does not lower the `Review (n)` count.
 
 A window that shows a stored receipt photo uses `DynamicMedia` with a `StoredPhoto` (by Telegram
 file id). `StoredPhotoMessageManager`, passed to `setup_dialogs`, uploads the bytes only when Telegram
@@ -369,6 +385,10 @@ through the n8n MCP server (`get_workflow_details`).
   Russian, but nothing from it is copied into files untranslated.
 - **Bump `PARSER_VERSION`** (n8n is at `2026-10-15.1`) whenever the prompt, schema, model
   or normalization changes. Store it on every `receipt_parses` row.
+- Which issue `field` is which editable field (`ISSUE_FIELDS` in `domain/edits.py`) is domain
+  knowledge, not bot knowledge: `Receipt.reviewable_issues`, `.issue_correction` and
+  `.correct_issue` use it, and the services expose the result as `IssueCard.editable` and
+  `.input_kind`. Product names are not in it (item-edit spec).
 - Timezone is `Europe/Madrid`. Default currency is `EUR`.
 - Money: round to 2 decimals for comparisons and use a 0.02 tolerance. Keep 4 decimals
   for unit prices.

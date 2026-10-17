@@ -6,21 +6,21 @@ photo" is included after them, so it never swallows a dialog's text input.
 """
 
 import logging
-from html import escape
-from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
 from aiogram.types import InlineKeyboardMarkup, Message, ReplyParameters
 from aiogram.utils.chat_action import ChatActionSender
+from aiogram_dialog import DialogManager, ShowMode, StartMode
+from aiogram_dialog.api.protocols import BaseDialogManager
 from fluentogram import TranslatorRunner
 
-from src.bot import render
-from src.bot.keyboards.receipt import receipt_keyboard
+from src.bot.handlers.dialog.common import TransferKeys
+from src.bot.states.receipt_card import ReceiptCardSG
 from src.bot.tasks import TaskRegistry
 from src.exception import DuplicatePhoto
 from src.services.container import Services
-from src.services.results import CurrentUser, NewPhoto, ParseResult
+from src.services.results import CurrentUser, NewPhoto
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ async def photo_intake(
     services: Services,
     tasks: TaskRegistry,
     i18n: TranslatorRunner,
+    dialog_manager: DialogManager,
 ) -> None:
     if message.photo:
         attachment = message.photo[-1]  # the largest size is last
@@ -77,17 +78,9 @@ async def photo_intake(
         return
 
     await _send(bot, message.chat.id, message.message_id, i18n.get("receipt-saved"))
+    bg = dialog_manager.bg()
     tasks.spawn(
-        _parse_and_reply(
-            bot,
-            message.chat.id,
-            message.message_id,
-            user.id,
-            card.receipt_id,
-            services,
-            i18n,
-            user.timezone,
-        ),
+        _parse_and_reply(bot, bg, message.chat.id, user.id, card.receipt_id, services),
         name=f"parse-receipt-{card.receipt_id}",
     )
 
@@ -98,32 +91,31 @@ async def not_a_photo(message: Message, i18n: TranslatorRunner) -> None:
 
 async def _parse_and_reply(
     bot: Bot,
+    bg: BaseDialogManager,
     chat_id: int,
-    reply_to: int,
     user_id: int,
     receipt_id: int,
     services: Services,
-    i18n: TranslatorRunner,
-    tz: str,
 ) -> None:
-    """Parse, then send exactly one reply. Nothing but cancellation leaves this function."""
-    item_count = 0
+    """Parse, then start the card: the parse reply is the dialog's `main` window. Nothing but
+    cancellation leaves this function."""
     try:
         # The sender's worker dies on a failed `sendChatAction` and the block still ends
         # normally, so the typing status never affects the parse or the reply.
         async with ChatActionSender.typing(bot=bot, chat_id=chat_id, interval=TYPING_INTERVAL):
-            result = await services.receipts.parse(user_id, receipt_id)
-        text = _render(result, i18n, ZoneInfo(tz))
-        # Only a parsed receipt offers its items; a duplicate keeps its own, but is inspected
-        # and deleted, not browsed.
-        item_count = result.card.item_count if result.outcome == "parsed" else 0
+            await services.receipts.parse(user_id, receipt_id)
     except Exception:
-        # The service has already marked the receipt failed; the user must not wait for nothing.
+        # The service has already marked the receipt failed; the card shows that.
         logger.exception("Parsing receipt %s failed", receipt_id)
-        text = i18n.get("receipt-failed")
-    await _send(
-        bot, chat_id, reply_to, text, receipt_keyboard(i18n, receipt_id, item_count=item_count)
-    )
+    try:
+        await bg.start(
+            ReceiptCardSG.main,
+            data={TransferKeys.RECEIPT_ID: receipt_id},
+            mode=StartMode.RESET_STACK,  # the previous card keeps its keyboard
+            show_mode=ShowMode.SEND,
+        )
+    except Exception:
+        logger.exception("Could not send the card of receipt %s", receipt_id)
 
 
 async def _send(
@@ -143,44 +135,6 @@ async def _send(
         )
     except TelegramAPIError:
         logger.exception("Could not send a reply to chat %s", chat_id)
-
-
-def _render(result: ParseResult, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
-    match result.outcome:
-        case "parsed":
-            return _summary(result, i18n, tz)
-        case "not_receipt":
-            return i18n.get("receipt-not-a-receipt")
-        case "duplicate":
-            original = result.duplicate_of or result.card
-            return i18n.get(
-                "receipt-duplicate",
-                store=render.store(original, i18n),
-                date=render.date(original, tz),
-                amount=render.amount(original, i18n),
-            )
-        case _:
-            return i18n.get("receipt-failed")
-
-
-def _summary(result: ParseResult, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
-    card = result.card
-    text = render.header(card, i18n, tz)
-    if not result.issues:
-        return text
-    lines = []
-    for issue in result.issues:
-        message = escape(issue.message)
-        if issue.item_name:
-            lines.append(
-                i18n.get("receipt-issue-line", item=escape(issue.item_name), message=message)
-            )
-        else:
-            lines.append(i18n.get("receipt-issue-line-plain", message=message))
-    if card.open_issue_count > len(result.issues):
-        lines.append(i18n.get("receipt-issues-more"))
-    header = i18n.get("receipt-issues", count=str(card.open_issue_count))
-    return "\n\n".join((text, "\n".join((header, *lines))))
 
 
 def register_photo(dp) -> None:
