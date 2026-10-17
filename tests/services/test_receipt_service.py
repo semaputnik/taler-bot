@@ -6,14 +6,18 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import text
 
-from src.domain.enums import IssueResolution
+from src.database.repositories.receipt import SqlAlchemyReceiptRepository
+from src.domain.enums import IssueResolution, IssueSeverity, IssueSource
 from src.domain.parse import Parse, ParsedIssue
 from src.domain.receipt import Receipt
 from src.exception import (
     DatabaseException,
     DuplicatePhoto,
+    InvalidEdit,
+    InvalidIssueResolution,
     InvalidReceiptTransition,
     ReceiptNotFound,
+    UnknownIssue,
 )
 from src.integration.storage import StorageError
 from src.services.receipt import ReceiptService, _apply_parse
@@ -410,3 +414,190 @@ async def test_another_users_photo_is_not_found(service, make_uow):
     for call in (service.photo(2, mine.receipt_id), service.photo_bytes(2, mine.receipt_id)):
         with pytest.raises(ReceiptNotFound):
             await call
+
+
+# --- issue review ----------------------------------------------------------------------
+
+
+def mixed_issues() -> tuple[ParsedIssue, ...]:
+    return (
+        ParsedIssue(severity=IssueSeverity.LOW, field="receipt.register", message="low note"),
+        ParsedIssue(
+            severity=IssueSeverity.MEDIUM,
+            field="items.name_raw",
+            item_name="LECHE",
+            message="unclear name",
+        ),
+        ParsedIssue(
+            source=IssueSource.WORKFLOW,
+            severity=IssueSeverity.HIGH,
+            issue_type="total_mismatch",
+            field="totals.total",
+            message="lines do not add up",
+        ),
+        ParsedIssue(
+            severity=IssueSeverity.MEDIUM,
+            field="items.line_total",
+            item_name="PAN",
+            message="line math is off",
+        ),
+        ParsedIssue(severity=IssueSeverity.MEDIUM, field="store.address", message="no address"),
+    )
+
+
+async def mixed_receipt(make_uow: MakeUow) -> Receipt:
+    return await parsed_receipt(make_uow, parse(MILK, BREAD, issues=mixed_issues()))
+
+
+async def test_review_lists_reviewable_issues_in_walk_order_with_what_can_be_done(
+    service, make_uow
+):
+    receipt = await mixed_receipt(make_uow)
+
+    cards = await service.review(1, receipt.id)
+
+    assert [c.message for c in cards] == [
+        "lines do not add up",
+        "unclear name",
+        "line math is off",
+        "no address",
+    ]
+    total, name, line, address = cards
+    assert (total.severity, total.source, total.issue_type) == (
+        "high",
+        "workflow",
+        "total_mismatch",
+    )
+    assert (total.editable, total.input_kind, total.current_value) == (
+        True,
+        "money",
+        Decimal("47.50"),
+    )
+    assert (name.editable, name.input_kind, name.current_value) == (False, None, None)
+    assert (name.item_name, name.field) == ("Leche", "items.name_raw")
+    assert (line.editable, line.input_kind, line.current_value) == (True, "money", Decimal("2.00"))
+    assert line.item_name == "Pan"
+    assert (address.editable, address.item_name) == (False, None)
+
+
+async def test_review_shows_the_current_value_with_edits_applied(service, make_uow):
+    receipt = await mixed_receipt(make_uow)
+    await service.edit_header(1, receipt.id, "total", "50.00")
+
+    [total, *_] = await service.review(1, receipt.id)
+
+    assert total.current_value == Decimal("50.00")
+
+
+async def test_review_leaves_out_resolved_issues(service, make_uow):
+    receipt = await mixed_receipt(make_uow)
+    [total, *_] = await service.review(1, receipt.id)
+    await service.resolve_issue(1, receipt.id, total.issue_id, "skipped")
+
+    assert total.issue_id not in [c.issue_id for c in await service.review(1, receipt.id)]
+
+
+async def test_review_of_a_receipt_without_issues_is_empty(service, make_uow):
+    receipt = await parsed_receipt(make_uow, parse(MILK))
+    assert await service.review(1, receipt.id) == []
+
+
+async def test_card_counts_the_reviewable_issues(service, make_uow):
+    receipt = await mixed_receipt(make_uow)
+
+    card = await service.card(1, receipt.id)
+
+    assert (card.review_count, card.open_issue_count) == (4, 5)
+
+
+async def test_correct_issue_stores_the_edit_and_the_resolution_and_returns_the_card(
+    service, make_uow
+):
+    receipt = await mixed_receipt(make_uow)
+    [total, *_] = await service.review(1, receipt.id)
+
+    card = await service.correct_issue(1, receipt.id, total.issue_id, Decimal("48.10"))
+
+    assert (card.total, card.review_count, card.open_issue_count) == (Decimal("48.10"), 3, 4)
+    stored = await load(make_uow, receipt.id)
+    assert stored.header.total == Decimal("48.10")
+    [edit] = stored.edits
+    assert (edit.field, edit.issue_id) == ("total", total.issue_id)
+    resolved = next(i for i in stored.issues if i.id == total.issue_id)
+    assert resolved.resolution is IssueResolution.CORRECTED
+    assert resolved.resolved_at is not None
+
+
+async def test_correct_issue_changes_the_item_the_issue_is_about(service, make_uow):
+    receipt = await mixed_receipt(make_uow)
+    line = (await service.review(1, receipt.id))[2]
+
+    await service.correct_issue(1, receipt.id, line.issue_id, "2.40")
+
+    stored = await load(make_uow, receipt.id)
+    assert [i.line_total for i in stored.items] == [Decimal("1.20"), Decimal("2.40")]
+    assert stored.edits[0].item_ref == "mercadona::pan#1"
+
+
+async def test_correct_issue_with_a_bad_value_changes_nothing(service, make_uow):
+    receipt = await mixed_receipt(make_uow)
+    [total, *_] = await service.review(1, receipt.id)
+
+    with pytest.raises(InvalidEdit):
+        await service.correct_issue(1, receipt.id, total.issue_id, "abc")
+
+    stored = await load(make_uow, receipt.id)
+    assert stored.edits == []
+    assert len(stored.reviewable_issues()) == 4
+
+
+async def test_correct_issue_refuses_a_field_that_cannot_be_typed(service, make_uow):
+    receipt = await mixed_receipt(make_uow)
+    name = (await service.review(1, receipt.id))[1]
+
+    with pytest.raises(InvalidEdit):
+        await service.correct_issue(1, receipt.id, name.issue_id, "Milk")
+
+
+async def test_correct_issue_refuses_unknown_and_resolved_issues(service, make_uow):
+    receipt = await mixed_receipt(make_uow)
+    [total, *_] = await service.review(1, receipt.id)
+    await service.resolve_issue(1, receipt.id, total.issue_id, "confirmed")
+
+    with pytest.raises(InvalidIssueResolution):
+        await service.correct_issue(1, receipt.id, total.issue_id, "1")
+    with pytest.raises(UnknownIssue):
+        await service.correct_issue(1, receipt.id, 987654, "1")
+
+
+async def test_a_failing_save_leaves_neither_the_edit_nor_the_resolution(
+    service, make_uow, monkeypatch
+):
+    receipt = await mixed_receipt(make_uow)
+    [total, *_] = await service.review(1, receipt.id)
+    original = SqlAlchemyReceiptRepository.save
+
+    async def save_then_fail(self, receipt):
+        await original(self, receipt)
+        raise DatabaseException("boom")
+
+    monkeypatch.setattr(SqlAlchemyReceiptRepository, "save", save_then_fail)
+    with pytest.raises(DatabaseException):
+        await service.correct_issue(1, receipt.id, total.issue_id, "48.10")
+    monkeypatch.undo()
+
+    stored = await load(make_uow, receipt.id)
+    assert stored.edits == []
+    assert stored.header.total == Decimal("47.50")
+    assert len(stored.reviewable_issues()) == 4
+
+
+async def test_review_and_correct_issue_of_another_users_receipt_are_not_found(service, make_uow):
+    receipt = await mixed_receipt(make_uow)
+    [total, *_] = await service.review(1, receipt.id)
+    await add_allowed_user(make_uow, 2)
+
+    with pytest.raises(ReceiptNotFound):
+        await service.review(2, receipt.id)
+    with pytest.raises(ReceiptNotFound):
+        await service.correct_issue(2, receipt.id, total.issue_id, "1")

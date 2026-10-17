@@ -91,8 +91,8 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, soft_delete, card, items, photo, photo_bytes
-    results.py             # CurrentUser, NewPhoto, ReceiptCard, ParseResult: the services' own pydantic types
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes
+    results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult: the services' own pydantic types
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
@@ -100,7 +100,7 @@ src/
     enums.py
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
     parse.py               # Parse, ParsedItem, ParsedIssue, ParseOutcome (value objects)
-    edits.py               # Edit and the editable fields
+    edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
     catalog.py             # Catalog aggregate: Store, Product
 alembic/                   # migrations (alembic.ini at the repo root)
 .env.template, .env        # settings template (committed) and local values (git-ignored)
@@ -369,6 +369,10 @@ through the n8n MCP server (`get_workflow_details`).
   Russian, but nothing from it is copied into files untranslated.
 - **Bump `PARSER_VERSION`** (n8n is at `2026-10-15.1`) whenever the prompt, schema, model
   or normalization changes. Store it on every `receipt_parses` row.
+- Which issue `field` is which editable field (`ISSUE_FIELDS` in `domain/edits.py`) is domain
+  knowledge, not bot knowledge: `Receipt.reviewable_issues`, `.issue_correction` and
+  `.correct_issue` use it, and the services expose the result as `IssueCard.editable` and
+  `.input_kind`. Product names are not in it (item-edit spec).
 - Timezone is `Europe/Madrid`. Default currency is `EUR`.
 - Money: round to 2 decimals for comparisons and use a 0.02 tolerance. Keep 4 decimals
   for unit prices.
