@@ -55,6 +55,7 @@ __all__ = [
 ]
 
 MONEY_TOLERANCE = Decimal("0.02")
+INTERRUPTED = "interrupted"
 S = ReceiptStatus
 _AWAITING_REVIEW = frozenset({IssueResolution.OPEN, IssueResolution.SKIPPED})
 _SEVERITY_ORDER = {IssueSeverity.HIGH: 0, IssueSeverity.MEDIUM: 1, IssueSeverity.LOW: 2}
@@ -172,11 +173,12 @@ class Receipt:
         if self.status not in _PARSEABLE:
             raise InvalidReceiptTransition(f"cannot parse a {self.status} receipt")
         previous = _used_keys(self.parse)
+        carried = _resolutions_of(self.issues)
         self.parse = parse
         self.header, self.items = self._with_edits(parse)
-        self.issues = [Issue.of(i) for i in parse.issues]
+        self.issues = [_carry(Issue.of(i), carried) for i in parse.issues]
         if parse.is_receipt:
-            self.issues += self._conflicts(parse)
+            self.issues += self._conflicts(parse)  # regenerated, never carried
             self.status = S.PARSED
             if same_key_as is not None and same_key_as != self.id:
                 self.mark_duplicate(same_key_as)
@@ -280,8 +282,12 @@ class Receipt:
     # --- status transitions ------------------------------------------------------------
 
     def mark_parsing(self) -> None:
-        """The photo is being read: a parse has started for a pending or failed receipt."""
-        self._transition({S.PENDING, S.FAILED}, S.PARSING)
+        """The photo is being read: a first parse or a re-parse has started.
+
+        Any receipt that can take a parse may be read again, except a duplicate (it would
+        compete with the original for the key) and one already being read.
+        """
+        self._transition({S.PENDING, S.FAILED, S.PARSED, S.NOT_RECEIPT}, S.PARSING)
 
     def mark_duplicate(self, of_receipt_id: int) -> None:
         """Another parsed receipt of the user has the same receipt key."""
@@ -291,8 +297,30 @@ class Receipt:
         self.duplicate_of_id = of_receipt_id
 
     def mark_failed(self, reason: str) -> None:
-        self._transition({S.PENDING, S.PARSING, S.FAILED}, S.FAILED)
+        """A read did not succeed; the reason is kept in `error_message`.
+
+        A receipt that was being read and already has a parse (a re-parse) goes back to what
+        that parse says it is: `parsed` or `not_receipt`, with parse, header, items, issues and
+        resolutions untouched. Without a parse it is `failed`. This is decided by data, not by
+        a remembered status, because the failure is recorded in a fresh Unit of Work.
+        """
+        self._transition({S.PENDING, S.PARSING, S.FAILED}, self._status_after_failed_read())
         self.error_message = reason
+
+    def recover_interrupted(self) -> None:
+        """The bot stopped while this receipt was being read: same as a failed read."""
+        if self.status is not S.PARSING:
+            raise InvalidReceiptTransition(f"a {self.status} receipt was not interrupted")
+        self.mark_failed(INTERRUPTED)
+
+    @property
+    def can_reparse(self) -> bool:
+        """Whether the photo can be read again: a settled reading (or failure), not deleted."""
+        return self.deleted_at is None and self.status in {S.PARSED, S.FAILED, S.NOT_RECEIPT}
+
+    @property
+    def parser_version(self) -> str | None:
+        return self.parse.parser_version if self.parse is not None else None
 
     def mark_not_receipt(self) -> None:
         self._transition({S.PENDING, S.PARSING, S.FAILED}, S.NOT_RECEIPT)
@@ -325,6 +353,11 @@ class Receipt:
         self.status = new
         if new is not S.FAILED:
             self.error_message = None
+
+    def _status_after_failed_read(self) -> ReceiptStatus:
+        if self.status is S.PARSING and self.parse is not None:
+            return S.PARSED if self.parse.is_receipt else S.NOT_RECEIPT
+        return S.FAILED
 
     def _clear_items(self) -> None:
         self.items = []
@@ -379,6 +412,30 @@ class Receipt:
                     )
                 )
         return found
+
+
+_IssueKey = tuple[IssueSource, str, str | None, str | None, str]
+
+
+def _issue_key(issue: Issue) -> _IssueKey:
+    return (issue.source, issue.issue_type, issue.field, issue.item_name, issue.message)
+
+
+def _resolutions_of(issues: list[Issue]) -> dict[_IssueKey, list[Issue]]:
+    """The previous issues by identity, in order, so each can be carried to one new issue."""
+    found: dict[_IssueKey, list[Issue]] = {}
+    for issue in issues:
+        found.setdefault(_issue_key(issue), []).append(issue)
+    return found
+
+
+def _carry(new: Issue, previous: dict[_IssueKey, list[Issue]]) -> Issue:
+    """Copy the user's resolution from the first unused equal previous issue, if any."""
+    candidates = previous.get(_issue_key(new))
+    if candidates:
+        old = candidates.pop(0)
+        new.resolution, new.resolved_at = old.resolution, old.resolved_at
+    return new
 
 
 def _used_keys(parse: Parse | None) -> frozenset[str]:
