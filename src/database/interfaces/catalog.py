@@ -9,8 +9,6 @@ class CatalogRepository(Protocol):
         ...
 
     async def save(self, catalog: Catalog) -> None:
-        """Insert the new stores and products and delete the ones marked for removal.
-
-        Nothing else is updated: hand edits of names and categories go through their own path.
-        """
+        """Insert the new stores and products, delete the ones marked for removal and update the
+        name and category of the changed products (hand edits). Nothing else is updated."""
         ...

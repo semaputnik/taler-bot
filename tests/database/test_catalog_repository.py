@@ -4,8 +4,10 @@ import pytest
 
 from src.domain.catalog import Catalog
 from src.domain.enums import Category
+from src.domain.receipt import Receipt
 from src.exception import CheckViolationError, ForeignKeyViolationError
-from tests.helpers import MakeUow, add_user, seed_purchase
+from tests.domain.builders import parse, photo, product
+from tests.helpers import MakeUow, add_receipt, add_user, seed_catalog, seed_purchase
 
 
 def stocked_catalog() -> Catalog:
@@ -56,6 +58,55 @@ async def test_save_inserts_only_what_is_new_and_leaves_the_rest_alone(make_uow:
         loaded = await uow.catalog.get(1)
     assert set(loaded.products) == {"mercadona::leche", "lidl::pan", "lidl::agua"}
     assert loaded.products["lidl::pan"].name == "Bread"
+
+
+async def test_save_persists_a_renamed_and_a_recategorized_product_and_nothing_else(
+    make_uow: MakeUow,
+) -> None:
+    await add_user(make_uow)
+    async with make_uow() as uow:
+        await uow.catalog.save(stocked_catalog())
+        await uow.commit()
+
+    async with make_uow() as uow:
+        catalog = await uow.catalog.get(1)
+        catalog.rename_product("mercadona::leche", "Oat milk")
+        catalog.set_category("mercadona::leche", Category.DRINKS)
+        await uow.catalog.save(catalog)
+        assert catalog.changed_products == ()
+        await uow.commit()
+
+    async with make_uow() as uow:
+        loaded = await uow.catalog.get(1)
+    milk = loaded.products["mercadona::leche"]
+    assert (milk.name, milk.category) == ("Oat milk", Category.DRINKS)
+    assert (milk.name_raw, milk.unit, milk.store_key) == ("LECHE ENTERA", "l", "mercadona")
+    bread = loaded.products["lidl::pan"]
+    assert (bread.name, bread.category) == ("Bread", Category.BAKERY)
+
+
+async def test_a_reloaded_receipt_shows_the_new_name_and_category_on_its_items(
+    make_uow: MakeUow,
+) -> None:
+    await add_user(make_uow)
+    bought = parse(product("lidl::pan"), store_key="lidl", store_name="Lidl")
+    await seed_catalog(make_uow, bought)
+    receipt = Receipt.start(1, photo())
+    receipt.apply_parse(bought)
+    receipt = await add_receipt(make_uow, receipt)
+    async with make_uow() as uow:
+        catalog = await uow.catalog.get(1)
+        catalog.rename_product("lidl::pan", "Sourdough")
+        catalog.set_category("lidl::pan", Category.BAKERY)
+        await uow.catalog.save(catalog)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        loaded = await uow.receipts.get(receipt.id)
+    assert loaded is not None
+    [item] = loaded.items
+    assert (item.readable_name, item.category) == ("Sourdough", Category.BAKERY)
+    assert item.printed_name == "PAN"
 
 
 async def test_save_deletes_products_marked_for_removal(make_uow: MakeUow) -> None:
