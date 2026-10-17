@@ -101,11 +101,43 @@ category, tags, and optionally the receipt it came from.
    when the receipt has an expense; a failed, duplicate or not-a-receipt card shows neither.
    `/receipts` lists the expenses of the month plus the receipts that have no expense (with
    their status icon), so a failed or duplicate receipt stays reachable for deleting.
-8. **Manual entry.** A message that is only a number (`12.50`, `12,50`, `7`) starts the entry
-   with that amount: payee (the five most recent as buttons, or typed; a typed name matching an
-   existing payee reuses it) → payment source (cards, `Cash`, `➕ New card`) → category → date
-   (`Today`, `Yesterday`, `dd.mm`) → tags (comma-separated or `Skip`) → the expense card. Every
-   step has `◀ Back`. Only expenses: amounts are positive.
+8. **Manual entry.** A message that is only a number (`12.50`, `12,50`, `7`; up to 8 digits and
+   2 decimals, above zero) starts the entry with that amount: payee (the five most recent as
+   buttons, or typed; a typed name matching an existing payee reuses it) → payment source
+   (cards, `Cash`, `➕ New card`) → category → date (`Today`, `Yesterday`, `dd.mm`) → tags
+   (comma-separated or `Skip`) → the expense. Only expenses: amounts are positive. **Done**
+   up to the last step: the entry ends by sending the expense as a plain message (no buttons)
+   until the expense card (item 9) replaces it. One message is edited in place; nothing is
+   saved before the last step. Each `ExpenseEntry` step shows the amount on top and asks:
+
+   | state | question and buttons |
+   |---|---|
+   | `payee` | "Who did you pay? Pick a recent payee or type a name." The five recent payees, `✏️ Type a name` |
+   | `payee_name` | "Type the name of the payee." Text input; a name without letters or digits is refused. `◀ Back` |
+   | `source` | "What did you pay with?" `Cash`, the cards by name, `➕ New card`, `◀ Back`; `✓` marks the current answer |
+   | `new_card` | "Type a name for the new card, like Revolut." A name another source has (ignoring case), `Cash` included, is refused. `◀ Back` |
+   | `category` | "Pick the category of this expense." The twelve, two per row. `◀ Back` |
+   | `date` | "When was it?" `Today` `Yesterday` / `✏️ Other date` / `◀ Back` |
+   | `date_text` | "Type the date as dd.mm (this year) or dd.mm.yyyy." In the user's time zone; a future or malformed date is refused with a hint. `◀ Back` |
+   | `tags` | "Add tags separated by commas, like kids, holiday, or skip." `⏭ Skip` / `◀ Back`; more than 10 tags or a tag over 32 characters is refused |
+
+   `◀ Back` goes one step back (`payee` is the first step and has none; `category` goes back
+   to `source`, `tags` to `date`) and keeps the answers given. A photo or a command during the
+   entry is handled as usual; the entry message stays, its buttons stop working. A number sent
+   in a step that reads text is that step's input; in any other window it starts a new entry.
+   The result message:
+
+   ```
+   💸 <b>Mercadona</b>
+
+   17.10.2026
+   Amount: <b>12.50 €</b>
+   Paid with: Cash
+   Category: Groceries
+   Tags: #holiday #kids
+
+   #mercadona
+   ```
 9. **Expense card.** One card for every expense. With a receipt it is the receipt card plus
    `Category` and `Tags`. Without one: amount, payee, source, category, date, tags; buttons
    `✏️ Amount` `🏪 Payee` / `💳 Source` `🏷 Category` / `📅 Date` `#️⃣ Tags` / `🗑 Delete` /
