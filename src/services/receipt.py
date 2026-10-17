@@ -13,6 +13,7 @@ import asyncio
 import logging
 import weakref
 from dataclasses import replace
+from datetime import datetime
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -34,6 +35,7 @@ from src.exception import (
 from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
 from src.services.results import (
+    HistoryPage,
     IssueCard,
     IssueLine,
     ItemRow,
@@ -45,6 +47,7 @@ from src.services.results import (
 
 logger = logging.getLogger(__name__)
 
+PAGE_SIZE = 8  # rows of the history per page
 _NAME_FIELDS = frozenset({"items.name_raw", "items.name_normalized"})
 _EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
@@ -255,6 +258,41 @@ class ReceiptService:
             if original is None:
                 return card
             return card.model_copy(update={"duplicate_of": await _card(uow, original)})
+
+    async def history(
+        self, user_id: int, year: int, month: int, store_id: int | None = None, page: int = 0
+    ) -> HistoryPage:
+        """One page of the user's receipts of a month, in the user's time zone, newest first.
+
+        A page past the end is the last page. The current month (and later ones) have no later
+        month to go to, whatever receipts are dated ahead. A store that is not the user's
+        matches nothing.
+        """
+        async with self._uow_factory() as uow:
+            user = await uow.users.get(user_id)
+            if user is None:
+                raise UserNotFound(user_id)
+            timezone = user.timezone
+
+            async def fetch(number: int) -> HistoryPage:
+                return await uow.receipts.history(
+                    user_id,
+                    year,
+                    month,
+                    timezone,
+                    store_id=store_id,
+                    offset=number * PAGE_SIZE,
+                    limit=PAGE_SIZE,
+                )
+
+            number = max(page, 0)
+            found = await fetch(number)
+            if not found.rows and found.total_rows:
+                found = await fetch((found.total_rows - 1) // PAGE_SIZE)
+        now = datetime.now(ZoneInfo(timezone))
+        if (year, month) >= (now.year, now.month):
+            found = found.model_copy(update={"has_later": False})
+        return found
 
     async def items(self, user_id: int, receipt_id: int) -> list[ItemRow]:
         """The receipt's items in parse order, edits applied. A deleted receipt still answers."""

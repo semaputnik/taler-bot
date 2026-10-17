@@ -83,6 +83,7 @@ src/
     engine.py              # create_engine / create_sessionmaker; install_error_translation
     errors.py              # SQLSTATE → app exception mapping
     models/                # SQLAlchemy ORM; never leaves database/
+    read_models.py         # HistoryPage, HistoryRow, …: screen-shaped query results (re-exported by services)
     dto/                   # UserDTO / NewUserDTO (the user repository's plain-data types)
     interfaces/            # Protocols for the UoW and the three repositories (typing)
     repositories/          # one per aggregate: ReceiptRepository, CatalogRepository, UserRepository
@@ -268,6 +269,15 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   repositories or services**; the DB constraints are the second line of defence.
 - Product name and category edits go to `store_products`, never to `receipt_edits`.
   A parse never overwrites `store_products` or `stores.name`.
+- `ReceiptRepository.history(user_id, year, month, timezone, store_id, offset, limit)` is the
+  month read model (`HistoryPage`, `HistoryRow`, `CurrencyTotal`, `StoreOption` in
+  `database/read_models.py`, re-exported by `services/results.py`): four SELECTs whatever the
+  month's size. A receipt belongs to the month of `coalesce(purchased_at, photo.received_at)`
+  in the user's time zone (purchase date first, the day the photo arrived as the fallback, so
+  a failed receipt is still findable). Deleted receipts are excluded everywhere; the store
+  filter narrows rows, counts and totals but not `stores`; `parsed_count` and `totals` count
+  parsed receipts only. `ReceiptService.history` pages by `PAGE_SIZE = 8`, clamps a page past
+  the end and clears `has_later` for the current month.
 - Deleting a receipt is soft (`deleted_at`). Every list, stats query and uniqueness check
   must filter `deleted_at IS NULL`.
 - Money is `numeric(12,2)` and unit prices/quantities are `numeric(12,4)`, both `Decimal`
