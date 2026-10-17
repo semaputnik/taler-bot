@@ -4,7 +4,8 @@ Later tickets add their seeding helpers here, so tests do not repeat setup code.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -14,6 +15,8 @@ from src.domain.enums import ReceiptStatus
 from src.domain.expense import Expense
 from src.domain.parse import Parse
 from src.domain.receipt import Receipt
+from src.services.expense import ExpenseService
+from src.services.results import ExpenseCard, ExpenseDraft
 from tests.domain.builders import parse, photo, product
 
 NOW = datetime(2026, 10, 14, 18, 32, tzinfo=UTC)
@@ -130,3 +133,29 @@ async def seed_purchase(make_uow: MakeUow, user_id: int = 1) -> tuple[int, int]:
     receipt.apply_parse(bought)
     await add_receipt(make_uow, receipt)
     return stores["lidl"], products["lidl::pan"]
+
+
+async def add_manual_expense(
+    make_uow: MakeUow,
+    user_id: int = 1,
+    *,
+    amount: str = "10.00",
+    spent_at: date | None = None,
+    category: str = "groceries",
+    payee_name: str | None = "Mercadona",
+    new_card_name: str | None = None,
+    tags: tuple[str, ...] = (),
+) -> ExpenseCard:
+    """An expense typed by hand, through the service; paid in cash unless a new card is named."""
+    return await ExpenseService(make_uow).add_manual(
+        user_id,
+        ExpenseDraft(
+            amount=Decimal(amount),
+            spent_at=spent_at or NOW.date(),
+            category=category,
+            payee_name=payee_name,
+            cash=new_card_name is None,
+            new_card_name=new_card_name,
+            tags=list(tags),
+        ),
+    )

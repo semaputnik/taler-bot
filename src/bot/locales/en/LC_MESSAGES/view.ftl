@@ -1,4 +1,7 @@
-start-greeting = Hello, { $first_name }! I read photos of your purchase receipts. Send me one to get started.
+start-greeting =
+    Hello, { $first_name }! I read photos of your purchase receipts. Send me one to get started.
+    { "" }
+    Send an amount like 12.50 to record an expense.
 
 photo-send-me-one = Send me a photo of a receipt.
 photo-too-large = This file is too large (the limit is 20 MB). Send a smaller photo.
@@ -29,6 +32,21 @@ expense-amount = Amount: <b>{ $amount }</b>
 expense-source = Paid with: { $source }
 expense-tags = Tags: { $tags }
 expense-payee-tag = #{ $tag }
+
+entry-amount = 💸 <b>{ $amount }</b>
+entry-payee = Who did you pay? Pick a recent payee or type a name.
+entry-payee-name = Type the name of the payee.
+entry-payee-name-error = ❌ The name needs letters or digits. Type it again.
+entry-source = What did you pay with?
+entry-new-card = Type a name for the new card, like Revolut.
+entry-new-card-error = ❌ You already have a source with this name, or the name is empty. Type another.
+entry-category = Pick the category of this expense.
+entry-date = When was it?
+entry-date-text = Type the date as dd.mm (this year) or dd.mm.yyyy.
+entry-date-text-error = ❌ Not accepted. Send a date like 05.10 or 05.10.2026, not in the future.
+entry-tags = Add tags separated by commas, like kids, holiday, or skip.
+entry-tags-error = ❌ Not accepted. Use up to 10 tags of up to 32 characters each.
+entry-pick-gone = That choice is no longer available. Pick again.
 receipt-items = Items: { $items }
 receipt-store-tag = #{ $tag }
 receipt-unknown-store = Unknown store
