@@ -9,8 +9,10 @@ data lives in directories under one `DATA_DIR`.
 ## Prerequisites
 
 - Docker with the compose plugin; the deploying user is in the `docker` group.
-- The GHCR package `taler-bot` is public (set once in GitHub: Packages, taler-bot, Package
-  settings, Change visibility), so the server needs no registry login.
+- The GHCR package `taler-bot` is public, so the server needs no registry login. A package
+  created by CI is private at first: after the first successful `publish` job, set it once in
+  GitHub (profile, Packages, `taler-bot`, Package settings, Danger Zone, Change visibility,
+  Public) and check from a machine without a GHCR login: `docker pull ghcr.io/semaputnik/taler-bot:latest`.
 
 ## The two bot tokens
 

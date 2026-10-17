@@ -115,6 +115,7 @@ Dockerfile, .dockerignore  # the production image (see Deploy)
 docker-compose.prod.yml    # production stack; docker-compose.yml is dev-only
 .env.prod.template         # the server's .env
 docs/deploy.md             # runbook: install, deploy, rollback, backup, tokens
+.github/workflows/ci.yml   # CI: `test` (ruff, pytest on postgres:18, alembic check) and `publish` (image to GHCR on a green main)
 .env.template, .env        # settings template (committed) and local values (git-ignored)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```

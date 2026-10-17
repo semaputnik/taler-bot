@@ -1,5 +1,7 @@
 # taler-bot
 
+[![CI](https://github.com/semaputnik/taler-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/semaputnik/taler-bot/actions/workflows/ci.yml)
+
 Telegram bot for household receipts: send a photo, get the items read, stored and summarised.
 
 Development: see [CLAUDE.md](CLAUDE.md) (stack, commands, architecture).
