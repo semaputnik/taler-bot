@@ -562,6 +562,7 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         error_message=receipt.error_message,
         expense_id=expense.id if expense is not None else None,
         expense_category=str(expense.category) if expense is not None else None,
+        tags=list(expense.tags) if expense is not None else [],
         payment_source_name=source.name if source is not None else None,
         item_count=len(receipt.items),
         open_issue_count=sum(1 for i in receipt.issues if i.resolution is IssueResolution.OPEN),

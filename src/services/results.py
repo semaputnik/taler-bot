@@ -98,6 +98,7 @@ class ReceiptCard(BaseModel):
     open_issue_count: int
     expense_id: int | None  # the receipt's expense; None while it is not a purchase
     expense_category: str | None  # an `ExpenseCategory` value
+    tags: list[str] = []  # the expense's tags, sorted; empty while there is no expense
     payment_source_name: str | None  # the expense's card or cash, by its name
     review_count: int  # open issues of severity high or medium: what the review walk visits
     can_reparse: bool  # the photo can be read again: parsed, failed or not_receipt, not deleted
