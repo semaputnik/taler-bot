@@ -8,6 +8,7 @@ class DialogDataKeys:
     CONFIRMED = "confirmed"
     CORRECTED = "corrected"
     SKIPPED = "skipped"
+    INPUT_ERROR = "input_error"  # the last typed value was refused; cleared on entry and on Back
 
 
 class PreviewDataKeys:

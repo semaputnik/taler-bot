@@ -11,9 +11,9 @@ from zoneinfo import ZoneInfo
 
 DATETIME_FORMAT = "%d.%m.%Y %H:%M"
 
-_NUMBER = re.compile(r"[+-]?(\d{1,8}([.,]\d+)?|[.,]\d+)")
-_LAST4 = re.compile(r"\d{4}")
-_CURRENCY = re.compile(r"[A-Za-z]{3}")
+_NUMBER = re.compile(r"[+-]?(\d{1,8}([.,]\d+)?|[.,]\d+)", re.ASCII)
+_LAST4 = re.compile(r"\d{4}", re.ASCII)
+_CURRENCY = re.compile(r"[A-Za-z]{3}", re.ASCII)
 
 
 class InvalidValue(ValueError):

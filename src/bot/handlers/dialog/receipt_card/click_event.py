@@ -1,11 +1,16 @@
-from aiogram.types import CallbackQuery
+from zoneinfo import ZoneInfo
+
+from aiogram.types import CallbackQuery, Message
 from aiogram_dialog import DialogManager
+from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import Button, Select
 from fluentogram import TranslatorRunner
 
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys
+from src.bot.handlers.dialog.receipt_card.values import InvalidValue, parse_value
 from src.bot.states.receipt_card import ReceiptCardSG
 from src.exception import (
+    InvalidEdit,
     InvalidIssueResolution,
     InvalidReceiptTransition,
     ReceiptNotFound,
@@ -132,11 +137,47 @@ async def _resolve(
 
 
 async def enter_value(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
     await manager.switch_to(ReceiptCardSG.issue_input)
 
 
 async def back_to_issue(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
     await manager.switch_to(ReceiptCardSG.issue)
+
+
+async def on_value(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    """The user typed (or sent) something in the entry window. A text that parses is given to
+    `correct_issue`; anything else keeps the window and the open issue, with the error line."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    data = manager.dialog_data
+    cards = await services.receipts.review(user.id, data[DialogDataKeys.RECEIPT_ID])
+    current = next((c for c in cards if c.issue_id == data[DialogDataKeys.CURRENT_ISSUE_ID]), None)
+    if current is None or not current.editable:
+        await advance(manager)  # resolved elsewhere meanwhile
+        return
+    try:
+        if message.text is None:
+            raise InvalidValue("not a text")
+        value = parse_value(current.input_kind, message.text, ZoneInfo(user.timezone))
+        await services.receipts.correct_issue(
+            user.id, data[DialogDataKeys.RECEIPT_ID], current.issue_id, value
+        )
+    except InvalidValue, InvalidEdit:
+        data[DialogDataKeys.INPUT_ERROR] = True
+        return
+    except ReceiptNotFound, InvalidReceiptTransition:
+        await message.answer(i18n.get("card-deleted-alert"))
+        await manager.done()
+        return
+    except UnknownIssue, InvalidIssueResolution:
+        pass  # resolved from another device meanwhile: nothing to record, just move on
+    else:
+        data[DialogDataKeys.CORRECTED] += 1
+    data.pop(DialogDataKeys.INPUT_ERROR, None)
+    await advance(manager)
 
 
 async def show_photo(query: CallbackQuery, button: Button, manager: DialogManager) -> None:

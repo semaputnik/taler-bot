@@ -1,5 +1,6 @@
-from aiogram.enums import ParseMode
+from aiogram.enums import ContentType, ParseMode
 from aiogram_dialog import Dialog, DialogManager, Window
+from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import Button, Row, ScrollingGroup, Select
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Const, Format
@@ -10,6 +11,7 @@ from src.bot.handlers.dialog.receipt_card import click_event
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewDataKeys
 from src.bot.handlers.dialog.receipt_card.getters import (
     issue_getter,
+    issue_input_getter,
     item_getter,
     items_getter,
     main_getter,
@@ -118,9 +120,10 @@ def create_receipt_card_dialog() -> Dialog:
             parse_mode=ParseMode.HTML,
         ),
         Window(
-            # Placeholder: the value entry arrives with the next ticket.
-            I18nText("issue-input-prompt"),
+            Format(f"{{{PreviewDataKeys.TEXT}}}"),
+            MessageInput(click_event.on_value, content_types=ContentType.ANY),
             Button(I18nText("button-back"), id="back", on_click=click_event.back_to_issue),
+            getter=issue_input_getter,
             state=ReceiptCardSG.issue_input,
             parse_mode=ParseMode.HTML,
         ),

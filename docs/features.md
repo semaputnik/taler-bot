@@ -94,7 +94,7 @@ is open is still accepted.
 | `items` | paginated item list (`ScrollingGroup`, 8 per page); a tap opens `item` |
 | `item` | all parsed fields, read-only; `[✏️ Name] [🏷 Category] [🔢 Qty/price]` arrive with item edit |
 | `issue` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip] [✖ Close]`; `✏️` only for an editable issue. `Correct` and `Skip` move on to the next issue |
-| `issue_input` | the typed value for the issue (placeholder with `◀ Back` until the value-entry ticket) |
+| `issue_input` | "Enter the total (a number with a point, like 12.50)" and a text input; `◀ Back` returns to `issue`. The text is read by the issue's input kind (date and time `dd.mm.yyyy hh:mm` in the user's time zone, number with a point or comma, four digits, 3-letter currency, free text). A wrong value or a non-text message keeps the window with an error line and the issue open; a good one is saved as an edit, the issue is marked corrected and the walk moves on |
 | `review_done` | the tally ("3 reviewed: 1 corrected, 1 confirmed, 1 skipped") and `◀ Back` to `main` |
 | `photo` | the stored photo by Telegram file id, uploaded from disk if Telegram refuses the id |
 | `delete_confirm` | confirms the delete (soft delete; the photo moves to the trash). Refused while the receipt is being read |

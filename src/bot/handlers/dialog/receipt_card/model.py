@@ -70,3 +70,12 @@ class TallyPreview(BaseModel):
 
     def to_data(self) -> dict:
         return {PreviewDataKeys.TEXT: self.text}
+
+
+class InputPreview(BaseModel):
+    """What the `issue_input` window shows: the prompt, with the error line after a refusal."""
+
+    text: str
+
+    def to_data(self) -> dict:
+        return {PreviewDataKeys.TEXT: self.text}

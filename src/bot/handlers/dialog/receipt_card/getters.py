@@ -11,6 +11,7 @@ from src.bot.handlers.dialog.media import StoredPhoto
 from src.bot.handlers.dialog.receipt_card.click_event import settle
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewDataKeys
 from src.bot.handlers.dialog.receipt_card.model import (
+    InputPreview,
     IssuePreview,
     ItemChoice,
     ItemPreview,
@@ -111,6 +112,34 @@ async def issue_getter(
         has_issue=True,
         can_enter_value=current.editable,
     ).to_data()
+
+
+async def issue_input_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The prompt for the issue on screen, plus the error line after a refused value."""
+    data = dialog_manager.dialog_data
+    cards = await services.receipts.review(user.id, data[DialogDataKeys.RECEIPT_ID])
+    current = next(
+        (c for c in cards if c.issue_id == data.get(DialogDataKeys.CURRENT_ISSUE_ID)), None
+    )
+    if current is None or not current.editable:
+        return InputPreview(text=i18n.get("issue-input-gone")).to_data()
+    hint = i18n.get(f"input-hint-{current.input_kind}")
+    lines = [i18n.get("issue-input-prompt", field=_field_label(current, i18n), hint=hint)]
+    if data.get(DialogDataKeys.INPUT_ERROR):
+        lines += ["", i18n.get("issue-input-error", hint=hint)]
+    return InputPreview(text="\n".join(lines)).to_data()
+
+
+def _field_label(issue: IssueCard, i18n: TranslatorRunner) -> str:
+    """`totals.total` -> `field-total`, `payment.card_last4` -> `field-card-last4`."""
+    name = (issue.field or "").rsplit(".", 1)[-1].replace("_", "-")
+    return i18n.get(f"field-{name}")
 
 
 async def review_done_getter(dialog_manager: DialogManager, i18n: TranslatorRunner, **_) -> dict:
