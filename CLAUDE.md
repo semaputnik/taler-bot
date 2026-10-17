@@ -89,8 +89,9 @@ src/
     mapping/               # ORM rows ↔ domain aggregates (the only place both are known)
     uow/                   # SqlAlchemyUnitOfWork
   services/                # application services: one class per entity, action methods
-    container.py           # Services (users, receipts): built once by App
+    container.py           # Services (users, receipts, catalog): built once by App
     user.py                # UserService.ensure, .allow
+    catalog.py             # CatalogService: rename_product, set_category (hand edits of products)
     receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes
     results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult: the services' own pydantic types
   integration/
@@ -101,7 +102,7 @@ src/
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
     parse.py               # Parse, ParsedItem, ParsedIssue, ParseOutcome (value objects)
     edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
-    catalog.py             # Catalog aggregate: Store, Product
+    catalog.py             # Catalog aggregate: Store, Product; rename_product, set_category
 alembic/                   # migrations (alembic.ini at the repo root)
 .env.template, .env        # settings template (committed) and local values (git-ignored)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
@@ -150,7 +151,7 @@ the value entry of the issue review (`issue_input` is a placeholder) and the his
   - A write that sets or replaces the parse also applies the `ParseOutcome` to the catalog
     in the same transaction: new stores and products first (the receipt's store and items
     refer to them), the receipt, then the released products this receipt created.
-  - Results are the service's own pydantic types (e.g. `CurrentUser`, `ReceiptCard`),
+  - Results are the service's own pydantic types (e.g. `CurrentUser`, `ReceiptCard`, `ProductCard`),
     so the bot never depends on `database` or `domain` internals.
 - **bot**:
   - Handlers and getters only call services and render the results through i18n. `bot`
