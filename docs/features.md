@@ -51,21 +51,30 @@ failures, the same photo sent twice and the same receipt photographed twice.
    384.20 € · 12 receipts · ▲ 8% vs September (355.10 €)
 
    Categories
-   • Produce 146.00 € · 38% · ▲ 12%
-   • Dairy 73.00 € · 19% · ▼ 5%
-   • Not itemised 3.20 € · 1%
+   • Groceries 300.00 € · 78% · ▲ 9%
+   • Rent 80.00 € · 21% · new
+   • Restaurants 4.20 € · 1%
 
-   Stores
+   Groceries by product
+   • Produce 146.00 € · 49% · ▲ 12%
+   • Dairy 73.00 € · 24% · ▼ 5%
+   • Not itemised 81.00 € · 27%
+
+   Payees
    • Mercadona 210.00 € · 55% · ▲ 3%
-   • Consum 98.00 € · 26% · new
+   • Landlord 80.00 € · 21% · new
+   • Consum 90.00 € · 23% · new
 
-   Cards
+   Payment sources
    • VISA •0848 300.00 € · ▲ 10%
-   • cash 84.20 €
+   • Cash 84.20 €
    ```
+   Since stage 3 the sections are: expense categories over all expenses, `Groceries by
+   product` (hidden when no receipt has items), payees (the top five) and payment sources
+   (cards and cash by name).
    - A week reads `📊 Week 42 · 13.10–19.10.2026` (ISO week number, Monday to Sunday).
-   - Categories come from the item lines, as a bulleted list with the share in percent; the part no item covers is `Not itemised`. Stores (the top five) and
-     cards come from the receipt totals. A line shows `▲ 12%`, `▼ 5%` or `new`; nothing is
+   - Stage 2 read categories from the item lines, as a bulleted list with the share in percent; the part no item covers is `Not itemised`. Stores (the top five) and
+     cards came from the receipt totals. A line shows `▲ 12%`, `▼ 5%` or `new`; nothing is
      compared when the previous period has no receipts.
    - One block per currency, headed by the currency when there is more than one. An empty
      period shows its title and "No purchases in this period."
@@ -87,7 +96,11 @@ category, tags, and optionally the receipt it came from.
    other) and tags. Every existing receipt becomes an expense (`groceries`, payee = its store,
    source by its card ending or cash, date = purchase date; a deleted receipt gives a deleted
    expense). `/stats` reports by expense category first, then "Groceries by product", payees and
-   payment sources.
+   payment sources. **Done.** The receipt card shows `Category: Groceries` after the payment
+   line and a `🏷 Category` button (the twelve categories, two per row, `✓` on the current one)
+   when the receipt has an expense; a failed, duplicate or not-a-receipt card shows neither.
+   `/receipts` lists the expenses of the month plus the receipts that have no expense (with
+   their status icon), so a failed or duplicate receipt stays reachable for deleting.
 8. **Manual entry.** A message that is only a number (`12.50`, `12,50`, `7`) starts the entry
    with that amount: payee (the five most recent as buttons, or typed; a typed name matching an
    existing payee reuses it) → payment source (cards, `Cash`, `➕ New card`) → category → date

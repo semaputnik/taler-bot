@@ -75,7 +75,7 @@ src/
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       parse_task.py        # read_and_show_card: the background read (typing, parse, fresh card) shared by photo intake and the card's Re-parse
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, item_input, item_category, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, item_input, item_category, category, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
     keyboards/history.py   # HistoryCallback (prefix "history": year, month, store_id, page, action)
     keyboards/stats.py     # StatsCallback (prefix "stats": kind week|month, the anchor date as year/month/day, action)
@@ -345,15 +345,20 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   duplicate, pending and parsing receipts get none),
   a cash source per user with a card-less receipt and a card per distinct `(user, last4)`
   (most frequent brand). It is tested on a seeded database in `tests/test_expense_migration.py`.
-- `ExpenseRepository.history(user_id, year, month, payee_id, offset, limit)` is the month read
+- `ExpenseRepository.history(user_id, year, month, timezone, payee_id, offset, limit)` is the month read
   model (`HistoryPage`, `HistoryRow`, `CurrencyTotal`, `PayeeOption` in
   `database/read_models.py`, re-exported by `services/results.py`): four SELECTs whatever the
-  month's size. A row is an expense, in the month of its `spent_at` (already the user's local
-  day, fixed when the expense was written). Rows carry `has_receipt`, `receipt_id` and the
-  receipt's `status` (all None/false for an expense without a receipt). Only parsed receipts
-  have expenses, so a failed, pending, duplicate or not-a-receipt receipt has no row. Deleted
-  expenses are excluded everywhere; the payee filter narrows rows, counts and totals but not
-  `payees`. `ExpenseService.history` pages by `PAGE_SIZE = 8`, clamps a page past the end and
+  month's size. The rows are one union: the live expenses, each in the month of its
+  `spent_at` (already the user's local day, fixed when the expense was written), and the live
+  receipts that have no live expense (failed, not_receipt, duplicate, pending, parsing), each
+  in the month of `coalesce(purchased_at, received_at)` in `timezone`, as rows with
+  `expense_id`, `amount`, `currency` and `category` None. Rows carry `has_receipt`,
+  `receipt_id` and the receipt's `status` (None/false for an expense without a receipt), so the
+  history keeps its status icons and the user can reach and delete junk. Expenses come before
+  receipts on the same day. `totals` and `expense_count` (the summary's count) are over the
+  expenses only; `total_rows` counts every row. Deleted expenses and receipts are excluded
+  everywhere; the payee filter narrows rows, counts and totals but not `payees` (the payees
+  with a row in the month). `ExpenseService.history` pages by `PAGE_SIZE = 8`, clamps a page past the end and
   clears `has_later` for the current month.
 - `ExpenseRepository.spending(user_id, start, end)` is the stats read model (`SpendingPeriod`,
   `CurrencyBlock`, `Amount`): five SELECTs whatever the number of expenses. `[start, end)` are
@@ -367,9 +372,9 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   `ExpenseService.spending(user_id, kind, anchor)` loads the period and the previous one
   (`services/periods.py`) in one Unit of Work and returns a `SpendingReport` of
   `ComparedBlock`/`Compared` lines with whole-number shares and changes (`None` when the
-  previous value is missing or zero), five payees, the user's currency first. Until the stats
-  screen is redone the bot renders `products` (with the `not_itemised` line) under
-  "Categories".
+  previous value is missing or zero), five payees, the user's currency first. The bot renders
+  `/stats` as `Categories` (`categories`), `Groceries by product` (`products` with the
+  `not_itemised` line, hidden when empty), `Payees` and `Payment sources` (cash by its name).
 - Deleting a receipt is soft (`deleted_at`). Every list, stats query and uniqueness check
   must filter `deleted_at IS NULL`.
 - Money is `numeric(12,2)` and unit prices/quantities are `numeric(12,4)`, both `Decimal`
