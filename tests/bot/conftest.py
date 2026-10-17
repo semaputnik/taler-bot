@@ -7,12 +7,28 @@ from typing import Any
 import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.methods import GetFile, GetMe, SendMessage, TelegramMethod
+from aiogram.methods import (
+    AnswerCallbackQuery,
+    DeleteMessage,
+    EditMessageMedia,
+    EditMessageReplyMarkup,
+    EditMessageText,
+    GetFile,
+    GetMe,
+    SendChatAction,
+    SendMessage,
+    SendPhoto,
+    TelegramMethod,
+)
 from aiogram.types import (
+    CallbackQuery,
     Chat,
     Document,
     File,
+    InlineKeyboardMarkup,
+    InputFile,
     Message,
     MessageEntity,
     PhotoSize,
@@ -35,6 +51,13 @@ class RecordingSession(BaseSession):
         super().__init__()
         self.calls: list[TelegramMethod[Any]] = []
         self.files: dict[str, bytes] = {}  # file_id -> bytes served by `download_file`
+        self.sent_ids: list[int] = []  # the message id given to each SendMessage, in order
+        self._next_message_id = 1000
+        self.chat_action_fails = False  # make every `sendChatAction` raise
+        self.rejected_file_ids: set[str] = set()  # file ids Telegram refuses to send as media
+        self.rejected_calls: list[TelegramMethod[Any]] = []  # the media calls it refused
+        self._uploads = 0
+        self.photo_message_ids: set[int] = set()  # messages that currently hold a photo
 
     async def make_request(self, bot: Bot, method: TelegramMethod[Any], timeout: int | None = None):  # noqa: ASYNC109
         if isinstance(method, GetMe):
@@ -47,14 +70,76 @@ class RecordingSession(BaseSession):
                 file_path=f"photos/{method.file_id}.jpg",
                 file_size=len(self.files.get(method.file_id, b"")),
             )
+        if isinstance(method, SendChatAction):
+            if self.chat_action_fails:
+                raise TelegramNetworkError(method=method, message="boom")
+            return True
         if isinstance(method, SendMessage):
+            self._next_message_id += 1
+            self.sent_ids.append(self._next_message_id)
             return Message(
-                message_id=1,
+                message_id=self._next_message_id,
                 date=datetime.now(UTC),
                 chat=Chat(id=int(method.chat_id), type="private"),
                 text=method.text,
             )
+        if isinstance(method, SendPhoto):
+            self._refuse_rejected(method, method.photo)
+            self._next_message_id += 1
+            self.sent_ids.append(self._next_message_id)
+            self.photo_message_ids.add(self._next_message_id)
+            return Message(
+                message_id=self._next_message_id,
+                date=datetime.now(UTC),
+                chat=Chat(id=int(method.chat_id), type="private"),
+                photo=[self._photo_size(method.photo)],
+                caption=method.caption,
+            )
+        if isinstance(method, EditMessageMedia):
+            self._refuse_rejected(method, getattr(method.media, "media", None))
+            self.photo_message_ids.add(int(method.message_id or 0))
+            return Message(
+                message_id=int(method.message_id or 0),
+                date=datetime.now(UTC),
+                chat=Chat(id=int(method.chat_id or 0), type="private"),
+                photo=[self._photo_size(getattr(method.media, "media", None))],
+                caption=getattr(method.media, "caption", None),
+            )
+        if isinstance(method, EditMessageText):
+            return Message(
+                message_id=int(method.message_id or 0),
+                date=datetime.now(UTC),
+                chat=Chat(id=int(method.chat_id or 0), type="private"),
+                text=method.text,
+            )
+        if isinstance(method, EditMessageReplyMarkup):
+            return Message(
+                message_id=int(method.message_id or 0),
+                date=datetime.now(UTC),
+                chat=Chat(id=int(method.chat_id or 0), type="private"),
+            )
+        if isinstance(method, DeleteMessage):
+            self.photo_message_ids.discard(int(method.message_id))
+            return True
+        if isinstance(method, AnswerCallbackQuery):
+            return True
         raise AssertionError(f"unexpected API call: {method!r}")
+
+    def _refuse_rejected(self, method: TelegramMethod[Any], source: Any) -> None:
+        if isinstance(source, str) and source in self.rejected_file_ids:
+            self.rejected_calls.append(method)
+            raise TelegramBadRequest(
+                method=method, message="Bad Request: wrong file identifier/HTTP URL specified"
+            )
+
+    def _photo_size(self, source: Any) -> PhotoSize:
+        """Telegram keeps a file id it was given; an uploaded file gets a new one."""
+        if isinstance(source, InputFile):
+            self._uploads += 1
+            file_id = f"uploaded-{self._uploads}"
+        else:
+            file_id = str(source)
+        return PhotoSize(file_id=file_id, file_unique_id=f"unique-{file_id}", width=800, height=600)
 
     async def stream_content(self, url: str, *args, **kwargs):
         """What `Bot.download_file` calls: the bytes registered for the file id in the URL."""
@@ -148,9 +233,72 @@ class BotHarness:
             self.bot, Update(update_id=self._update_id, message=message)
         )
 
+    async def press(self, user_id: int, callback_data: str, message_id: int) -> None:
+        """A tap on an inline button of the message `message_id` in the user's chat."""
+        self._update_id += 1
+        query = CallbackQuery(
+            id=str(self._update_id),
+            from_user=User(id=user_id, is_bot=False, first_name="Ann", username="ann"),
+            chat_instance="test",
+            message=Message(
+                message_id=message_id,
+                date=datetime.now(UTC),
+                chat=Chat(id=user_id, type="private"),
+                photo=[PhotoSize(file_id="shown", file_unique_id="shown", width=1, height=1)]
+                if message_id in self.session.photo_message_ids
+                else None,
+            ),
+            data=callback_data,
+        )
+        await self.dispatcher.feed_update(
+            self.bot, Update(update_id=self._update_id, callback_query=query)
+        )
+
+    def keyboards(self) -> list[tuple[int, InlineKeyboardMarkup]]:
+        """Every keyboard sent so far as (message id, keyboard), oldest first. A keyboard
+        removed or replaced later shows up as its own entry (an empty one for a removal)."""
+        found: list[tuple[int, InlineKeyboardMarkup]] = []
+        sends = iter(self.session.sent_ids)
+        for call in self.session.calls:
+            if any(call is refused for refused in self.session.rejected_calls):
+                continue  # Telegram refused it: no message, no keyboard
+            if isinstance(call, SendMessage | SendPhoto):
+                message_id = next(sends)
+                if isinstance(call.reply_markup, InlineKeyboardMarkup):
+                    found.append((message_id, call.reply_markup))
+            elif isinstance(call, EditMessageText | EditMessageReplyMarkup | EditMessageMedia):
+                markup = call.reply_markup
+                found.append(
+                    (int(call.message_id or 0), markup or InlineKeyboardMarkup(inline_keyboard=[]))
+                )
+        return found
+
+    def last_keyboard(self) -> tuple[int, InlineKeyboardMarkup]:
+        return self.keyboards()[-1]
+
+    def button_texts(self) -> list[str]:
+        """The button labels of the latest keyboard."""
+        return [b.text for row in self.last_keyboard()[1].inline_keyboard for b in row]
+
+    async def tap(self, user_id: int, text: str) -> None:
+        """Tap the button labelled `text` on the latest keyboard."""
+        message_id, markup = self.last_keyboard()
+        data = next(
+            b.callback_data for row in markup.inline_keyboard for b in row if b.text == text
+        )
+        await self.press(user_id, data, message_id)
+
     @property
     def sent_messages(self) -> list[SendMessage]:
         return [call for call in self.session.calls if isinstance(call, SendMessage)]
+
+    @property
+    def sent_photos(self) -> list[SendPhoto]:
+        return [call for call in self.session.calls if isinstance(call, SendPhoto)]
+
+    @property
+    def chat_actions(self) -> list[SendChatAction]:
+        return [call for call in self.session.calls if isinstance(call, SendChatAction)]
 
     @property
     def get_file_calls(self) -> list[GetFile]:

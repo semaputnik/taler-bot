@@ -41,6 +41,8 @@ class ReceiptCard(BaseModel):
 
     receipt_id: int
     status: str
+    received_at: datetime
+    deleted: bool
     store_name: str | None
     purchased_at: datetime | None
     currency: str | None
@@ -50,6 +52,36 @@ class ReceiptCard(BaseModel):
     card_last4: str | None
     item_count: int
     open_issue_count: int
+    duplicate_of: ReceiptCard | None = None  # set by `ReceiptService.card` for a duplicate
+
+
+class ItemRow(BaseModel):
+    """One item of a receipt with the user's edits applied, for the item list and item view."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ref: str
+    currency: str | None  # the receipt's; items carry no currency of their own
+    printed_name: str
+    readable_name: str
+    category: str
+    quantity: Decimal
+    unit: str
+    unit_price: Decimal | None
+    reference_price: Decimal | None
+    reference_unit: str | None
+    discount: Decimal
+    line_total: Decimal | None
+    vat_rate: Decimal | None
+
+
+class PhotoRef(BaseModel):
+    """What Telegram knows of a receipt's photo: enough to show it without reading the disk."""
+
+    model_config = ConfigDict(frozen=True)
+
+    telegram_file_id: str | None
+    mime_type: str | None
 
 
 class IssueLine(BaseModel):

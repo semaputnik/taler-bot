@@ -198,3 +198,32 @@ async def test_a_sticker_is_asked_for_a_photo(harness):
 
     (sent,) = harness.sent_messages
     assert sent.text == i18n.get("photo-send-me-one")
+
+
+async def test_typing_is_shown_while_the_photo_is_read_and_ends_before_the_summary(
+    harness, monkeypatch
+):
+    monkeypatch.setattr("src.bot.handlers.message.photo.TYPING_INTERVAL", 0.01)
+    harness.parser.delay = 0.1
+
+    await harness.send_photo(user_id=USER)
+    await harness.tasks.drain()
+
+    calls = harness.session.calls
+    saved = next(i for i, call in enumerate(calls) if call is harness.sent_messages[0])
+    summary = next(i for i, call in enumerate(calls) if call is harness.sent_messages[-1])
+    typing = [i for i, call in enumerate(calls) if call in harness.chat_actions]
+    assert len(typing) >= 2  # repeated while the model works
+    assert all(saved < i < summary for i in typing)
+    assert all(call.action == "typing" and call.chat_id == USER for call in harness.chat_actions)
+
+
+async def test_a_failing_chat_action_does_not_affect_the_summary(harness):
+    harness.session.chat_action_fails = True
+
+    message_id = await harness.send_photo(user_id=USER)
+    await harness.tasks.drain()
+
+    saved, summary = harness.sent_messages
+    assert "Consum" in summary.text
+    assert replied_to(summary) == message_id

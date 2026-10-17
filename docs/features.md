@@ -23,8 +23,8 @@ and dependencies, not commitments.
 failures, the same photo sent twice and the same receipt photographed twice.
 
 **Stage 1: working with a receipt after parsing**
-1. **Receipt card.** Inline buttons under the summary: items, photo, review issues,
-   delete.
+1. **Receipt card.** Inline buttons under the summary: `Items`, `Photo`, `Delete`
+   (`Review` comes with the issue-review spec). Done (items are read-only until the item-edit spec).
 2. **Issue review.** Walk through high/medium issues one at a time. For each, confirm the
    assumed value or enter the right one (date, total, card last 4, lines that don't add up).
 3. **Item edit.** Name, category, quantity/price. Name and category are saved to
@@ -74,23 +74,27 @@ A plain handler, not a dialog, so that a photo is accepted in any state.
         → 🧾 Mercadona · 14.10.2026 18:32
           Total 47.85 € · VISA •1234 · 23 items
           ⚠️ 2 to review
-          [📋 Items] [⚠️ Review (2)] [🗑 Delete]
+          [📋 Items] [🖼 Photo] [🗑 Delete]
 ```
 
 A bad reading: the user taps `🗑 Delete` and sends a better photo.
 
-The buttons start the `ReceiptCard` dialog with `receipt_id` in `start_data`.
+The buttons are a plain inline keyboard under every parse reply (parsed, not a receipt,
+duplicate, failed). A tap starts the `ReceiptCard` dialog with `receipt_id` in
+`start_data`, as a new message; the summary is never edited and keeps its buttons. A tap on
+a deleted receipt answers with an alert and removes the keyboard. A photo sent while a card
+is open is still accepted.
 
 ### ReceiptCard
 
 | window | content |
 |---|---|
-| `main` | summary and buttons |
-| `items` | paginated item list (`ScrollingGroup`); a tap opens `item` |
-| `item` | `[✏️ Name] [🏷 Category] [🔢 Qty/price]` |
+| `main` | summary and buttons (`Items`, `Photo`, `Delete`, `Close`); a receipt that is not `parsed` shows its status, the photo's date and, for a duplicate, the receipt it repeats |
+| `items` | paginated item list (`ScrollingGroup`, 8 per page); a tap opens `item` |
+| `item` | all parsed fields, read-only; `[✏️ Name] [🏷 Category] [🔢 Qty/price]` arrive with item edit |
 | `issues` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip]` |
-| `photo` | sends the stored photo |
-| `delete_confirm` | confirms the delete |
+| `photo` | the stored photo by Telegram file id, uploaded from disk if Telegram refuses the id |
+| `delete_confirm` | confirms the delete (soft delete; the photo moves to the trash). Refused while the receipt is being read |
 
 An issue screen looks like this:
 

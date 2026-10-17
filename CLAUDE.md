@@ -71,9 +71,13 @@ src/
     middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (only /start so far), each exposes register_xxx(dp)
-      message/photo.py     # photo intake: save, reply, parse in the background; catch-all "send me a photo"
-      dialog/              # one folder per aiogram-dialog dialog (none yet, see Dialogs)
-    states/                # StatesGroup classes
+      callback/            # taps on the summary keyboard: receipt.py opens the ReceiptCard dialog
+      message/photo.py     # photo intake: save, reply with the keyboard, parse in the background; catch-all "send me a photo"
+      dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py (main, items, item, photo, delete_confirm)
+    keyboards/receipt.py   # inline keyboard under the parse reply, ReceiptCallback (prefix "receipt")
+    render.py              # receipt texts shared by the parse reply and the dialog
+    states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
   database/
     engine.py              # create_engine / create_sessionmaker; install_error_translation
@@ -87,7 +91,7 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts): built once by App
     user.py                # UserService.ensure, .allow
-    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, soft_delete, card
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, soft_delete, card, items, photo, photo_bytes
     results.py             # CurrentUser, NewPhoto, ReceiptCard, ParseResult: the services' own pydantic types
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
@@ -104,7 +108,7 @@ tests/                     # domain/ database/ services/ bot/ + root conftest.py
 ```
 
 Not built yet (each arrives with its feature): `domain/matching.py` (a domain service) and
-the dialogs.
+the other dialogs (items, photo, issue review, history).
 
 ### Layers and dependencies
 
@@ -156,7 +160,9 @@ the dialogs.
     lookup leaves the translator's chain polluted.
   - `App` owns one `TaskRegistry` (handler data key `tasks`, put there by `TasksMiddleware`);
     `lifespan` awaits pending parses for up to `TASK_SHUTDOWN_TIMEOUT`, cancels the rest, then
-    closes the bot session. The photo router is included last: it holds a catch-all.
+    closes the bot session. Handler order: commands, callbacks, the photo handler, the dialogs, then the
+    catch-all "send me a photo". A dialog consumes every message sent while it is open, so photos must
+    be handled before the dialogs and the catch-all after them.
   - `App` builds the services once (`Services` in `services/container.py`, handler data key `services`), and a
     middleware puts them into handler data, so getters receive them as arguments. There
     is no DI library.
@@ -191,7 +197,7 @@ As in paper-work-bot, each dialog is a folder in `bot/handlers/dialog/<name>/`:
 
 | file | contents |
 |---|---|
-| `dialog.py` | `Dialog(Window(...), ...)`, `on_start` |
+| `dialog.py` | `create_xxx_dialog()` returning `Dialog(Window(...), ...)` (a factory: a router attaches to one dispatcher only), `on_start` |
 | `getters.py` | window data; calls services |
 | `click_event.py` | button and input handlers |
 | `common.py` | key constants: `DialogDataKeys` (dialog_data), `PreviewDataKeys` (getter output) |
@@ -200,6 +206,10 @@ As in paper-work-bot, each dialog is a folder in `bot/handlers/dialog/<name>/`:
 Keys passed between dialogs through `start_data` live in one shared `TransferKeys`
 class. State groups live in `bot/states/`. Every text comes from `.ftl`, and there are
 no string literals in windows.
+
+A window that shows a stored receipt photo uses `DynamicMedia` with a `StoredPhoto` (by Telegram
+file id). `StoredPhotoMessageManager`, passed to `setup_dialogs`, uploads the bytes only when Telegram
+refuses the id, and shows a notice if the bytes are unreadable.
 
 ### Tests
 

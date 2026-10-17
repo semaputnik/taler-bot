@@ -3,6 +3,7 @@ from aiogram.fsm.storage.base import BaseStorage
 from aiogram_dialog import setup_dialogs
 from fluentogram import TranslatorHub
 
+from src.bot.handlers.dialog.media import StoredPhotoMessageManager
 from src.bot.handlers.setup import register_handlers
 from src.bot.middlewares.access import AccessMiddleware
 from src.bot.middlewares.i18n import I18nMiddleware
@@ -26,5 +27,5 @@ def create_dispatcher(
     dp.update.outer_middleware(AccessMiddleware())
     dp.update.outer_middleware(I18nMiddleware(translator_hub))
     register_handlers(dp)
-    setup_dialogs(dp)
+    setup_dialogs(dp, message_manager=StoredPhotoMessageManager())
     return dp

@@ -25,3 +25,51 @@ receipt-issues = ⚠️ Issues ({ $count }):
 receipt-issue-line = • { $item }: { $message }
 receipt-issue-line-plain = • { $message }
 receipt-issues-more = …
+
+card-deleted-alert = This receipt was deleted.
+card-deleted = 🗑 This receipt was deleted.
+card-deleted-done = 🗑 Deleted
+card-status-pending = ⏳ Waiting to be read.
+card-status-parsing = ⏳ Being read…
+card-status-failed = ❌ Could not be read.
+card-status-not-receipt = 🤔 Not a receipt.
+card-status-duplicate = ♻️ Duplicate.
+card-received = Photo received: { $date }
+card-repeats = Repeats <b>{ $store }</b>, { $date }, { $amount }
+card-delete-confirm = Delete this receipt? The photo is kept in the trash.
+card-cannot-delete-parsing = This receipt is still being read. Try again in a moment.
+
+card-items-title = 📋 Items ({ $count })
+
+item-title =
+    <b>{ $name }</b>
+    { "" }
+item-printed = <b>Printed as:</b> { $name }
+item-category = <b>Category:</b> { $category }
+item-quantity = <b>Quantity:</b> { $quantity } { $unit }
+item-unit-price = <b>Unit price:</b> { $price }
+item-reference-price = <b>Reference price:</b> { $price } per { $unit }
+item-discount = <b>Discount:</b> { $amount }
+item-line-total = <b>Line total:</b> { $amount }
+item-vat = <b>VAT:</b> { $rate }%
+item-amount = { $amount } { $sign }
+item-not-specified = not specified
+item-gone = This item is no longer on the receipt.
+item-row = { $name } · { $quantity } { $unit } · { $total }
+
+category-produce = Produce
+category-meat = Meat
+category-fish = Fish
+category-dairy = Dairy
+category-bakery = Bakery
+category-drinks = Drinks
+category-alcohol = Alcohol
+category-snacks = Snacks
+category-frozen = Frozen
+category-pantry = Pantry
+category-household = Household
+category-personal-care = Personal care
+category-baby = Baby
+category-pet = Pet
+category-other = Other
+card-photo-unavailable = The photo could not be loaded.
