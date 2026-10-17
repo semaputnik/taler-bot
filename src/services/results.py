@@ -1,6 +1,6 @@
 """The services' own types: what the bot passes in and gets back (no domain, no database types)."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -23,6 +23,8 @@ __all__ = [
     "BulkResult",
     "CurrencyBlock",
     "CurrencyTotal",
+    "Compared",
+    "ComparedBlock",
     "CurrentUser",
     "HistoryPage",
     "HistoryRow",
@@ -37,6 +39,7 @@ __all__ = [
     "ReparseCandidates",
     "ReparseSummary",
     "SpendingPeriod",
+    "SpendingReport",
     "StoreOption",
 ]
 
@@ -206,3 +209,56 @@ class BulkResult(BaseModel):
 
     ok: int
     failed: int
+
+
+class Compared(BaseModel):
+    """One line of a breakdown set against the previous period.
+
+    `share` is the value as a whole percent of its block's total. `previous` is the same line's
+    value in the previous period, None when that period had no such line (the view says "new");
+    `change` is the whole percent against `previous`, None when `previous` is missing or zero.
+    `key` is `not_itemised` for the remainder no item line covers (its `label` is empty).
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str
+    label: str
+    value: Decimal
+    share: int
+    previous: Decimal | None
+    change: int | None
+
+
+class ComparedBlock(BaseModel):
+    """One currency of a period against the previous period. `previous_total` is None when the
+    previous period had no receipts in this currency; `change` is the whole percent of the total
+    against it, None when it is missing or zero. `categories` ends with the `not_itemised` line
+    when it is at least 0.01 in size; `stores` holds the five largest; `cards` all of them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    currency: str
+    total: Decimal
+    previous_total: Decimal | None
+    change: int | None
+    receipt_count: int
+    categories: list[Compared]
+    stores: list[Compared]
+    cards: list[Compared]
+
+
+class SpendingReport(BaseModel):
+    """A week or month of spending for the stats screen, in the user's time zone. `[start, end)`
+    are local dates; `is_current` says the period holds today; `has_earlier` says a parsed
+    receipt was bought before `start`. `blocks` hold the user's default currency first, then the
+    others alphabetically; a period with no receipts has none."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["week", "month"]
+    start: date
+    end: date
+    is_current: bool
+    has_earlier: bool
+    blocks: list[ComparedBlock]
