@@ -297,3 +297,23 @@ def test_mark_saved_clears_the_renamed_sources():
     catalog.mark_saved()
 
     assert catalog.renamed_sources == ()
+
+
+# --- the source a receipt's card ending points at -------------------------------------------
+
+
+def test_source_for_a_card_ending_is_the_card():
+    catalog = Catalog(user_id=1)
+
+    source = catalog.source_for("visa", "0848")
+
+    assert source is catalog.ensure_card("VISA", "0848")
+    assert source.kind is PaymentSourceKind.CARD
+
+
+def test_source_for_no_card_ending_is_cash_whatever_the_brand():
+    catalog = Catalog(user_id=1)
+
+    assert catalog.source_for(None, None) is catalog.cash()
+    assert catalog.source_for("VISA", None) is catalog.cash()
+    assert len(catalog.payment_sources) == 1

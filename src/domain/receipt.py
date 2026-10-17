@@ -319,6 +319,12 @@ class Receipt:
         return self.deleted_at is None and self.status in {S.PARSED, S.FAILED, S.NOT_RECEIPT}
 
     @property
+    def backs_expense(self) -> bool:
+        """Whether the receipt is a purchase the user made: read and a receipt, not a repeat of
+        another one, not deleted. Only such a receipt has an expense (ADR-0003)."""
+        return self.deleted_at is None and self.status is S.PARSED
+
+    @property
     def parser_version(self) -> str | None:
         return self.parse.parser_version if self.parse is not None else None
 

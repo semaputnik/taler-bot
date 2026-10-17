@@ -357,3 +357,23 @@ def test_a_receipt_expense_can_be_deleted():
     expense.soft_delete()
 
     assert expense.deleted_at is not None
+
+
+# --- restore ----------------------------------------------------------------------------
+
+
+def test_restore_reopens_a_deleted_expense_and_keeps_what_the_user_set():
+    expense = from_receipt()
+    expense.set_category(ExpenseCategory.HEALTH)
+    expense.soft_delete()
+
+    expense.restore()
+
+    assert expense.deleted_at is None
+    assert expense.category is ExpenseCategory.HEALTH
+    expense.set_category(ExpenseCategory.GIFTS)
+
+
+def test_restoring_an_open_expense_is_refused():
+    with pytest.raises(InvalidExpense):
+        manual().restore()

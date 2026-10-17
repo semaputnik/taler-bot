@@ -219,6 +219,12 @@ class Expense:
             raise InvalidExpense("the expense is already deleted")
         self.deleted_at = at or datetime.now(UTC)
 
+    def restore(self) -> None:
+        """Reopen a deleted expense, as it was (a receipt that is a purchase again)."""
+        if self.deleted_at is None:
+            raise InvalidExpense("the expense is not deleted")
+        self.deleted_at = None
+
     # --- for the repository ------------------------------------------------------------
 
     def mark_saved(self) -> None:

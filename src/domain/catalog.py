@@ -141,6 +141,12 @@ class Catalog:
         self.payment_sources[_CASH_KEY] = source
         return source
 
+    def source_for(self, card_brand: str | None, card_last4: str | None) -> PaymentSource:
+        """What a receipt was paid with: the card of its printed ending, else cash."""
+        if card_last4:
+            return self.ensure_card(card_brand, card_last4)
+        return self.cash()
+
     def rename_source(self, source_id: int | str, name: str) -> PaymentSource:
         """Give a source a name by hand (stripped, not empty). `source_id` is its key."""
         source = self.payment_sources.get(source_id)
