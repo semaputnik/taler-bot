@@ -18,7 +18,7 @@ from tests.domain.builders import parse, photo, product
 from tests.helpers import MakeUow, add_receipt, add_user, seed_catalog
 
 USER = 7
-RECEIPTS = "🧾 Receipts"
+EXPENSES = "💸 Expenses"
 SPENDING = "📊 Spending"
 WEEK = "📅 Week"
 MONTH = "📅 Month"
@@ -134,7 +134,7 @@ async def test_stats_renders_the_month_with_the_comparison(harness, make_uow):
 
     assert harness.last_text() == (
         f"{month_title()}\n"
-        f"48.00 € · 2 receipts · ▲ 140% vs {month_name(-1)} (20.00 €)\n"
+        f"48.00 € · 2 expenses · ▲ 140% vs {month_name(-1)} (20.00 €)\n"
         "\n"
         "<b>Categories</b>\n"
         "• Groceries 48.00 € · 100% · ▲ 140%\n"
@@ -203,7 +203,7 @@ async def test_a_period_without_a_previous_one_shows_no_comparison(harness, make
     await harness.send_text("/stats", user_id=USER)
 
     text = harness.last_text()
-    assert text.splitlines()[1] == "10.00 € · 1 receipt"
+    assert text.splitlines()[1] == "10.00 € · 1 expense"
     assert "new" not in text and "▲" not in text
     assert "• Meat 10.00 € · 100%" in text.splitlines()
 
@@ -229,7 +229,7 @@ async def test_prev_edits_to_the_previous_month_and_next_is_only_in_a_past_one(h
 
     assert harness.last_keyboard()[0] == message_id
     assert len(edits(harness)) == 1
-    assert harness.last_text().startswith(f"{month_title(-1)}\n20.00 € · 1 receipt")
+    assert harness.last_text().startswith(f"{month_title(-1)}\n20.00 € · 1 expense")
     assert f"{short(0)} ▶" in harness.button_texts()
     assert f"◀ {short(-2)}" in harness.button_texts()  # the past is always reachable
 
@@ -246,16 +246,16 @@ async def test_week_switches_to_the_week_of_the_first_and_prev_moves_one_week(ha
 
     await harness.tap(USER, WEEK)
 
-    assert harness.last_text().startswith(f"{week_title(first)}\n10.00 € · 1 receipt")
+    assert harness.last_text().startswith(f"{week_title(first)}\n10.00 € · 1 expense")
     assert "▲ 150% vs previous week (4.00 €)" in harness.last_text()
     before = monday(first) - timedelta(days=7)
     assert f"◀ {before:%d.%m}" in harness.button_texts()
-    assert RECEIPTS not in harness.button_texts()
+    assert EXPENSES not in harness.button_texts()
     assert MONTH in harness.button_texts()
 
     await harness.tap(USER, f"◀ {before:%d.%m}")
 
-    assert harness.last_text().startswith(f"{week_title(before)}\n4.00 € · 1 receipt")
+    assert harness.last_text().startswith(f"{week_title(before)}\n4.00 € · 1 expense")
     assert f"{monday(first):%d.%m} ▶" in harness.button_texts()
 
     await harness.tap(USER, MONTH)
@@ -272,7 +272,7 @@ async def test_the_week_header_uses_iso_week_numbers_across_a_year_boundary(harn
     ).pack()
     await harness.press(USER, data, message_id)
 
-    assert harness.last_text().startswith("📊 Week 1 · 29.12–04.01.2026\n10.00 € · 1 receipt")
+    assert harness.last_text().startswith("📊 Week 1 · 29.12–04.01.2026\n10.00 € · 1 expense")
 
 
 async def test_an_empty_period_says_so_and_still_offers_the_arrow(harness, make_uow):
@@ -283,7 +283,7 @@ async def test_an_empty_period_says_so_and_still_offers_the_arrow(harness, make_
     assert harness.last_text() == f"{month_title()}\n{i18n.get('stats-empty')}"
     assert harness.last_text().endswith("No purchases in this period.")
     assert f"◀ {short(-1)}" in harness.button_texts()
-    assert RECEIPTS in harness.button_texts()
+    assert EXPENSES in harness.button_texts()
 
 
 async def test_two_currencies_give_two_headed_blocks(harness, make_uow):
@@ -295,23 +295,23 @@ async def test_two_currencies_give_two_headed_blocks(harness, make_uow):
     await harness.send_text("/stats", user_id=USER)
 
     text = harness.last_text()
-    assert text.startswith(f"{month_title()}\n<b>EUR</b>\n10.00 € · 1 receipt")
-    assert "\n\n<b>USD</b>\n5.00 $ · 1 receipt" in text
+    assert text.startswith(f"{month_title()}\n<b>EUR</b>\n10.00 € · 1 expense")
+    assert "\n\n<b>USD</b>\n5.00 $ · 1 expense" in text
     assert text.index("EUR") < text.index("USD")
 
 
-async def test_receipts_button_sends_the_history_of_the_month_as_a_new_message(harness, make_uow):
+async def test_expenses_button_sends_the_history_of_the_month_as_a_new_message(harness, make_uow):
     await seed_two_months(make_uow)
     await harness.send_text("/stats", user_id=USER)
     await harness.tap(USER, f"◀ {short(-1)}")
     stats_id = harness.last_keyboard()[0]
 
-    await harness.tap(USER, RECEIPTS)
+    await harness.tap(USER, EXPENSES)
 
     year, month = shifted(-1)
     sent = harness.sent_messages[-1]
     assert sent.text.startswith(f"🗓 {i18n.get(f'month-{month}')} {year}")
-    assert sent.text.endswith("1 receipt · 20.00 €")
+    assert sent.text.endswith("1 expense · 20.00 €")
     assert harness.session.sent_ids[-1] != stats_id
 
 
@@ -320,12 +320,12 @@ async def test_start_carries_the_spending_button_and_it_sends_the_stats_as_a_new
 ):
     await seed_two_months(make_uow)
     await harness.send_text("/start", user_id=USER)
-    assert harness.button_texts() == [RECEIPTS, SPENDING]
+    assert harness.button_texts() == [EXPENSES, SPENDING]
     greeting_id = harness.last_keyboard()[0]
 
     await harness.tap(USER, SPENDING)
 
-    assert harness.sent_messages[-1].text.startswith(f"{month_title()}\n48.00 € · 2 receipts")
+    assert harness.sent_messages[-1].text.startswith(f"{month_title()}\n48.00 € · 2 expenses")
     assert harness.session.sent_ids[-1] != greeting_id
     assert not edits(harness)
 

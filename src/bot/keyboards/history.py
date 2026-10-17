@@ -8,13 +8,13 @@ from aiogram.filters.callback_data import CallbackData
 
 class HistoryAction(StrEnum):
     OPEN = "open"  # the /start button: send the month as a new message
-    SHOW = "show"  # the month's receipts, edited in place
-    STORES = "stores"  # the store chooser
+    SHOW = "show"  # the month's expenses, edited in place
+    PAYEES = "payees"  # the payee chooser
 
 
 class HistoryCallback(CallbackData, prefix="history"):
     year: int
     month: int
-    store_id: int = 0  # 0 = all stores
+    payee_id: int = 0  # 0 = all payees
     page: int = 0
     action: HistoryAction = HistoryAction.SHOW

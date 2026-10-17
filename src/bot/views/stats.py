@@ -181,6 +181,6 @@ def show_keyboard(report: SpendingReport, i18n: TranslatorRunner) -> InlineKeybo
             year=report.start.year, month=report.start.month, action=HistoryAction.OPEN
         )
         rows.append(
-            [InlineKeyboardButton(text=i18n.get("button-receipts"), callback_data=history.pack())]
+            [InlineKeyboardButton(text=i18n.get("button-expenses"), callback_data=history.pack())]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)

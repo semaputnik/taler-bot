@@ -1,4 +1,4 @@
-"""The history message: text and plain inline keyboard for the month and store chooser screens."""
+"""The history message: text and plain inline keyboard for the month and payee chooser screens."""
 
 from html import escape
 
@@ -45,7 +45,7 @@ def title(page: HistoryPage, i18n: TranslatorRunner) -> str:
             "history-title-filtered",
             month=month,
             year=str(page.year),
-            store=escape(page.payee_name),
+            payee=escape(page.payee_name),
         )
     return i18n.get("history-title", month=month, year=str(page.year))
 
@@ -65,15 +65,15 @@ def show_text(page: HistoryPage, i18n: TranslatorRunner) -> str:
 
 def _row_label(row: HistoryRow, i18n: TranslatorRunner) -> str:
     day = f"{row.day.day:02d}.{row.day.month:02d}"
-    # A button is plain text, so the store name is not HTML-escaped here.
-    store = row.payee_name or i18n.get("receipt-unknown-store")
+    # A button is plain text, so the payee name is not HTML-escaped here.
+    payee = row.payee_name or i18n.get("receipt-unknown-store")
     icon = _STATUS_ICONS.get(row.status)
     if icon is not None:
-        return i18n.get("history-row-status", day=day, store=store, status=icon)
+        return i18n.get("history-row-status", day=day, payee=payee, status=icon)
     amount = render.money(row.amount, i18n, row.currency)
     # An expense typed by hand has no receipt: its own icon instead of the plain bullet.
     key = "history-row" if row.has_receipt else "history-row-manual"
-    return i18n.get(key, day=day, store=store, amount=amount)
+    return i18n.get(key, day=day, payee=payee, amount=amount)
 
 
 def _open_card(row: HistoryRow) -> str:
@@ -112,8 +112,8 @@ def show_keyboard(
         )
     nav.append(
         _button(
-            i18n.get("button-store-filter"),
-            here.model_copy(update={"action": HistoryAction.STORES, "page": number}),
+            i18n.get("button-payee-filter"),
+            here.model_copy(update={"action": HistoryAction.PAYEES, "page": number}),
         )
     )
     if page.has_later:
@@ -141,29 +141,33 @@ def show_keyboard(
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def stores_text(page: HistoryPage, i18n: TranslatorRunner) -> str:
+def payees_text(page: HistoryPage, i18n: TranslatorRunner) -> str:
     return title(page, i18n)
 
 
-def stores_keyboard(
+def payees_keyboard(
     page: HistoryPage, shown: HistoryCallback, i18n: TranslatorRunner
 ) -> InlineKeyboardMarkup:
     here = shown.model_copy(
         update={"year": page.year, "month": page.month, "action": HistoryAction.SHOW}
     )
     rows = []
-    for store in page.payees:
-        key = "button-store-selected" if store.payee_id == shown.store_id else "button-store"
+    for payee in page.payees:
+        key = (
+            "button-payee-option-selected"
+            if payee.payee_id == shown.payee_id
+            else "button-payee-option"
+        )
         rows.append(
             [
                 _button(
-                    i18n.get(key, name=store.name),
-                    here.model_copy(update={"store_id": store.payee_id, "page": 0}),
+                    i18n.get(key, name=payee.name),
+                    here.model_copy(update={"payee_id": payee.payee_id, "page": 0}),
                 )
             ]
         )
     rows.append(
-        [_button(i18n.get("button-all-stores"), here.model_copy(update={"store_id": 0, "page": 0}))]
+        [_button(i18n.get("button-all-payees"), here.model_copy(update={"payee_id": 0, "page": 0}))]
     )
     rows.append([_button(i18n.get("button-back"), here)])
     return InlineKeyboardMarkup(inline_keyboard=rows)

@@ -168,16 +168,16 @@ input-hint-text = free text
 review-done = { $reviewed } reviewed: { $corrected } corrected, { $confirmed } confirmed, { $skipped } skipped
 
 history-title = 🗓 { $month } { $year }
-history-title-filtered = 🗓 { $month } { $year } · { $store }
+history-title-filtered = 🗓 { $month } { $year } · { $payee }
 history-summary = { $count ->
-    [one] 1 receipt
-   *[other] { $count } receipts
+    [one] 1 expense
+   *[other] { $count } expenses
   } · { $totals }
-history-summary-none = No parsed receipts
-history-empty = No receipts this month.
-history-row = • { $day } { $store } · { $amount }
-history-row-manual = 💸 { $day } { $store } · { $amount }
-history-row-status = • { $day } { $store } · { $status }
+history-summary-none = No expenses yet
+history-empty = No expenses this month.
+history-row = • { $day } { $payee } · { $amount }
+history-row-manual = 💸 { $day } { $payee } · { $amount }
+history-row-status = • { $day } { $payee } · { $status }
 history-page = { $page }/{ $pages }
 
 month-1 = January
@@ -209,12 +209,12 @@ month-short-12 = Dec
 stats-title-month = 📊 { $month } { $year }
 stats-title-week = 📊 Week { $week } · { $from }–{ $to }
 stats-headline = { $total } · { $count ->
-    [one] 1 receipt
-   *[other] { $count } receipts
+    [one] 1 expense
+   *[other] { $count } expenses
   } · { $change } vs { $previous } ({ $previous_total })
 stats-headline-no-previous = { $total } · { $count ->
-    [one] 1 receipt
-   *[other] { $count } receipts
+    [one] 1 expense
+   *[other] { $count } expenses
   }
 stats-previous-week = previous week
 stats-empty = No purchases in this period.

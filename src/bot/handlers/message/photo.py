@@ -95,6 +95,7 @@ def register_not_a_photo(dp) -> None:
     that does not read text) does not take a stray word and send itself again. It steps aside
     when the open window reads typed text, so the dialog gets that input."""
     router = Router(name="not-a-photo")
-    # Any message that is not a command (commands are handled before this router).
-    router.message.register(not_a_photo, ~F.text.startswith("/"), no_window_reads_text)
+    # Any other message, an unknown command included (known commands are handled before this
+    # router), so a retired command such as /receipts is answered, not ignored.
+    router.message.register(not_a_photo, no_window_reads_text)
     dp.include_router(router)

@@ -499,7 +499,7 @@ async def test_a_history_row_of_a_manual_expense_opens_its_card_and_the_history_
     harness, make_uow
 ):
     await add_manual_expense(make_uow, USER, amount="10.00", spent_at=today())
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
     history_id, history_markup = harness.last_keyboard()
     row = harness.button_texts()[0]
     assert row == f"💸 {today().day:02d}.{today().month:02d} Mercadona · 10.00 €"
