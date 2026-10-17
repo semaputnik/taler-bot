@@ -126,15 +126,32 @@ Current value: 4.80 €
 
 ### History (`/receipts`)
 
+One month of the user's receipts (month by purchase date, the day the photo arrived as the
+fallback, in the user's time zone), newest first, eight rows per page. A plain callback
+keyboard, not a dialog: every button carries the month, the store filter and the page, so the
+message keeps working however old it is and however many cards were opened from it.
+
 ```
-October 2026 · 12 receipts · 384.20 €
+🗓 October 2026 · Mercadona
+12 receipts · 384.20 €
+[• 14.10 Mercadona · 47.85 €]
+[• 12.10 Lidl · 23.10 €]
+[• 11.10 Consum · ❌]
 [◀ Sep] [Store ▾] [Nov ▶]
-• 14.10 Mercadona   47.85 €
-• 12.10 Lidl        23.10 €
+[◀] [2/3] [▶]
 ```
 
-A row opens `ReceiptCard`.
+- The summary counts parsed receipts only, with one total per currency. A month without any
+  says so (`No receipts this month.`, or `No parsed receipts`).
+- A row without an amount shows ❌ failed, ♻️ duplicate, 🤔 not a receipt, ⏳ pending or parsing.
+- `◀ Sep` / `Nov ▶` appear only when a receipt lies before / after the month (never past the
+  current month). The paging row appears only with more than one page, and its arrows only
+  where there is a page to go to.
+- `Store ▾` lists the stores with receipts in the month, `✓` on the selected one, `All stores`
+  and `◀ Back`. The filter stays while moving between months and pages.
+- A row opens the receipt's card as a new message; the history keeps its buttons.
 
 ### Main menu (`/start`)
 
-`[🧾 Receipts] [📊 Spending]`. Only Receipts works in stage 1.
+The greeting carries `[🧾 Receipts]`, which sends the current month as a new message. The
+spending button comes with the stats feature.

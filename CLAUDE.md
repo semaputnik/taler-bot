@@ -70,12 +70,14 @@ src/
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
     middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
-      command/             # one module per command (only /start so far), each exposes register_xxx(dp)
-      callback/            # taps on the card's plain buttons: receipt.py edits the current card in place or sends a fresh one
+      command/             # one module per command (/start, /receipts), each exposes register_xxx(dp)
+      callback/            # taps on plain buttons: receipt.py edits the current card in place or sends a fresh one; history.py edits the history message in place
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
         receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, item_input, item_category, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
+    keyboards/history.py   # HistoryCallback (prefix "history": year, month, store_id, page, action)
+    views/history.py       # the history message: text and keyboard of the month and store chooser screens
     render.py              # receipt texts (currency sign, header) used by the card
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
@@ -83,6 +85,7 @@ src/
     engine.py              # create_engine / create_sessionmaker; install_error_translation
     errors.py              # SQLSTATE → app exception mapping
     models/                # SQLAlchemy ORM; never leaves database/
+    read_models.py         # HistoryPage, HistoryRow, …: screen-shaped query results (re-exported by services)
     dto/                   # UserDTO / NewUserDTO (the user repository's plain-data types)
     interfaces/            # Protocols for the UoW and the three repositories (typing)
     repositories/          # one per aggregate: ReceiptRepository, CatalogRepository, UserRepository
@@ -219,6 +222,13 @@ card, however old: a tap on the dialog's last message restarts the dialog with `
 never calls `done()`**: it would strip the buttons. Every exit goes `switch_to(ReceiptCardSG.main)`,
 which is also where a deleted receipt ends. `✖ Close` (a plain card button) hides the buttons and keeps the text.
 
+**Exception: the history and the card's resting buttons are plain callback keyboards, because their
+buttons must outlive any dialog stack.** `/receipts` is a plain message whose `HistoryCallback`
+buttons carry the whole view state (month, store, page); `callback/history.py` edits the message in
+place. Its row buttons are `ReceiptCallback`s, so a tap goes through `open_card`, which sends a fresh
+card and leaves the history keyboard alone. The `/start` button uses `HistoryAction.OPEN`: it sends
+the list as a new message instead of editing the greeting.
+
 The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
 `position`, `current_issue_id` and the counters, loaded once by `click_event.start_review`.
 `click_event.advance` moves on after any action that closes an issue; a skipped issue stays
@@ -268,6 +278,15 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   repositories or services**; the DB constraints are the second line of defence.
 - Product name and category edits go to `store_products`, never to `receipt_edits`.
   A parse never overwrites `store_products` or `stores.name`.
+- `ReceiptRepository.history(user_id, year, month, timezone, store_id, offset, limit)` is the
+  month read model (`HistoryPage`, `HistoryRow`, `CurrencyTotal`, `StoreOption` in
+  `database/read_models.py`, re-exported by `services/results.py`): four SELECTs whatever the
+  month's size. A receipt belongs to the month of `coalesce(purchased_at, photo.received_at)`
+  in the user's time zone (purchase date first, the day the photo arrived as the fallback, so
+  a failed receipt is still findable). Deleted receipts are excluded everywhere; the store
+  filter narrows rows, counts and totals but not `stores`; `parsed_count` and `totals` count
+  parsed receipts only. `ReceiptService.history` pages by `PAGE_SIZE = 8`, clamps a page past
+  the end and clears `has_later` for the current month.
 - Deleting a receipt is soft (`deleted_at`). Every list, stats query and uniqueness check
   must filter `deleted_at IS NULL`.
 - Money is `numeric(12,2)` and unit prices/quantities are `numeric(12,4)`, both `Decimal`

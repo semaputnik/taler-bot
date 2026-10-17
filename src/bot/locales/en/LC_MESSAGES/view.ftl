@@ -106,3 +106,41 @@ input-hint-last4 = four digits
 input-hint-currency = a 3-letter code, like EUR
 input-hint-text = free text
 review-done = { $reviewed } reviewed: { $corrected } corrected, { $confirmed } confirmed, { $skipped } skipped
+
+history-title = 🗓 { $month } { $year }
+history-title-filtered = 🗓 { $month } { $year } · { $store }
+history-summary = { $count ->
+    [one] 1 receipt
+   *[other] { $count } receipts
+  } · { $totals }
+history-summary-none = No parsed receipts
+history-empty = No receipts this month.
+history-row = • { $day } { $store } · { $amount }
+history-row-status = • { $day } { $store } · { $status }
+history-page = { $page }/{ $pages }
+
+month-1 = January
+month-2 = February
+month-3 = March
+month-4 = April
+month-5 = May
+month-6 = June
+month-7 = July
+month-8 = August
+month-9 = September
+month-10 = October
+month-11 = November
+month-12 = December
+
+month-short-1 = Jan
+month-short-2 = Feb
+month-short-3 = Mar
+month-short-4 = Apr
+month-short-5 = May
+month-short-6 = Jun
+month-short-7 = Jul
+month-short-8 = Aug
+month-short-9 = Sep
+month-short-10 = Oct
+month-short-11 = Nov
+month-short-12 = Dec

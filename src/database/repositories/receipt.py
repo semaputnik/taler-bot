@@ -1,6 +1,7 @@
 from dataclasses import replace
+from datetime import datetime
 
-from sqlalchemy import delete, exists, insert, select, update
+from sqlalchemy import Date, cast, delete, exists, func, insert, null, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +17,12 @@ from src.database.models import (
     ReceiptPhoto,
     Store,
     StoreProduct,
+)
+from src.database.read_models import (
+    CurrencyTotal,
+    HistoryPage,
+    HistoryRow,
+    StoreOption,
 )
 from src.domain.enums import ReceiptStatus
 from src.domain.receipt import Receipt
@@ -304,3 +311,115 @@ class SqlAlchemyReceiptRepository:
 
     async def _get_or_none(self, receipt_id: int | None) -> Receipt | None:
         return None if receipt_id is None else await self.get(receipt_id)
+
+    async def history(
+        self,
+        user_id: int,
+        year: int,
+        month: int,
+        timezone: str,
+        store_id: int | None = None,
+        offset: int = 0,
+        limit: int = 8,
+    ) -> HistoryPage:
+        """Four SELECTs, whatever the month's size: the rows, the counts (with the filter's store
+        name), the totals, the stores.
+
+        The month is `coalesce(purchased_at, received_at)` converted to `timezone` (a naive
+        local timestamp, compared with the month's naive local bounds), so a late-evening
+        purchase falls on the user's own day.
+        """
+        local = func.timezone(
+            timezone, func.coalesce(ReceiptRow.purchased_at, ReceiptPhoto.received_at)
+        )
+        start = datetime(year, month, 1)
+        end = datetime(year + (month == 12), month % 12 + 1, 1)
+        mine = (
+            ReceiptRow.user_id == user_id,
+            ReceiptRow.deleted_at.is_(None),
+        )
+        in_month = (*mine, local >= start, local < end)
+        shown = (*in_month, ReceiptRow.store_id == store_id) if store_id is not None else in_month
+        parsed = ReceiptRow.status == ReceiptStatus.PARSED.value
+        from_receipts = ReceiptRow.__table__.join(
+            ReceiptPhoto, ReceiptPhoto.receipt_id == ReceiptRow.id
+        )
+
+        found = await self._session.execute(
+            select(
+                ReceiptRow.id,
+                cast(local, Date),
+                Store.name,
+                ReceiptRow.total,
+                ReceiptRow.currency,
+                ReceiptRow.status,
+            )
+            .select_from(from_receipts.outerjoin(Store, Store.id == ReceiptRow.store_id))
+            .where(*shown)
+            .order_by(local.desc(), ReceiptRow.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        rows = [
+            HistoryRow(
+                receipt_id=receipt_id,
+                day=day,
+                store_name=store_name,
+                total=total,
+                currency=currency,
+                status=status,
+            )
+            for receipt_id, day, store_name, total, currency, status in found
+        ]
+
+        filter_name = (
+            select(Store.name)
+            .where(Store.id == store_id, Store.user_id == user_id)
+            .scalar_subquery()
+            if store_id is not None
+            else null()
+        )
+        total_rows, parsed_count, earlier, later, store_name = (
+            await self._session.execute(
+                select(
+                    func.count().filter(*shown),
+                    func.count().filter(*shown, parsed),
+                    func.coalesce(func.bool_or(local < start), False),
+                    func.coalesce(func.bool_or(local >= end), False),
+                    filter_name,
+                )
+                .select_from(from_receipts)
+                .where(*mine)
+            )
+        ).one()
+        sums = await self._session.execute(
+            select(ReceiptRow.currency, func.sum(ReceiptRow.total))
+            .select_from(from_receipts)
+            .where(*shown, parsed, ReceiptRow.currency.is_not(None), ReceiptRow.total.is_not(None))
+            .group_by(ReceiptRow.currency)
+            .order_by(ReceiptRow.currency)
+        )
+        month_stores = await self._session.execute(
+            select(Store.id, Store.name)
+            .where(
+                Store.user_id == user_id,
+                exists().where(
+                    ReceiptRow.store_id == Store.id,
+                    ReceiptPhoto.receipt_id == ReceiptRow.id,
+                    *in_month,
+                ),
+            )
+            .order_by(Store.name, Store.id)
+        )
+        return HistoryPage(
+            year=year,
+            month=month,
+            rows=rows,
+            total_rows=total_rows,
+            parsed_count=parsed_count,
+            totals=[CurrencyTotal(currency=c, amount=a) for c, a in sums],
+            stores=[StoreOption(store_id=i, name=n) for i, n in month_stores],
+            has_earlier=earlier,
+            has_later=later,
+            store_name=store_name,
+        )
