@@ -22,6 +22,13 @@ receipt-summary =
     Total: <b>{ $amount }</b>
     Payment: { $payment }
 receipt-category = Category: { $category }
+
+expense-title = 💸 <b>{ $payee }</b>
+expense-unknown-payee = Unknown payee
+expense-amount = Amount: <b>{ $amount }</b>
+expense-source = Paid with: { $source }
+expense-tags = Tags: { $tags }
+expense-payee-tag = #{ $tag }
 receipt-items = Items: { $items }
 receipt-store-tag = #{ $tag }
 receipt-unknown-store = Unknown store
