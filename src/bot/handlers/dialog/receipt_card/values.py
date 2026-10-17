@@ -45,3 +45,12 @@ def parse_value(kind: str | None, text: str, tz: ZoneInfo) -> Decimal | datetime
                 raise InvalidValue(text)
             return text
     raise InvalidValue(text)
+
+
+# The editable fields of an item and the input kind each is read as.
+ITEM_FIELD_KINDS = {
+    "name": "text",
+    "quantity": "number",
+    "unit_price": "number",
+    "line_total": "money",
+}

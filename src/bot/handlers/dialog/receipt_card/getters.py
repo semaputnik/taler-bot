@@ -9,8 +9,14 @@ from fluentogram import TranslatorRunner
 from src.bot import render
 from src.bot.handlers.dialog.media import StoredPhoto
 from src.bot.handlers.dialog.receipt_card.click_event import settle
-from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewDataKeys
+from src.bot.handlers.dialog.receipt_card.common import (
+    CATEGORIES,
+    DialogDataKeys,
+    PreviewDataKeys,
+)
 from src.bot.handlers.dialog.receipt_card.model import (
+    CategoriesPreview,
+    CategoryChoice,
     InputPreview,
     IssuePreview,
     ItemChoice,
@@ -19,6 +25,7 @@ from src.bot.handlers.dialog.receipt_card.model import (
     MainPreview,
     TallyPreview,
 )
+from src.bot.handlers.dialog.receipt_card.values import ITEM_FIELD_KINDS
 from src.services.container import Services
 from src.services.results import CurrentUser, IssueCard, ItemRow, ReceiptCard
 
@@ -76,7 +83,78 @@ async def item_getter(
     ref = dialog_manager.dialog_data.get(DialogDataKeys.ITEM_REF)
     row = next((r for r in rows if r.ref == ref), None)
     text = _item_text(row, i18n) if row is not None else i18n.get("item-gone")
-    return ItemPreview(text=text).to_data()
+    return ItemPreview(text=text, has_item=row is not None).to_data()
+
+
+async def _selected_item(
+    dialog_manager: DialogManager, services: Services, user: CurrentUser
+) -> ItemRow | None:
+    rows = await services.receipts.items(
+        user.id, dialog_manager.dialog_data[DialogDataKeys.RECEIPT_ID]
+    )
+    ref = dialog_manager.dialog_data.get(DialogDataKeys.ITEM_REF)
+    return next((r for r in rows if r.ref == ref), None)
+
+
+async def item_input_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The prompt for the item field being edited: label, hint, current value, error line."""
+    data = dialog_manager.dialog_data
+    row = await _selected_item(dialog_manager, services, user)
+    field = data.get(DialogDataKeys.EDIT_FIELD)
+    if row is None or field not in ITEM_FIELD_KINDS:
+        return InputPreview(text=i18n.get("item-gone")).to_data()
+    hint = i18n.get(f"input-hint-{ITEM_FIELD_KINDS[field]}")
+    lines = [
+        i18n.get(
+            "item-input-prompt",
+            field=i18n.get(f"field-{field.replace('_', '-')}"),
+            hint=hint,
+            value=_item_value(row, field, i18n),
+        )
+    ]
+    if data.get(DialogDataKeys.INPUT_ERROR):
+        lines += ["", i18n.get("issue-input-error", hint=hint)]
+    return InputPreview(text="\n".join(lines)).to_data()
+
+
+def _item_value(row: ItemRow, field: str, i18n: TranslatorRunner) -> str:
+    match field:
+        case "name":
+            return escape(row.readable_name)
+        case "quantity":
+            return render.quantity(row.quantity)
+        case "unit_price":
+            return render.money(row.unit_price, i18n, row.currency)
+        case _:
+            return render.money(row.line_total, i18n, row.currency)
+
+
+async def item_categories_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The category list with the item's current category marked."""
+    row = await _selected_item(dialog_manager, services, user)
+    if row is None:
+        return CategoriesPreview(text=i18n.get("item-gone"), categories=[]).to_data()
+    choices = []
+    for category in CATEGORIES:
+        label = i18n.get(f"category-{category.replace('_', '-')}")
+        if category == row.category:
+            label = i18n.get("category-current", name=label)
+        choices.append(CategoryChoice(id=category, text=label))
+    return CategoriesPreview(
+        text=i18n.get("item-category-prompt", name=escape(row.readable_name)), categories=choices
+    ).to_data()
 
 
 async def issue_getter(

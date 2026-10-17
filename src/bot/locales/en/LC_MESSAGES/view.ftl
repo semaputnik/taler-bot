@@ -65,6 +65,12 @@ category-personal-care = Personal care
 category-baby = Baby
 category-pet = Pet
 category-other = Other
+category-current = ✓ { $name }
+item-category-prompt = Pick the category for { $name }
+item-input-prompt =
+    Enter the { $field } ({ $hint })
+    { "" }
+    <b>Current value:</b> { $value }
 card-photo-unavailable = The photo could not be loaded.
 
 issue-title = ⚠️ <b>Issue { $position } of { $total }</b> { $icon }
@@ -85,6 +91,7 @@ field-discount-total = total discount
 field-tax-total = total tax
 field-method = payment method
 field-card-last4 = card ending
+field-name = name
 field-quantity = quantity
 field-unit-price = unit price
 field-reference-price = reference price

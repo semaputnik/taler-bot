@@ -7,7 +7,7 @@ from aiogram_dialog.widgets.kbd import Button, Select
 from fluentogram import TranslatorRunner
 
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys
-from src.bot.handlers.dialog.receipt_card.values import InvalidValue, parse_value
+from src.bot.handlers.dialog.receipt_card.values import ITEM_FIELD_KINDS, InvalidValue, parse_value
 from src.bot.states.receipt_card import ReceiptCardSG
 from src.exception import (
     InvalidEdit,
@@ -15,6 +15,7 @@ from src.exception import (
     InvalidReceiptTransition,
     ReceiptNotFound,
     UnknownIssue,
+    UnknownProduct,
 )
 from src.services.container import Services
 from src.services.results import CurrentUser, IssueCard
@@ -46,6 +47,89 @@ async def select_item(
         await query.answer(i18n.get("item-gone"), show_alert=True)
         return
     manager.dialog_data[DialogDataKeys.ITEM_REF] = rows[position].ref
+    manager.dialog_data[DialogDataKeys.PRODUCT_KEY] = rows[position].product_key
+    await manager.switch_to(ReceiptCardSG.item)
+
+
+def start_item_edit(field: str):
+    """The click handler that opens the entry window for one item field."""
+
+    async def handler(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+        manager.dialog_data[DialogDataKeys.EDIT_FIELD] = field
+        manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
+        await manager.switch_to(ReceiptCardSG.item_input)
+
+    return handler
+
+
+async def choose_category(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(ReceiptCardSG.item_category)
+
+
+async def back_to_item(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
+    await manager.switch_to(ReceiptCardSG.item)
+
+
+async def _is_open(services: Services, user_id: int, receipt_id: int) -> bool:
+    """False when the receipt was deleted meanwhile (catalog edits do not look at the receipt)."""
+    try:
+        return not (await services.receipts.card(user_id, receipt_id)).deleted
+    except ReceiptNotFound:
+        return False
+
+
+async def pick_category(
+    query: CallbackQuery, widget: Select, manager: DialogManager, item_id: str
+) -> None:
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    data = manager.dialog_data
+    if not await _is_open(services, user.id, data[DialogDataKeys.RECEIPT_ID]):
+        await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
+        await manager.switch_to(ReceiptCardSG.main)
+        return
+    try:
+        await services.catalog.set_category(user.id, data[DialogDataKeys.PRODUCT_KEY], item_id)
+    except InvalidEdit, UnknownProduct:
+        await query.answer(i18n.get("item-gone"), show_alert=True)
+    await manager.switch_to(ReceiptCardSG.item)
+
+
+async def on_item_value(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    """The user typed (or sent) a value for the item field. A text that parses goes to the
+    catalog (name) or to the receipt (numbers); anything else keeps the window with an error."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    data = manager.dialog_data
+    receipt_id = data[DialogDataKeys.RECEIPT_ID]
+    field = data[DialogDataKeys.EDIT_FIELD]
+    try:
+        if message.text is None:
+            raise InvalidValue("not a text")
+        value = parse_value(ITEM_FIELD_KINDS[field], message.text, ZoneInfo(user.timezone))
+        if field == "name":
+            if not await _is_open(services, user.id, receipt_id):
+                raise ReceiptNotFound(receipt_id)
+            await services.catalog.rename_product(
+                user.id, data[DialogDataKeys.PRODUCT_KEY], str(value)
+            )
+        else:
+            await services.receipts.edit_item(
+                user.id, receipt_id, data[DialogDataKeys.ITEM_REF], field, value
+            )
+    except InvalidValue, InvalidEdit:
+        data[DialogDataKeys.INPUT_ERROR] = True
+        return
+    except ReceiptNotFound, InvalidReceiptTransition:
+        await message.answer(i18n.get("card-deleted-alert"))
+        await manager.switch_to(ReceiptCardSG.main)
+        return
+    except UnknownProduct:
+        await message.answer(i18n.get("item-gone"))
+    data.pop(DialogDataKeys.INPUT_ERROR, None)
     await manager.switch_to(ReceiptCardSG.item)
 
 
