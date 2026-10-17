@@ -90,8 +90,8 @@ src/
     models/                # SQLAlchemy ORM; never leaves database/
     read_models.py         # HistoryPage, SpendingPeriod, …: screen-shaped query results (re-exported by services)
     dto/                   # UserDTO / NewUserDTO (the user repository's plain-data types)
-    interfaces/            # Protocols for the UoW and the three repositories (typing)
-    repositories/          # one per aggregate: ReceiptRepository, CatalogRepository, UserRepository
+    interfaces/            # Protocols for the UoW and the four repositories (typing)
+    repositories/          # one per aggregate: ReceiptRepository, ExpenseRepository, CatalogRepository, UserRepository
     mapping/               # ORM rows ↔ domain aggregates (the only place both are known)
     uow/                   # SqlAlchemyUnitOfWork
   services/                # application services: one class per entity, action methods
@@ -109,7 +109,8 @@ src/
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
     parse.py               # Parse, ParsedItem, ParsedIssue, ParseOutcome (value objects)
     edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
-    catalog.py             # Catalog aggregate: Store, Product; rename_product, set_category
+    expense.py             # Expense aggregate (ADR-0003): from_receipt, sync_with_receipt, set_*, tags
+    catalog.py             # Catalog aggregate: Payee, PaymentSource, Product; ensure_card, cash, rename_*
 alembic/                   # migrations (alembic.ini at the repo root)
 Dockerfile, .dockerignore  # the production image (see Deploy)
 docker-compose.prod.yml    # production stack; docker-compose.yml is dev-only
@@ -133,8 +134,11 @@ the history dialog.
     issues and edits; `receipt.apply_parse(parse)` sets or replaces the parse, rebuilds
     the header, items and issues, applies the edits and reports released products.
     `record_edit`, `mark_failed`, `soft_delete` keep the same invariants. Nothing outside the aggregate
-    changes its parts. `Catalog` (stores and products) is a second aggregate: it outlives
-    receipts and is edited by hand.
+    changes its parts. `Expense` (ADR-0003) is the root of what the bot keeps: one outflow
+    with amount, day, payee, payment source, category and tags, and optionally the receipt it
+    was read from; it mirrors that receipt's header (`sync_with_receipt`) and refuses direct
+    edits of the mirrored facts. `Catalog` (payees, payment sources and products) is a third
+    aggregate: it outlives receipts and is edited by hand.
   - **Domain services** (planned) are the few stateless operations that fit no entity:
     `normalize` (raw LLM output → `Parse`, including the receipt key).
   - No DB, network or filesystem access. Tested with plain unit tests on the objects,
@@ -146,7 +150,7 @@ the history dialog.
   - **One repository per aggregate**, never per table. `uow.receipts.get(id)` returns a
     whole `Receipt`; `uow.receipts.save(receipt)` writes every table it spans. The
     ORM ↔ aggregate mapping lives in `database/mapping/`.
-  - Use `async with uow:` to get repositories (`uow.receipts`, `uow.catalog`, `uow.users`).
+  - Use `async with uow:` to get repositories (`uow.receipts`, `uow.expenses`, `uow.catalog`, `uow.users`).
   - Commit only explicitly with `await uow.commit()`. Leaving the block without a
     commit rolls back.
   - Repositories never commit and never return ORM objects.
@@ -290,7 +294,8 @@ refuses the id, and shows a notice if the bytes are unreadable.
 
 Every table is reached through the Unit of Work (`async with uow:`) and one repository per
 aggregate (ADR-0001): `uow.receipts` (receipt + photo, parse, items, issues, edits),
-`uow.catalog` (stores, products), `uow.users`. Protocols in
+`uow.expenses` (expense + tags; ADR-0003), `uow.catalog` (payees, payment sources, products),
+`uow.users`. Protocols in
 `src/database/interfaces/`, implementations in `src/database/repositories/`. Repositories
 have only the methods the code and tests need today; add more when a service needs them.
 Tests never import ORM models.
@@ -307,7 +312,26 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   set or replaced. **These rules are enforced by the `Receipt` aggregate, not by
   repositories or services**; the DB constraints are the second line of defence.
 - Product name and category edits go to `store_products`, never to `receipt_edits`.
-  A parse never overwrites `store_products` or `stores.name`.
+  A parse never overwrites `store_products` or `payees.name`.
+- ADR-0003 tables. `payees` (was `stores`: `payee_key`, and `payee_id` on `receipts` and
+  `store_products`) are whoever received money; a payee with products is a store.
+  `payment_sources` are a user's cards (unique `(user_id, last4)`) and their one cash source
+  (partial unique index on `kind = 'cash'`). `expenses` hold `amount >= 0`, `currency`,
+  `spent_at` (the user's local day), `payee_id`, `payment_source_id` (both `SET NULL`),
+  `category` (`ExpenseCategory` CHECK), `receipt_id` (unique, at most one expense per
+  receipt) and `deleted_at`. `tags` (unique `(user_id, name)`) link through `expense_tags`.
+- **Mirror rule: an expense from a receipt follows the receipt header.** Amount (0.00 when the
+  total is unreadable), currency, local day, payee and payment source are copied from the
+  header by `Expense.sync_with_receipt`; the category and the tags are the user's own and a
+  receipt never touches them. This is enforced by the `Expense` aggregate; the service that
+  changes a receipt header saves the expense in the same Unit of Work. `receipts.card_brand`
+  and `card_last4` stay as what was printed.
+- `Catalog.payment_sources` is keyed by id; a source not yet stored sits under a temporary key
+  (`"cash"`, `"card:<last4>"`) until `CatalogRepository.save` assigns its id. Read `source.id`
+  after saving the catalog.
+- The expense migration (`a3c91d5e7b42`) creates one expense per receipt (every status),
+  a cash source per user with a card-less receipt and a card per distinct `(user, last4)`
+  (most frequent brand). It is tested on a seeded database in `tests/test_expense_migration.py`.
 - `ReceiptRepository.history(user_id, year, month, timezone, store_id, offset, limit)` is the
   month read model (`HistoryPage`, `HistoryRow`, `CurrencyTotal`, `StoreOption` in
   `database/read_models.py`, re-exported by `services/results.py`): four SELECTs whatever the
@@ -446,7 +470,7 @@ retried and must not break the pipeline.
 |---|---|---|
 | `telegram_whitelist` | `userId` (string), `name` | `users.is_allowed` |
 | `receipt_payments` | one row per photo. Status: `pending → storing → parsed`, or `failed` / `not_receipt` / `duplicate`. Holds `rawJson`, `model`, `parserVersion`, Drive ids | `receipts` + `receipt_parses` + `receipt_photos` |
-| `store_products` | catalogue per store, keyed by `productKey` | `store_products` (+ `stores`) |
+| `store_products` | catalogue per store, keyed by `productKey` | `store_products` (+ `payees`, ex-`stores`) |
 | `product_prices` | price history, one row per receipt line | `receipt_items` |
 | `receipt_issues` | model and workflow notes, used to improve the prompt | `receipt_issues` |
 

@@ -2,31 +2,43 @@
 
 from collections.abc import Iterable
 
-from src.database.models import Store as StoreRow
+from src.database.models import Payee as PayeeRow
+from src.database.models import PaymentSource as SourceRow
 from src.database.models import StoreProduct as ProductRow
-from src.domain.catalog import Catalog, Product, Store
-from src.domain.enums import ProductCategory
+from src.domain.catalog import Catalog, Payee, PaymentSource, Product
+from src.domain.enums import PaymentSourceKind, ProductCategory
 
 
 def to_catalog(
-    user_id: int, store_rows: Iterable[StoreRow], product_rows: Iterable[ProductRow]
+    user_id: int,
+    payee_rows: Iterable[PayeeRow],
+    source_rows: Iterable[SourceRow],
+    product_rows: Iterable[ProductRow],
 ) -> Catalog:
     catalog = Catalog(user_id=user_id)
-    key_by_store_id: dict[int, str] = {}
-    for row in store_rows:
-        key_by_store_id[row.id] = row.store_key
-        catalog.stores[row.store_key] = Store(
+    key_by_payee_id: dict[int, str] = {}
+    for row in payee_rows:
+        key_by_payee_id[row.id] = row.payee_key
+        catalog.payees[row.payee_key] = Payee(
             id=row.id,
-            store_key=row.store_key,
+            payee_key=row.payee_key,
             name=row.name,
             legal_name=row.legal_name,
             tax_id=row.tax_id,
             address=row.address,
         )
+    for source in source_rows:
+        catalog.payment_sources[source.id] = PaymentSource(
+            id=source.id,
+            kind=PaymentSourceKind(source.kind),
+            name=source.name,
+            brand=source.brand,
+            last4=source.last4,
+        )
     for row in product_rows:
         catalog.products[row.product_key] = Product(
             id=row.id,
-            store_key=key_by_store_id[row.store_id],
+            payee_key=key_by_payee_id[row.payee_id],
             product_key=row.product_key,
             name_raw=row.name_raw,
             name=row.name,
@@ -37,21 +49,31 @@ def to_catalog(
     return catalog
 
 
-def to_store_row(user_id: int, store: Store) -> StoreRow:
-    return StoreRow(
+def to_payee_row(user_id: int, payee: Payee) -> PayeeRow:
+    return PayeeRow(
         user_id=user_id,
-        store_key=store.store_key,
-        name=store.name,
-        legal_name=store.legal_name,
-        tax_id=store.tax_id,
-        address=store.address,
+        payee_key=payee.payee_key,
+        name=payee.name,
+        legal_name=payee.legal_name,
+        tax_id=payee.tax_id,
+        address=payee.address,
     )
 
 
-def to_product_row(user_id: int, store_id: int, product: Product) -> ProductRow:
+def to_source_row(user_id: int, source: PaymentSource) -> SourceRow:
+    return SourceRow(
+        user_id=user_id,
+        kind=str(source.kind),  # the database CHECK decides what is valid
+        name=source.name,
+        brand=source.brand,
+        last4=source.last4,
+    )
+
+
+def to_product_row(user_id: int, payee_id: int, product: Product) -> ProductRow:
     return ProductRow(
         user_id=user_id,
-        store_id=store_id,
+        payee_id=payee_id,
         product_key=product.product_key,
         name_raw=product.name_raw,
         name=product.name,

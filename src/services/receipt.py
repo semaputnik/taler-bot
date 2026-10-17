@@ -541,7 +541,7 @@ def _register(catalog: Catalog, receipt: Receipt) -> None:
     parse = receipt.parse
     if parse is None or not parse.is_receipt or parse.store_key is None:
         return
-    catalog.ensure_store(
+    catalog.ensure_payee(
         parse.store_key,
         parse.store_name or parse.store_key,
         parse.store_legal_name,
@@ -564,7 +564,7 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
     header = receipt.header
     store_name = None
     if header.store_key is not None:
-        store = (await uow.catalog.get(receipt.user_id)).stores.get(header.store_key)
+        store = (await uow.catalog.get(receipt.user_id)).payees.get(header.store_key)
         store_name = store.name if store is not None else None
     assert receipt.id is not None
     return ReceiptCard(

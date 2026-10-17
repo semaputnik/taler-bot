@@ -5,15 +5,16 @@ from src.database.models.base import Base, Timestamps, enum_check
 from src.domain.enums import ProductCategory
 
 
-class Store(Timestamps, Base):
-    """A shop, keyed per user by the slug of its trading name. `name` may be edited by hand."""
+class Payee(Timestamps, Base):
+    """Whoever received money, keyed per user by the slug of its name (ADR-0003). A payee with
+    products is a store. `name` may be edited by hand. Was `stores`."""
 
-    __tablename__ = "stores"
-    __table_args__ = (UniqueConstraint("user_id", "store_key"),)
+    __tablename__ = "payees"
+    __table_args__ = (UniqueConstraint("user_id", "payee_key"),)
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    store_key: Mapped[str]
+    payee_key: Mapped[str]
     name: Mapped[str]
     legal_name: Mapped[str | None]
     tax_id: Mapped[str | None]
@@ -21,7 +22,7 @@ class Store(Timestamps, Base):
 
 
 class StoreProduct(Timestamps, Base):
-    """Per-store product catalogue, keyed by `store_key::slug(printed line text)`.
+    """Per-payee product catalogue, keyed by `payee_key::slug(printed line text)`.
 
     Created on first purchase and never overwritten by a parse, so `name` and `category`
     are safe to edit by hand.
@@ -36,7 +37,7 @@ class StoreProduct(Timestamps, Base):
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    store_id: Mapped[int] = mapped_column(ForeignKey("stores.id", ondelete="CASCADE"), index=True)
+    payee_id: Mapped[int] = mapped_column(ForeignKey("payees.id", ondelete="CASCADE"), index=True)
     product_key: Mapped[str]
     name: Mapped[str]
     name_raw: Mapped[str]

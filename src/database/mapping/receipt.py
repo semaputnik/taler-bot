@@ -50,13 +50,13 @@ _HEADER_COLUMNS = (
 )
 
 
-def receipt_values(receipt: Receipt, *, store_id: int | None) -> dict[str, Any]:
+def receipt_values(receipt: Receipt, *, payee_id: int | None) -> dict[str, Any]:
     """The `receipts` row of the aggregate (everything but its own id and timestamps)."""
     return {
         "user_id": receipt.user_id,
         "status": receipt.status.value,
         "duplicate_of_id": receipt.duplicate_of_id,
-        "store_id": store_id,
+        "payee_id": payee_id,
         "error_message": receipt.error_message,
         "deleted_at": receipt.deleted_at,
         **{column: getattr(receipt.header, column) for column in _HEADER_COLUMNS},

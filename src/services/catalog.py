@@ -41,7 +41,7 @@ class CatalogService:
 def _card(product: Product) -> ProductCard:
     return ProductCard(
         product_key=product.product_key,
-        store_key=product.store_key,
+        store_key=product.payee_key,
         printed_name=product.name_raw,
         name=product.name,
         category=str(product.category),

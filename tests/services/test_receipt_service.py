@@ -719,7 +719,7 @@ async def test_another_users_store_id_yields_an_empty_page(service, make_uow):
     await bought_on(make_uow, 1, datetime(2026, 10, 10, 12, tzinfo=UTC))
     await bought_on(make_uow, 2, datetime(2026, 10, 10, 12, tzinfo=UTC), user_id=2)
     async with make_uow() as uow:
-        theirs = (await uow.catalog.get(2)).stores["mercadona"].id
+        theirs = (await uow.catalog.get(2)).payees["mercadona"].id
 
     page = await service.history(1, 2026, 10, store_id=theirs)
 

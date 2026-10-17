@@ -645,7 +645,7 @@ async def october(make_uow: MakeUow, **kwargs):
 
 async def store_id_of(make_uow: MakeUow, key: str) -> int:
     async with make_uow() as uow:
-        return (await uow.catalog.get(1)).stores[key].id
+        return (await uow.catalog.get(1)).payees[key].id
 
 
 async def test_a_receipt_lands_in_the_month_of_its_purchase_date(make_uow):

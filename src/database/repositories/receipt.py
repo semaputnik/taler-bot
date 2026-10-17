@@ -8,16 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.mapping import receipt as mapping
 from src.database.models import (
-    Receipt as ReceiptRow,
-)
-from src.database.models import (
+    Payee,
     ReceiptEdit,
     ReceiptIssue,
     ReceiptItem,
     ReceiptParse,
     ReceiptPhoto,
-    Store,
     StoreProduct,
+)
+from src.database.models import (
+    Receipt as ReceiptRow,
 )
 from src.database.read_models import (
     Amount,
@@ -51,8 +51,8 @@ class SqlAlchemyReceiptRepository:
         """The whole aggregate, soft-deleted included: one query per table, 6 at most."""
         found = (
             await self._session.execute(
-                select(ReceiptRow, Store.store_key)
-                .outerjoin(Store, Store.id == ReceiptRow.store_id)
+                select(ReceiptRow, Payee.payee_key)
+                .outerjoin(Payee, Payee.id == ReceiptRow.payee_id)
                 .where(ReceiptRow.id == receipt_id)
                 .execution_options(populate_existing=True)
             )
@@ -106,7 +106,7 @@ class SqlAlchemyReceiptRepository:
 
     async def add(self, receipt: Receipt) -> Receipt:
         """Insert a new receipt with all its parts; sets the ids on it and its parts."""
-        values = mapping.receipt_values(receipt, store_id=await self._store_id(receipt))
+        values = mapping.receipt_values(receipt, payee_id=await self._payee_id(receipt))
         receipt.id = (
             await self._session.execute(
                 insert(ReceiptRow).values(**values).returning(ReceiptRow.id)
@@ -124,11 +124,11 @@ class SqlAlchemyReceiptRepository:
         New edits are appended.
         """
         assert receipt.id is not None
-        store_id = await self._store_id(receipt)
+        payee_id = await self._payee_id(receipt)
         await self._session.execute(
             update(ReceiptRow)
             .where(ReceiptRow.id == receipt.id)
-            .values(**mapping.receipt_values(receipt, store_id=store_id))
+            .values(**mapping.receipt_values(receipt, payee_id=payee_id))
         )
         await self._write_parts(receipt, new=False)
 
@@ -148,13 +148,13 @@ class SqlAlchemyReceiptRepository:
         await self._insert_edits(receipt)
         receipt.mark_saved()
 
-    async def _store_id(self, receipt: Receipt) -> int | None:
-        """The receipt's store row, or None when the catalog has not got it (yet)."""
+    async def _payee_id(self, receipt: Receipt) -> int | None:
+        """The receipt's payee row, or None when the catalog has not got it (yet)."""
         key = receipt.header.store_key
         if key is None:
             return None
         return await self._session.scalar(
-            select(Store.id).where(Store.user_id == receipt.user_id, Store.store_key == key)
+            select(Payee.id).where(Payee.user_id == receipt.user_id, Payee.payee_key == key)
         )
 
     async def _insert_photo(self, receipt: Receipt) -> None:
@@ -344,7 +344,7 @@ class SqlAlchemyReceiptRepository:
             ReceiptRow.deleted_at.is_(None),
         )
         in_month = (*mine, local >= start, local < end)
-        shown = (*in_month, ReceiptRow.store_id == store_id) if store_id is not None else in_month
+        shown = (*in_month, ReceiptRow.payee_id == store_id) if store_id is not None else in_month
         parsed = ReceiptRow.status == ReceiptStatus.PARSED.value
         from_receipts = ReceiptRow.__table__.join(
             ReceiptPhoto, ReceiptPhoto.receipt_id == ReceiptRow.id
@@ -354,12 +354,12 @@ class SqlAlchemyReceiptRepository:
             select(
                 ReceiptRow.id,
                 cast(local, Date),
-                Store.name,
+                Payee.name,
                 ReceiptRow.total,
                 ReceiptRow.currency,
                 ReceiptRow.status,
             )
-            .select_from(from_receipts.outerjoin(Store, Store.id == ReceiptRow.store_id))
+            .select_from(from_receipts.outerjoin(Payee, Payee.id == ReceiptRow.payee_id))
             .where(*shown)
             .order_by(local.desc(), ReceiptRow.id.desc())
             .offset(offset)
@@ -378,8 +378,8 @@ class SqlAlchemyReceiptRepository:
         ]
 
         filter_name = (
-            select(Store.name)
-            .where(Store.id == store_id, Store.user_id == user_id)
+            select(Payee.name)
+            .where(Payee.id == store_id, Payee.user_id == user_id)
             .scalar_subquery()
             if store_id is not None
             else null()
@@ -405,16 +405,16 @@ class SqlAlchemyReceiptRepository:
             .order_by(ReceiptRow.currency)
         )
         month_stores = await self._session.execute(
-            select(Store.id, Store.name)
+            select(Payee.id, Payee.name)
             .where(
-                Store.user_id == user_id,
+                Payee.user_id == user_id,
                 exists().where(
-                    ReceiptRow.store_id == Store.id,
+                    ReceiptRow.payee_id == Payee.id,
                     ReceiptPhoto.receipt_id == ReceiptRow.id,
                     *in_month,
                 ),
             )
-            .order_by(Store.name, Store.id)
+            .order_by(Payee.name, Payee.id)
         )
         return HistoryPage(
             year=year,
@@ -470,11 +470,11 @@ class SqlAlchemyReceiptRepository:
             )
 
         shops = await self._session.execute(
-            select(ReceiptRow.currency, ReceiptRow.store_id, func.max(Store.name), value)
+            select(ReceiptRow.currency, ReceiptRow.payee_id, func.max(Payee.name), value)
             .select_from(ReceiptRow)
-            .outerjoin(Store, Store.id == ReceiptRow.store_id)
+            .outerjoin(Payee, Payee.id == ReceiptRow.payee_id)
             .where(*counted)
-            .group_by(ReceiptRow.currency, ReceiptRow.store_id)
+            .group_by(ReceiptRow.currency, ReceiptRow.payee_id)
         )
         stores: dict[str, list[Amount]] = {}
         for currency, store_id, name, amount in shops:

@@ -61,7 +61,7 @@ async def seed_catalog(
         for bought in parses:
             if bought.store_key is None:
                 continue
-            catalog.ensure_store(bought.store_key, bought.store_name or bought.store_key)
+            catalog.ensure_payee(bought.store_key, bought.store_name or bought.store_key)
             for item in bought.items:
                 catalog.ensure_product(
                     bought.store_key,
@@ -73,7 +73,7 @@ async def seed_catalog(
                 )
         await uow.catalog.save(catalog)
         await uow.commit()
-    stores = {key: store.id for key, store in catalog.stores.items() if store.id is not None}
+    stores = {key: store.id for key, store in catalog.payees.items() if store.id is not None}
     products = {key: p.id for key, p in catalog.products.items() if p.id is not None}
     return stores, products
 

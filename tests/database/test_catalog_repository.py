@@ -2,22 +2,25 @@
 
 import pytest
 
-from src.domain.catalog import Catalog
-from src.domain.enums import ProductCategory
+from src.domain.catalog import Catalog, PaymentSource
+from src.domain.enums import PaymentSourceKind, ProductCategory
 from src.domain.receipt import Receipt
-from src.exception import CheckViolationError, ForeignKeyViolationError
+from src.exception import CheckViolationError, ForeignKeyViolationError, UniqueViolationError
 from tests.domain.builders import parse, photo, product
 from tests.helpers import MakeUow, add_receipt, add_user, seed_catalog, seed_purchase
 
 
 def stocked_catalog() -> Catalog:
     catalog = Catalog(user_id=1)
-    catalog.ensure_store("mercadona", "Mercadona", legal_name="Mercadona, S.A.", tax_id="A-1")
-    catalog.ensure_store("lidl", "Lidl")
+    catalog.ensure_payee("mercadona", "Mercadona", legal_name="Mercadona, S.A.", tax_id="A-1")
+    catalog.ensure_payee("lidl", "Lidl")
     catalog.ensure_product(
         "mercadona", "mercadona::leche", "LECHE ENTERA", "Whole milk", ProductCategory.DAIRY, "l"
     )
     catalog.ensure_product("lidl", "lidl::pan", "PAN", "Bread", ProductCategory.BAKERY, "pcs")
+    catalog.ensure_payee("landlord", "Landlord")  # a payee without products
+    catalog.ensure_card("VISA", "0848")
+    catalog.cash()
     return catalog
 
 
@@ -37,7 +40,9 @@ async def test_a_saved_catalog_loads_equal(make_uow: MakeUow) -> None:
     async with make_uow() as uow:
         loaded = await uow.catalog.get(1)
     assert loaded == catalog  # ids were assigned to the saved aggregate
-    assert all(store.id is not None for store in loaded.stores.values())
+    assert all(payee.id is not None for payee in loaded.payees.values())
+    assert all(source.id is not None for source in loaded.payment_sources.values())
+    assert set(loaded.payment_sources) == {s.id for s in loaded.payment_sources.values()}
     assert all(product.id is not None for product in loaded.products.values())
 
 
@@ -80,7 +85,7 @@ async def test_save_persists_a_renamed_and_a_recategorized_product_and_nothing_e
         loaded = await uow.catalog.get(1)
     milk = loaded.products["mercadona::leche"]
     assert (milk.name, milk.category) == ("Oat milk", ProductCategory.DRINKS)
-    assert (milk.name_raw, milk.unit, milk.store_key) == ("LECHE ENTERA", "l", "mercadona")
+    assert (milk.name_raw, milk.unit, milk.payee_key) == ("LECHE ENTERA", "l", "mercadona")
     bread = loaded.products["lidl::pan"]
     assert (bread.name, bread.category) == ("Bread", ProductCategory.BAKERY)
 
@@ -138,7 +143,7 @@ async def test_product_used_by_an_item_cannot_be_removed(make_uow: MakeUow) -> N
 async def test_unknown_product_category_is_rejected(make_uow: MakeUow) -> None:
     await add_user(make_uow)
     catalog = Catalog(user_id=1)
-    catalog.ensure_store("lidl", "Lidl")
+    catalog.ensure_payee("lidl", "Lidl")
     catalog.ensure_product("lidl", "lidl::pan", "PAN", "Pan", "bread", "pcs")  # type: ignore[arg-type]
     async with make_uow() as uow:
         with pytest.raises(CheckViolationError):
@@ -164,3 +169,125 @@ async def test_deleting_a_user_removes_their_catalog(make_uow: MakeUow) -> None:
 
     async with make_uow() as uow:
         assert await uow.catalog.get(1) == Catalog(user_id=1)
+
+
+async def test_payees_without_products_and_payment_sources_round_trip(make_uow: MakeUow) -> None:
+    await add_user(make_uow)
+    async with make_uow() as uow:
+        saved = stocked_catalog()
+        await uow.catalog.save(saved)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        loaded = await uow.catalog.get(1)
+    assert loaded.payees["landlord"].name == "Landlord"
+    assert not loaded.has_catalog("landlord")
+    assert loaded.has_catalog("lidl")
+    [card] = [s for s in loaded.payment_sources.values() if s.kind is PaymentSourceKind.CARD]
+    assert (card.name, card.brand, card.last4) == ("VISA •0848", "VISA", "0848")
+    assert loaded.cash().id is not None
+    assert loaded.ensure_card("MASTERCARD", "0848") is card
+
+
+async def test_saving_assigns_ids_to_new_sources_and_rekeys_them(make_uow: MakeUow) -> None:
+    await add_user(make_uow)
+    catalog = Catalog(user_id=1)
+    card = catalog.ensure_card("VISA", "0848")
+    cash = catalog.cash()
+    assert set(catalog.payment_sources) == {"card:0848", "cash"}
+    async with make_uow() as uow:
+        await uow.catalog.save(catalog)
+
+    assert card.id is not None and cash.id is not None
+    assert catalog.payment_sources == {card.id: card, cash.id: cash}
+
+
+async def test_a_renamed_source_is_saved_by_id(make_uow: MakeUow) -> None:
+    await add_user(make_uow)
+    async with make_uow() as uow:
+        await uow.catalog.save(stocked_catalog())
+        await uow.commit()
+    async with make_uow() as uow:
+        catalog = await uow.catalog.get(1)
+        card = catalog.ensure_card(None, "0848")
+        assert card.id is not None
+        catalog.rename_source(card.id, "Joint card")
+        await uow.catalog.save(catalog)
+        assert catalog.renamed_sources == ()
+        await uow.commit()
+
+    async with make_uow() as uow:
+        loaded = await uow.catalog.get(1)
+    assert loaded.ensure_card(None, "0848").name == "Joint card"
+    assert loaded.cash().name == "Cash"
+
+
+async def test_a_new_source_renamed_before_the_first_save_is_saved_with_the_name(
+    make_uow: MakeUow,
+) -> None:
+    await add_user(make_uow)
+    catalog = Catalog(user_id=1)
+    catalog.ensure_card("VISA", "0848")
+    catalog.rename_source("card:0848", "Joint card")
+    async with make_uow() as uow:
+        await uow.catalog.save(catalog)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        assert (await uow.catalog.get(1)).ensure_card(None, "0848").name == "Joint card"
+
+
+async def test_a_user_has_one_card_per_ending_and_one_cash_source(make_uow: MakeUow) -> None:
+    await add_user(make_uow)
+    async with make_uow() as uow:
+        await uow.catalog.save(stocked_catalog())
+        await uow.commit()
+    twin = Catalog(user_id=1)
+    twin.payment_sources["x"] = PaymentSource(
+        kind=PaymentSourceKind.CARD, name="Again", brand="VISA", last4="0848"
+    )
+    second_cash = Catalog(user_id=1)
+    second_cash.payment_sources["x"] = PaymentSource(kind=PaymentSourceKind.CASH, name="Wallet")
+
+    async with make_uow() as uow:
+        with pytest.raises(UniqueViolationError):
+            await uow.catalog.save(twin)
+    async with make_uow() as uow:
+        with pytest.raises(UniqueViolationError):
+            await uow.catalog.save(second_cash)
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        PaymentSource(kind=PaymentSourceKind.CARD, name="No digits"),
+        PaymentSource(kind=PaymentSourceKind.CASH, name="Cash with digits", last4="1234"),
+        PaymentSource(kind=PaymentSourceKind.CARD, name="Short", last4="12"),
+        PaymentSource(kind="wallet", name="Unknown kind"),  # type: ignore[arg-type]
+    ],
+    ids=["card-without-last4", "cash-with-last4", "short-last4", "unknown-kind"],
+)
+async def test_the_database_refuses_a_malformed_source(make_uow: MakeUow, source) -> None:
+    await add_user(make_uow)
+    catalog = Catalog(user_id=1)
+    catalog.payment_sources["x"] = source
+    async with make_uow() as uow:
+        with pytest.raises(CheckViolationError):
+            await uow.catalog.save(catalog)
+
+
+async def test_two_users_may_use_the_same_card_ending_and_each_has_cash(make_uow: MakeUow) -> None:
+    await add_user(make_uow, 1)
+    await add_user(make_uow, 2)
+    for user_id in (1, 2):
+        catalog = Catalog(user_id=user_id)
+        catalog.ensure_card("VISA", "0848")
+        catalog.cash()
+        async with make_uow() as uow:
+            await uow.catalog.save(catalog)
+            await uow.commit()
+
+    async with make_uow() as uow:
+        first, second = await uow.catalog.get(1), await uow.catalog.get(2)
+    assert set(first.payment_sources).isdisjoint(second.payment_sources)
+    assert len(first.payment_sources) == len(second.payment_sources) == 2
