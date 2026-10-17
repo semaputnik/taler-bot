@@ -1,5 +1,6 @@
 from typing import Protocol
 
+from src.database.read_models import HistoryPage
 from src.domain.receipt import Receipt
 
 
@@ -33,3 +34,20 @@ class ReceiptRepository(Protocol):
         ...
 
     async def photo_exists(self, user_id: int, telegram_file_unique_id: str) -> bool: ...
+
+    async def history(
+        self,
+        user_id: int,
+        year: int,
+        month: int,
+        timezone: str,
+        store_id: int | None = None,
+        offset: int = 0,
+        limit: int = 8,
+    ) -> HistoryPage:
+        """One page of the user's not deleted receipts of a month, newest first.
+
+        A receipt belongs to the month of `coalesce(purchased_at, photo.received_at)` in the
+        IANA time zone `timezone`. A fixed number of statements, whatever the month's size.
+        """
+        ...
