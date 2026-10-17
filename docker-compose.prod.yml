@@ -1,0 +1,62 @@
+# Production stack. Copy it to the server next to a `.env` made from `.env.prod.template`.
+# Nothing is published on the host: Postgres and Redis are reachable only inside the compose network.
+# See docs/deploy.md.
+x-bot-image: &bot-image ghcr.io/semaputnik/taler-bot:${TALER_TAG:-latest}
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: taler
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: taler
+    volumes:
+      - ${DATA_DIR:?set DATA_DIR in .env}/postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U taler -d taler"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:8
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ${DATA_DIR}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  migrate:
+    image: *bot-image
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    environment:
+      # Compose interpolates here (it does not inside env_file values).
+      DATABASE__URL: postgresql+asyncpg://taler:${POSTGRES_PASSWORD}@postgres:5432/taler
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  bot:
+    image: *bot-image
+    restart: unless-stopped
+    stop_signal: SIGINT
+    stop_grace_period: 30s
+    # Secrets and settings from the server's `.env`; the fixed wiring below wins over it.
+    env_file: .env
+    environment:
+      DATABASE__URL: postgresql+asyncpg://taler:${POSTGRES_PASSWORD}@postgres:5432/taler
+      REDIS__URL: redis://redis:6379/0
+      STORAGE__RECEIPTS_DIR: /data/receipts
+    volumes:
+      - ${DATA_DIR}/receipts:/data/receipts
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy

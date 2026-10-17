@@ -111,6 +111,10 @@ src/
     edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
     catalog.py             # Catalog aggregate: Store, Product; rename_product, set_category
 alembic/                   # migrations (alembic.ini at the repo root)
+Dockerfile, .dockerignore  # the production image (see Deploy)
+docker-compose.prod.yml    # production stack; docker-compose.yml is dev-only
+.env.prod.template         # the server's .env
+docs/deploy.md             # runbook: install, deploy, rollback, backup, tokens
 .env.template, .env        # settings template (committed) and local values (git-ignored)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```
@@ -346,6 +350,27 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   `ForeignKeyViolationError` (also RESTRICT), `CheckViolationError`, `DataViolationError`
   (SQLSTATE class 22) or `DatabaseException`. Repositories carry no wrappers. A test engine
   must call `install_error_translation` too.
+
+### Deploy
+
+Full runbook: [docs/deploy.md](docs/deploy.md).
+
+- `Dockerfile`: two stages on `python:3.14-slim`; uv is copied from a pinned `ghcr.io/astral-sh/uv`
+  image and installs the locked, non-dev dependencies (`--frozen`). The image holds only the
+  venv, `src/`, `alembic/` and `alembic.ini` (the prompt and `.ftl` files are inside `src/`), and
+  runs as user `app` (uid 1000). `.dockerignore` excludes everything else.
+- `docker-compose.prod.yml`: `postgres`, `redis`, one-shot `migrate` (`alembic upgrade head`) and
+  `bot` (starts only after `migrate` succeeded; `stop_signal: SIGINT`, grace period 30 s). No
+  ports are published. All data is in bind mounts under `DATA_DIR` (`postgres/`, `redis/`,
+  `receipts/`; `receipts/` must be writable for uid 1000).
+- Secrets live only in the server's `.env` (from `.env.prod.template`), never in the image.
+  Compose does not interpolate `${...}` inside `env_file` values, so the compose file builds
+  `DATABASE__URL` from `${POSTGRES_PASSWORD}` in `environment:`, and also fixes `REDIS__URL` and
+  `STORAGE__RECEIPTS_DIR`.
+- The image is built by CI on a green `main` and published to `ghcr.io/semaputnik/taler-bot`
+  (`latest`, `sha-<short>`). A deploy is `docker compose pull && docker compose up -d`; a rollback
+  pins `TALER_TAG`.
+- Production and development use different bots: one token has one polling consumer.
 
 ### Photo storage
 
