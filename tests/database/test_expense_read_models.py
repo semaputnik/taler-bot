@@ -492,6 +492,23 @@ async def test_not_itemised_is_what_receipt_expenses_spent_beyond_their_item_lin
     assert sum(a.value for a in block.products) + block.not_itemised == D("26.50")
 
 
+async def test_a_receipt_without_a_total_adds_no_product_lines_so_not_itemised_stays_sound(
+    make_uow,
+):
+    await bought(make_uow, at(2), (ProductCategory.DAIRY, "5.00"), total="5.00")
+    unknown = await bought(make_uow, at(3), (ProductCategory.MEAT, "9.00"), store="other")
+    async with make_uow() as uow:
+        expense = await uow.expenses.find_by_receipt(unknown.id)
+        expense.amount = D("0.00")
+        await uow.expenses.save(expense)
+        await uow.commit()
+
+    block = only_block(await october_spending(make_uow))
+
+    assert [(a.key, a.value) for a in block.products] == [("dairy", D("5.00"))]
+    assert (block.total, block.expense_count, block.not_itemised) == (D("5.00"), 2, D("0.00"))
+
+
 async def test_spending_products_follow_the_catalog_at_query_time(make_uow):
     await bought(make_uow, at(2), (ProductCategory.DAIRY, "5.00"))
     async with make_uow() as uow:

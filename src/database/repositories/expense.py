@@ -203,7 +203,9 @@ class SqlAlchemyExpenseRepository:
             .select_from(ReceiptItem)
             .join(ExpenseRow, ExpenseRow.receipt_id == ReceiptItem.receipt_id)
             .join(StoreProduct, StoreProduct.id == ReceiptItem.store_product_id)
-            .where(*counted)
+            # A receipt without a readable total is an expense of 0.00: its lines would only
+            # push `not_itemised` below zero.
+            .where(*counted, ExpenseRow.amount > 0)
             .group_by(ExpenseRow.currency, StoreProduct.category)
             .having(func.coalesce(func.sum(ReceiptItem.line_total), 0) != 0)
         )
