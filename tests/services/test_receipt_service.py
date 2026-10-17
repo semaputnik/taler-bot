@@ -489,12 +489,15 @@ async def test_review_shows_the_current_value_with_edits_applied(service, make_u
     assert total.current_value == Decimal("50.00")
 
 
-async def test_review_leaves_out_resolved_issues(service, make_uow):
+async def test_review_leaves_out_resolved_issues_but_keeps_skipped_ones(service, make_uow):
     receipt = await mixed_receipt(make_uow)
-    [total, *_] = await service.review(1, receipt.id)
-    await service.resolve_issue(1, receipt.id, total.issue_id, "skipped")
+    [total, name, *_] = await service.review(1, receipt.id)
+    await service.resolve_issue(1, receipt.id, total.issue_id, "confirmed")
+    await service.resolve_issue(1, receipt.id, name.issue_id, "skipped")
 
-    assert total.issue_id not in [c.issue_id for c in await service.review(1, receipt.id)]
+    ids = [c.issue_id for c in await service.review(1, receipt.id)]
+    assert total.issue_id not in ids
+    assert name.issue_id in ids
 
 
 async def test_review_of_a_receipt_without_issues_is_empty(service, make_uow):

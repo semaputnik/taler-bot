@@ -56,6 +56,7 @@ __all__ = [
 
 MONEY_TOLERANCE = Decimal("0.02")
 S = ReceiptStatus
+_AWAITING_REVIEW = frozenset({IssueResolution.OPEN, IssueResolution.SKIPPED})
 _SEVERITY_ORDER = {IssueSeverity.HIGH: 0, IssueSeverity.MEDIUM: 1, IssueSeverity.LOW: 2}
 # Statuses that may receive a parse (a first one, or a re-parse).
 _PARSEABLE = {S.PENDING, S.PARSING, S.PARSED, S.FAILED, S.NOT_RECEIPT}
@@ -191,13 +192,14 @@ class Receipt:
         return sorted(self.issues, key=lambda i: _SEVERITY_ORDER[i.severity])[:limit]
 
     def reviewable_issues(self) -> list[Issue]:
-        """Open issues of severity high or medium, high first, in parse order within each."""
-        open_ones = [
+        """Issues of severity high or medium still waiting for the user, high first, in parse
+        order within each. A skipped issue waits for a later walk, so it stays in the list."""
+        waiting = [
             i
             for i in self.issues
-            if i.resolution is IssueResolution.OPEN and i.severity is not IssueSeverity.LOW
+            if i.resolution in _AWAITING_REVIEW and i.severity is not IssueSeverity.LOW
         ]
-        return sorted(open_ones, key=lambda i: _SEVERITY_ORDER[i.severity])
+        return sorted(waiting, key=lambda i: _SEVERITY_ORDER[i.severity])
 
     def item_of(self, issue: Issue) -> Item | None:
         """The item an `items.*` issue is about: the first whose printed name is the issue's."""
@@ -259,7 +261,7 @@ class Receipt:
         issue = next((i for i in self.issues if i.id == issue_id), None)
         if issue is None:
             raise UnknownIssue(issue_id)
-        if issue.resolution is not IssueResolution.OPEN:
+        if issue.resolution not in _AWAITING_REVIEW:
             raise InvalidIssueResolution(f"issue {issue_id} is already {issue.resolution}")
         correction = self.issue_correction(issue)
         if correction is None:

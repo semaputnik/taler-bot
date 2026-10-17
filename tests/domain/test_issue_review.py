@@ -33,7 +33,7 @@ def receipt_with(*issues: ParsedIssue, items=None) -> Receipt:
     return receipt
 
 
-def test_reviewable_issues_are_open_high_and_medium_high_first_in_parse_order():
+def test_reviewable_issues_are_waiting_high_and_medium_high_first_in_parse_order():
     receipt = receipt_with(
         issue(LOW, message="low-0"),
         issue(MEDIUM, message="medium-1"),
@@ -41,13 +41,16 @@ def test_reviewable_issues_are_open_high_and_medium_high_first_in_parse_order():
         issue(MEDIUM, message="medium-3"),
         issue(HIGH, message="high-4"),
         issue(MEDIUM, message="resolved-5"),
+        issue(MEDIUM, message="skipped-6"),
     )
-    receipt.resolve_issue(15, IssueResolution.SKIPPED)
+    receipt.resolve_issue(15, IssueResolution.CONFIRMED)
+    receipt.resolve_issue(16, IssueResolution.SKIPPED)  # waits for a later walk
     assert [i.message for i in receipt.reviewable_issues()] == [
         "high-2",
         "high-4",
         "medium-1",
         "medium-3",
+        "skipped-6",
     ]
 
 
@@ -216,13 +219,20 @@ def test_an_unknown_issue_cannot_be_corrected():
         receipt_with(issue(field="totals.total")).correct_issue(99, "1")
 
 
-@pytest.mark.parametrize("first", [IssueResolution.CONFIRMED, IssueResolution.SKIPPED])
+@pytest.mark.parametrize("first", [IssueResolution.CONFIRMED, IssueResolution.CORRECTED])
 def test_a_resolved_issue_cannot_be_corrected(first):
     receipt = receipt_with(issue(field="totals.total"))
     receipt.resolve_issue(10, first)
     with pytest.raises(InvalidIssueResolution):
         receipt.correct_issue(10, "1")
     assert receipt.edits == []
+
+
+def test_a_skipped_issue_can_still_be_corrected_later():
+    receipt = receipt_with(issue(field="totals.total"))
+    receipt.resolve_issue(10, IssueResolution.SKIPPED)
+    receipt.correct_issue(10, "1")
+    assert receipt.issues[0].resolution is IssueResolution.CORRECTED
 
 
 def test_a_deleted_receipt_cannot_be_corrected():
