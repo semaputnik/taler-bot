@@ -130,17 +130,17 @@ async def test_stats_renders_the_month_with_the_comparison(harness, make_uow):
         f"48.00 € · 2 receipts · ▲ 140% vs {month_name(-1)} (20.00 €)\n"
         "\n"
         "<b>Categories</b>\n"
-        "▇▇▇▇▇▇▇ Produce 35.00 € · 73% · ▲ 75%\n"
-        "▇▇ Dairy 10.00 € · 21% · new\n"
-        "▇ Not itemised 3.00 € · 6%\n"
+        "• Produce 35.00 € · 73% · ▲ 75%\n"
+        "• Dairy 10.00 € · 21% · new\n"
+        "• Not itemised 3.00 € · 6%\n"
         "\n"
         "<b>Stores</b>\n"
-        "Mercadona 40.00 € · 83% · ▲ 100%\n"
-        "Lidl 8.00 € · 17% · new\n"
+        "• Mercadona 40.00 € · 83% · ▲ 100%\n"
+        "• Lidl 8.00 € · 17% · new\n"
         "\n"
         "<b>Cards</b>\n"
-        "VISA •0848 40.00 € · ▲ 100%\n"
-        "cash 8.00 € · new"
+        "• VISA •0848 40.00 € · ▲ 100%\n"
+        "• cash 8.00 € · new"
     )
 
 
@@ -152,15 +152,15 @@ async def test_a_period_without_a_previous_one_shows_no_comparison(harness, make
     text = harness.last_text()
     assert text.splitlines()[1] == "10.00 € · 1 receipt"
     assert "new" not in text and "▲" not in text
-    assert "▇▇▇▇▇▇▇▇▇▇ Meat 10.00 € · 100%" in text.splitlines()
+    assert "• Meat 10.00 € · 100%" in text.splitlines()
 
 
-async def test_a_tiny_share_still_gets_one_bar(harness, make_uow):
+async def test_a_tiny_share_is_listed_with_its_percent(harness, make_uow):
     await bought(make_uow, in_month(0), (Category.MEAT, "99.00"), (Category.FISH, "0.50"))
 
     await harness.send_text("/stats", user_id=USER)
 
-    assert "▇ Fish 0.50 € · 1%" in harness.last_text().splitlines()
+    assert "• Fish 0.50 € · 1%" in harness.last_text().splitlines()
 
 
 async def test_prev_edits_to_the_previous_month_and_next_is_only_in_a_past_one(harness, make_uow):
@@ -289,7 +289,7 @@ async def test_a_receipt_without_a_store_gets_the_unknown_store_label(harness, m
 
     await harness.send_text("/stats", user_id=USER)
 
-    assert "Unknown store 10.00 € · 100%" in harness.last_text().splitlines()
+    assert "• Unknown store 10.00 € · 100%" in harness.last_text().splitlines()
 
 
 async def test_a_strangers_stats_gets_no_reply(harness):

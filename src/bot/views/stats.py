@@ -12,16 +12,9 @@ from src.bot.keyboards.stats import StatsCallback, StatsKind
 from src.services import periods
 from src.services.results import Compared, ComparedBlock, SpendingReport
 
-BAR = "▇"
-BAR_LENGTH = 10
 NOT_ITEMISED = "not_itemised"
 CASH = "cash"
 NO_STORE = "none"
-
-
-def bar(share: int) -> str:
-    """1 to 10 bars proportional to the share in percent, at least one for a non-zero amount."""
-    return BAR * min(BAR_LENGTH, max(1, round(share * BAR_LENGTH / 100)))
 
 
 def title(report: SpendingReport, i18n: TranslatorRunner) -> str:
@@ -95,7 +88,7 @@ def _category_label(line: Compared, i18n: TranslatorRunner) -> str:
         name = i18n.get("stats-not-itemised")
     else:
         name = i18n.get(f"category-{line.key.replace('_', '-')}")
-    return f"{bar(line.share)} {name}"
+    return name
 
 
 def _store_label(line: Compared, i18n: TranslatorRunner) -> str:

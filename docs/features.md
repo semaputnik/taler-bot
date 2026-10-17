@@ -51,21 +51,20 @@ failures, the same photo sent twice and the same receipt photographed twice.
    384.20 € · 12 receipts · ▲ 8% vs September (355.10 €)
 
    Categories
-   ▇▇▇▇▇▇▇▇ Produce 146.00 € · 38% · ▲ 12%
-   ▇▇▇▇ Dairy 73.00 € · 19% · ▼ 5%
-   ▇ Not itemised 3.20 € · 1%
+   • Produce 146.00 € · 38% · ▲ 12%
+   • Dairy 73.00 € · 19% · ▼ 5%
+   • Not itemised 3.20 € · 1%
 
    Stores
-   Mercadona 210.00 € · 55% · ▲ 3%
-   Consum 98.00 € · 26% · new
+   • Mercadona 210.00 € · 55% · ▲ 3%
+   • Consum 98.00 € · 26% · new
 
    Cards
-   VISA •0848 300.00 € · ▲ 10%
-   cash 84.20 €
+   • VISA •0848 300.00 € · ▲ 10%
+   • cash 84.20 €
    ```
    - A week reads `📊 Week 42 · 13.10–19.10.2026` (ISO week number, Monday to Sunday).
-   - Categories come from the item lines (bar of 1 to 10 `▇` by share, at least one for a
-     non-zero amount); the part no item covers is `Not itemised`. Stores (the top five) and
+   - Categories come from the item lines, as a bulleted list with the share in percent; the part no item covers is `Not itemised`. Stores (the top five) and
      cards come from the receipt totals. A line shows `▲ 12%`, `▼ 5%` or `new`; nothing is
      compared when the previous period has no receipts.
    - One block per currency, headed by the currency when there is more than one. An empty
