@@ -70,15 +70,17 @@ src/
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
     middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
-      command/             # one module per command (/start, /receipts, /reparse), each exposes register_xxx(dp)
-      callback/            # taps on plain buttons: receipt.py edits the current card in place or sends a fresh one; history.py edits the history message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
+      command/             # one module per command (/start, /receipts, /reparse, /stats), each exposes register_xxx(dp)
+      callback/            # taps on plain buttons: receipt.py edits the current card in place or sends a fresh one; history.py edits the history message in place; stats.py edits the stats message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       parse_task.py        # read_and_show_card: the background read (typing, parse, fresh card) shared by photo intake and the card's Re-parse
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
         receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, item_input, item_category, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
     keyboards/history.py   # HistoryCallback (prefix "history": year, month, store_id, page, action)
+    keyboards/stats.py     # StatsCallback (prefix "stats": kind week|month, the anchor date as year/month/day, action)
     views/history.py       # the history message: text and keyboard of the month and store chooser screens
+    views/stats.py         # the stats message: text (bars, shares, changes) and keyboard (arrows, week/month, Receipts)
     render.py              # receipt texts (currency sign, header) used by the card
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
@@ -234,12 +236,18 @@ card, however old: a tap on the dialog's last message restarts the dialog with `
 never calls `done()`**: it would strip the buttons. Every exit goes `switch_to(ReceiptCardSG.main)`,
 which is also where a deleted receipt ends. `✖ Close` (a plain card button) hides the buttons and keeps the text.
 
-**Exception: the history and the card's resting buttons are plain callback keyboards, because their
+**Exception: the history, the stats and the card's resting buttons are plain callback keyboards, because their
 buttons must outlive any dialog stack.** `/receipts` is a plain message whose `HistoryCallback`
 buttons carry the whole view state (month, store, page); `callback/history.py` edits the message in
 place. Its row buttons are `ReceiptCallback`s, so a tap goes through `open_card`, which sends a fresh
 card and leaves the history keyboard alone. The `/start` button uses `HistoryAction.OPEN`: it sends
 the list as a new message instead of editing the greeting.
+
+`/stats` works the same way: `StatsCallback` buttons carry the kind and an anchor date inside the
+period, `callback/stats.py` edits the message in place (`StatsAction.SHOW`) and the `/start`
+`📊 Spending` button uses `StatsAction.OPEN` to send a new message. The view only formats what
+`ReceiptService.spending` returns (whole-percent shares and changes, `new` when `previous` is
+None); the `🧾 Receipts` button of a month screen is a `HistoryCallback` with `OPEN`.
 
 The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
 `position`, `current_issue_id` and the counters, loaded once by `click_event.start_review`.
