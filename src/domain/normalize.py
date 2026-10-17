@@ -19,7 +19,7 @@ from src.domain.parse import Parse, ParsedIssue, ParsedItem
 from src.exception import InvalidReceiptData
 
 # Bump whenever the prompt, the schema, the model or this module changes (n8n was 2026-10-15.1).
-PARSER_VERSION = "2026-10-17.2"
+PARSER_VERSION = "2026-10-17.3"  # product category `greens`; the model schema lists the categories
 
 TOLERANCE = Decimal("0.02")
 

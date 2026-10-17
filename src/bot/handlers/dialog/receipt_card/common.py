@@ -34,6 +34,7 @@ class PreviewDataKeys:
 # other string; `tests/bot/test_item_edit.py` keeps this list equal to the domain's.
 CATEGORIES = (
     "produce",
+    "greens",
     "meat",
     "fish",
     "dairy",

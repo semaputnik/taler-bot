@@ -61,6 +61,7 @@ item-gone = This item is no longer on the receipt.
 item-row = { $name } · { $quantity } { $unit } · { $total }
 
 category-produce = Produce
+category-greens = Greens
 category-meat = Meat
 category-fish = Fish
 category-dairy = Dairy

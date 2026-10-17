@@ -495,7 +495,7 @@ retried and must not break the pipeline.
 | `product_prices` | price history, one row per receipt line | `receipt_items` |
 | `receipt_issues` | model and workflow notes, used to improve the prompt | `receipt_issues` |
 
-Category enum: produce, meat, fish, dairy, bakery, drinks, alcohol, snacks, frozen,
+Category enum: produce, greens, meat, fish, dairy, bakery, drinks, alcohol, snacks, frozen,
 pantry, household, personal_care, baby, pet, other.
 
 ### Reference files

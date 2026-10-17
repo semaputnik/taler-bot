@@ -90,11 +90,11 @@ async def test_the_category_list_marks_the_current_one_and_a_pick_applies_everyw
     await harness.tap(USER, CATEGORY)
 
     texts = harness.button_texts()
-    assert len(texts) == 16
+    assert len(texts) == 17  # 16 categories and Back
     assert "✓ Drinks" in texts
     assert texts[-1] == BACK
     rows = [len(row) for row in harness.last_keyboard()[1].inline_keyboard]
-    assert rows == [2] * 7 + [1, 1]
+    assert rows == [2] * 8 + [1]
     await harness.tap(USER, "Snacks")
     assert "<b>Category:</b> Snacks" in harness.last_text()
     await harness.tap(USER, CATEGORY)

@@ -30,3 +30,10 @@ def test_fixture_raw_output_validates_and_normalizes_the_same_as_plain_data(path
 def test_every_schema_field_is_required_in_the_json_schema_the_model_sees():
     receipt_info = RawParse.model_json_schema()["$defs"]["RawReceiptInfo"]
     assert set(receipt_info["required"]) == set(receipt_info["properties"])
+
+
+def test_the_item_categories_the_model_may_use_are_the_product_categories():
+    from src.domain.enums import ProductCategory
+    from src.integration.llm.schema import ItemCategory
+
+    assert [c.value for c in ItemCategory] == [c.value for c in ProductCategory]
