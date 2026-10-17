@@ -1,13 +1,14 @@
 """`OpenAIReceiptParser`: the n8n "Parse Receipt" step on pydantic-ai.
 
-The system prompt is `docs/n8n-reference/system_prompt.md`, read verbatim at import so the
-docs file stays the single source. The Docker image must therefore ship `docs/n8n-reference/`
-(or the prompt must move into the package) before the bot is containerised.
+The system prompt is `prompt.md` next to this module, read verbatim at import through
+`importlib.resources`, so it ships with the package. `docs/n8n-reference/system_prompt.md` is
+the reference snapshot of the n8n workflow; `tests/integration/llm/test_prompt.py` keeps the
+two byte-identical.
 """
 
 import os
 import time
-from pathlib import Path
+from importlib.resources import files
 
 # pydantic-ai prints a Logfire advert on the first run unless told not to.
 os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
@@ -20,9 +21,7 @@ from src.config.llm import LLMConfig
 from src.integration.llm.interface import LLMError, ParserOutput
 from src.integration.llm.schema import RawParse
 
-SYSTEM_PROMPT = (
-    Path(__file__).resolve().parents[3] / "docs" / "n8n-reference" / "system_prompt.md"
-).read_text(encoding="utf-8")
+SYSTEM_PROMPT = files("src.integration.llm").joinpath("prompt.md").read_text(encoding="utf-8")
 USER_PROMPT = "Transcribe this receipt into the JSON schema."
 _RETRIES = 2
 
