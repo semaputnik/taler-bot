@@ -74,7 +74,7 @@ src/
       callback/            # taps on the summary keyboard: receipt.py opens the ReceiptCard dialog
       message/photo.py     # photo intake: save, reply with the keyboard, parse in the background; catch-all "send me a photo"
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py (main, items, item, photo, delete_confirm)
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py (main, items, item, photo, delete_confirm, issue, issue_input, review_done)
     keyboards/receipt.py   # inline keyboard under the parse reply, ReceiptCallback (prefix "receipt")
     render.py              # receipt texts shared by the parse reply and the dialog
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
@@ -108,7 +108,7 @@ tests/                     # domain/ database/ services/ bot/ + root conftest.py
 ```
 
 Not built yet (each arrives with its feature): `domain/matching.py` (a domain service) and
-the other dialogs (items, photo, issue review, history).
+the value entry of the issue review (`issue_input` is a placeholder) and the history dialog.
 
 ### Layers and dependencies
 
@@ -206,6 +206,11 @@ As in paper-work-bot, each dialog is a folder in `bot/handlers/dialog/<name>/`:
 Keys passed between dialogs through `start_data` live in one shared `TransferKeys`
 class. State groups live in `bot/states/`. Every text comes from `.ftl`, and there are
 no string literals in windows.
+
+The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
+`position`, `current_issue_id` and the counters, loaded once by `click_event.start_review`.
+`click_event.advance` moves on after any action that closes an issue; a skipped issue stays
+reviewable (domain `reviewable_issues`), so Skip does not lower the `Review (n)` count.
 
 A window that shows a stored receipt photo uses `DynamicMedia` with a `StoredPhoto` (by Telegram
 file id). `StoredPhotoMessageManager`, passed to `setup_dialogs`, uploads the bytes only when Telegram

@@ -5,9 +5,14 @@ from fluentogram import TranslatorRunner
 
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys
 from src.bot.states.receipt_card import ReceiptCardSG
-from src.exception import InvalidReceiptTransition, ReceiptNotFound
+from src.exception import (
+    InvalidIssueResolution,
+    InvalidReceiptTransition,
+    ReceiptNotFound,
+    UnknownIssue,
+)
 from src.services.container import Services
-from src.services.results import CurrentUser
+from src.services.results import CurrentUser, IssueCard
 
 
 async def ask_delete(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
@@ -37,6 +42,101 @@ async def select_item(
         return
     manager.dialog_data[DialogDataKeys.ITEM_REF] = rows[position].ref
     await manager.switch_to(ReceiptCardSG.item)
+
+
+async def show_review(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await start_review(manager)
+
+
+async def start_review(manager: DialogManager) -> None:
+    """Load the walk once and show its first open issue; with nothing to review, show `main`."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    cards = await services.receipts.review(user.id, manager.dialog_data[DialogDataKeys.RECEIPT_ID])
+    data = manager.dialog_data
+    data[DialogDataKeys.WALK] = [card.issue_id for card in cards]
+    data[DialogDataKeys.POSITION] = 0
+    data[DialogDataKeys.CONFIRMED] = data[DialogDataKeys.CORRECTED] = 0
+    data[DialogDataKeys.SKIPPED] = 0
+    await _show_current(manager, cards)
+
+
+def settle(manager: DialogManager, cards: list[IssueCard]) -> IssueCard | None:
+    """Move the position forward to the first walk issue that is still reviewable (an issue
+    resolved from another device is skipped silently). None when the walk is over."""
+    data = manager.dialog_data
+    by_id = {card.issue_id: card for card in cards}
+    walk: list[int] = data[DialogDataKeys.WALK]
+    position: int = data[DialogDataKeys.POSITION]
+    while position < len(walk) and walk[position] not in by_id:
+        position += 1
+    data[DialogDataKeys.POSITION] = position
+    if position >= len(walk):
+        data.pop(DialogDataKeys.CURRENT_ISSUE_ID, None)
+        return None
+    data[DialogDataKeys.CURRENT_ISSUE_ID] = walk[position]
+    return by_id[walk[position]]
+
+
+async def advance(manager: DialogManager) -> None:
+    """Step past the issue on screen: show the next open one, or the tally after the last.
+    Every action that closes an issue (Skip, Correct, a later entered value) ends here."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    manager.dialog_data[DialogDataKeys.POSITION] += 1
+    cards = await services.receipts.review(user.id, manager.dialog_data[DialogDataKeys.RECEIPT_ID])
+    await _show_current(manager, cards)
+
+
+async def _show_current(manager: DialogManager, cards: list[IssueCard]) -> None:
+    if settle(manager, cards) is not None:
+        await manager.switch_to(ReceiptCardSG.issue)
+    elif manager.dialog_data[DialogDataKeys.WALK]:
+        await manager.switch_to(ReceiptCardSG.review_done)
+    else:
+        await manager.switch_to(ReceiptCardSG.main)
+
+
+async def confirm_issue(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await _resolve(query, manager, "confirmed", DialogDataKeys.CONFIRMED)
+
+
+async def skip_issue(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await _resolve(query, manager, "skipped", DialogDataKeys.SKIPPED)
+
+
+async def _resolve(
+    query: CallbackQuery, manager: DialogManager, resolution: str, counter: str
+) -> None:
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    data = manager.dialog_data
+    try:
+        await services.receipts.resolve_issue(
+            user.id,
+            data[DialogDataKeys.RECEIPT_ID],
+            data[DialogDataKeys.CURRENT_ISSUE_ID],
+            resolution,
+        )
+    except ReceiptNotFound, InvalidReceiptTransition:
+        # The receipt was deleted while the walk was open.
+        await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
+        await manager.done()
+        return
+    except UnknownIssue, InvalidIssueResolution:
+        pass  # resolved from another device meanwhile: nothing to record, just move on
+    else:
+        data[counter] += 1
+    await advance(manager)
+
+
+async def enter_value(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(ReceiptCardSG.issue_input)
+
+
+async def back_to_issue(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(ReceiptCardSG.issue)
 
 
 async def show_photo(query: CallbackQuery, button: Button, manager: DialogManager) -> None:

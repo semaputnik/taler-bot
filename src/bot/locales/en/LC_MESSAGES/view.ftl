@@ -73,3 +73,11 @@ category-baby = Baby
 category-pet = Pet
 category-other = Other
 card-photo-unavailable = The photo could not be loaded.
+
+issue-title = ⚠️ <b>Issue { $position } of { $total }</b> { $icon }
+issue-severity-high = 🔴
+issue-severity-medium = 🟡
+issue-item = <b>Item:</b> { $name }
+issue-current-value = <b>Current value:</b> { $value }
+issue-input-prompt = Enter the right value.
+review-done = { $reviewed } reviewed: { $corrected } corrected, { $confirmed } confirmed, { $skipped } skipped

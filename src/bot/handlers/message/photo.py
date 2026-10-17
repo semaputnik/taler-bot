@@ -108,6 +108,7 @@ async def _parse_and_reply(
 ) -> None:
     """Parse, then send exactly one reply. Nothing but cancellation leaves this function."""
     item_count = 0
+    review_count = 0
     try:
         # The sender's worker dies on a failed `sendChatAction` and the block still ends
         # normally, so the typing status never affects the parse or the reply.
@@ -117,13 +118,13 @@ async def _parse_and_reply(
         # Only a parsed receipt offers its items; a duplicate keeps its own, but is inspected
         # and deleted, not browsed.
         item_count = result.card.item_count if result.outcome == "parsed" else 0
+        review_count = result.card.review_count if result.outcome == "parsed" else 0
     except Exception:
         # The service has already marked the receipt failed; the user must not wait for nothing.
         logger.exception("Parsing receipt %s failed", receipt_id)
         text = i18n.get("receipt-failed")
-    await _send(
-        bot, chat_id, reply_to, text, receipt_keyboard(i18n, receipt_id, item_count=item_count)
-    )
+    keyboard = receipt_keyboard(i18n, receipt_id, item_count=item_count, review_count=review_count)
+    await _send(bot, chat_id, reply_to, text, keyboard)
 
 
 async def _send(

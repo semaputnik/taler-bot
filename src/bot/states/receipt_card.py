@@ -6,4 +6,7 @@ class ReceiptCardSG(StatesGroup):
     items = State()
     item = State()
     photo = State()
+    issue = State()
+    issue_input = State()
+    review_done = State()
     delete_confirm = State()

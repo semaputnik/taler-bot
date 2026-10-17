@@ -24,9 +24,10 @@ failures, the same photo sent twice and the same receipt photographed twice.
 
 **Stage 1: working with a receipt after parsing**
 1. **Receipt card.** Inline buttons under the summary: `Items`, `Photo`, `Delete`
-   (`Review` comes with the issue-review spec). Done (items are read-only until the item-edit spec).
+   `Review (n)` appears when issues wait. Done (items are read-only until the item-edit spec).
 2. **Issue review.** Walk through high/medium issues one at a time. For each, confirm the
    assumed value or enter the right one (date, total, card last 4, lines that don't add up).
+   The walk with `Correct`, `Skip` and the tally is done; the value entry is next.
 3. **Item edit.** Name, category, quantity/price. Name and category are saved to
    `store_products`, so future receipts pick them up.
 4. **Receipt history** `/receipts`. Paginated, filtered by month and store; a row opens
@@ -89,19 +90,29 @@ is open is still accepted.
 
 | window | content |
 |---|---|
-| `main` | summary and buttons (`Items`, `Photo`, `Delete`, `Close`); a receipt that is not `parsed` shows its status, the photo's date and, for a duplicate, the receipt it repeats |
+| `main` | summary and buttons (`Items`, `⚠️ Review (n)` when n > 0, `Photo`, `Delete`, `Close`); a receipt that is not `parsed` shows its status, the photo's date and, for a duplicate, the receipt it repeats |
 | `items` | paginated item list (`ScrollingGroup`, 8 per page); a tap opens `item` |
 | `item` | all parsed fields, read-only; `[✏️ Name] [🏷 Category] [🔢 Qty/price]` arrive with item edit |
-| `issues` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip]` |
+| `issue` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip] [✖ Close]`; `✏️` only for an editable issue. `Correct` and `Skip` move on to the next issue |
+| `issue_input` | the typed value for the issue (placeholder with `◀ Back` until the value-entry ticket) |
+| `review_done` | the tally ("3 reviewed: 1 corrected, 1 confirmed, 1 skipped") and `◀ Back` to `main` |
 | `photo` | the stored photo by Telegram file id, uploaded from disk if Telegram refuses the id |
 | `delete_confirm` | confirms the delete (soft delete; the photo moves to the trash). Refused while the receipt is being read |
 
-An issue screen looks like this:
+The `⚠️ Review (n)` button sits under the summary (between Items and Photo) and in `main`,
+only when `n` high or medium issues wait. The walk is loaded once on entry, high first, then
+parse order; an issue resolved elsewhere is skipped silently. A skipped issue stays counted
+on the button and comes back in the next walk. An issue screen looks like this:
 
 ```
-Date read as 14.10.2025, photo sent on 14.10.2026.
-I used 14.10.2026.
-[✅ Correct] [✏️ Enter date] [⏭ Skip]
+⚠️ Issue 2 of 5 🟡
+
+Item: Cervesa Free Limo
+Line math is off.
+
+Current value: 4.80 €
+[✅ Correct] [✏️ Enter value]
+[⏭ Skip] [✖ Close]
 ```
 
 ### History (`/receipts`)

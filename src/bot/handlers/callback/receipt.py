@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 _WINDOWS = {
     CardWindow.MAIN: ReceiptCardSG.main,
     CardWindow.ITEMS: ReceiptCardSG.items,
+    CardWindow.REVIEW: ReceiptCardSG.issue,
     CardWindow.PHOTO: ReceiptCardSG.photo,
     CardWindow.DELETE_CONFIRM: ReceiptCardSG.delete_confirm,
 }

@@ -14,6 +14,8 @@ USER = 7
 PHOTO = "🖼 Photo"
 DELETE = "🗑 Delete"
 ITEMS = "📋 Items"
+REVIEW = "⚠️ Review (1)"
+REVIEW_NO_ITEMS = "⚠️ Review (2)"  # the workflow raises issues for a receipt without lines
 
 i18n = create_translator_hub().get_translator_by_locale(DEFAULT_LOCALE)
 
@@ -56,7 +58,7 @@ def last_text(harness) -> str:
 async def test_the_parse_reply_carries_photo_and_delete_buttons(harness):
     await parsed(harness)
 
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
 
 
 @pytest.mark.parametrize("outcome", ["not_receipt", "failed"])
@@ -101,7 +103,7 @@ async def test_back_returns_to_the_card(harness):
     await harness.tap(USER, "◀ Back")
 
     assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, "✖ Close"]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, "✖ Close"]
 
 
 async def test_confirming_deletes_the_receipt_and_trashes_the_photo(
@@ -252,7 +254,7 @@ async def test_a_receipt_without_items_has_no_items_button(harness):
 
     await parsed(harness)
 
-    assert harness.button_texts() == [PHOTO, DELETE]
+    assert harness.button_texts() == [REVIEW_NO_ITEMS, PHOTO, DELETE]
 
 
 async def test_the_card_of_a_receipt_without_items_has_no_items_button(harness):
@@ -263,7 +265,7 @@ async def test_the_card_of_a_receipt_without_items_has_no_items_button(harness):
 
     await harness.tap(USER, "◀ Back")
 
-    assert harness.button_texts() == [PHOTO, DELETE, "✖ Close"]
+    assert harness.button_texts() == [REVIEW_NO_ITEMS, PHOTO, DELETE, "✖ Close"]
 
 
 async def test_items_opens_the_list_as_a_new_message(harness):
@@ -307,7 +309,7 @@ async def test_back_goes_from_the_item_to_the_list_and_then_to_the_card(harness)
 
     await harness.tap(USER, "◀ Back")
     assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, "✖ Close"]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, "✖ Close"]
 
 
 async def test_a_long_list_is_paged_by_eight(harness):
