@@ -150,15 +150,14 @@ def _arrow_label(
 
 def show_keyboard(report: SpendingReport, i18n: TranslatorRunner) -> InlineKeyboardMarkup:
     kind = StatsKind(report.kind)
-    nav: list[InlineKeyboardButton] = []
-    if report.has_earlier:
-        before = periods.previous(report.start, report.end)[0]
-        nav.append(
-            _button(
-                _arrow_label("button-prev-month", report, before, i18n),
-                StatsCallback.at(kind, periods.previous_anchor(report.start, report.end)),
-            )
+    # `◀` is always there: an empty earlier period just says so. Only the future is closed.
+    before = periods.previous(report.start, report.end)[0]
+    nav: list[InlineKeyboardButton] = [
+        _button(
+            _arrow_label("button-prev-month", report, before, i18n),
+            StatsCallback.at(kind, periods.previous_anchor(report.start, report.end)),
         )
+    ]
     if not report.is_current:
         nav.append(
             _button(

@@ -176,7 +176,7 @@ async def test_prev_edits_to_the_previous_month_and_next_is_only_in_a_past_one(h
     assert len(edits(harness)) == 1
     assert harness.last_text().startswith(f"{month_title(-1)}\n20.00 € · 1 receipt")
     assert f"{short(0)} ▶" in harness.button_texts()
-    assert not [b for b in harness.button_texts() if b.startswith("◀")]
+    assert f"◀ {short(-2)}" in harness.button_texts()  # the past is always reachable
 
     await harness.tap(USER, f"{short(0)} ▶")
     assert harness.last_text().startswith(month_title(0))

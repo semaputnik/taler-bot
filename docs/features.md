@@ -69,7 +69,7 @@ failures, the same photo sent twice and the same receipt photographed twice.
      compared when the previous period has no receipts.
    - One block per currency, headed by the currency when there is more than one. An empty
      period shows its title and "No purchases in this period."
-   - Buttons: `[◀ Sep] [Nov ▶]` (`◀` only when an earlier receipt exists, `▶` only in a past
+   - Buttons: `[◀ Sep] [Nov ▶]` (`◀` always, an empty period says so; `▶` only in a past
      period; a week's labels are its neighbours' start dates), `[📅 Week]` or `[📅 Month]` (the
      other kind, anchored on this period's start), and `[🧾 Receipts]` on the month screen,
      which sends that month's history as a new message. Taps edit the message in place.
