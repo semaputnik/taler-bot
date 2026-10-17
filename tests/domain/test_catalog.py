@@ -4,7 +4,7 @@ import pytest
 
 from src.domain.catalog import Catalog, Product
 from src.domain.enums import Category
-from src.exception import UnknownStore
+from src.exception import InvalidEdit, UnknownProduct, UnknownStore
 
 
 def ensure_milk(catalog: Catalog, **fields) -> Product:
@@ -96,3 +96,77 @@ def test_ensuring_a_product_marked_for_removal_keeps_it():
     assert again is first
     assert again.name == "Whole milk"
     assert catalog.removed_product_keys == frozenset()
+
+
+def stocked() -> Catalog:
+    catalog = Catalog(user_id=1)
+    catalog.ensure_store("mercadona", "Mercadona")
+    ensure_milk(catalog)
+    ensure_milk(catalog, product_key="mercadona::pan", name_raw="PAN", name="Bread")
+    return catalog
+
+
+def test_rename_product_strips_the_name_and_marks_it_changed():
+    catalog = stocked()
+
+    catalog.rename_product("mercadona::leche", "  Oat milk  ")
+
+    assert catalog.products["mercadona::leche"].name == "Oat milk"
+    assert [p.product_key for p in catalog.changed_products] == ["mercadona::leche"]
+
+
+def test_set_category_changes_it_and_marks_it_changed():
+    catalog = stocked()
+
+    catalog.set_category("mercadona::pan", Category.BAKERY)
+
+    assert catalog.products["mercadona::pan"].category is Category.BAKERY
+    assert [p.product_key for p in catalog.changed_products] == ["mercadona::pan"]
+
+
+@pytest.mark.parametrize("name", ["", "   ", "\n"])
+def test_rename_product_refuses_an_empty_name(name):
+    catalog = stocked()
+
+    with pytest.raises(InvalidEdit):
+        catalog.rename_product("mercadona::leche", name)
+
+    assert catalog.products["mercadona::leche"].name == "Whole milk"
+    assert catalog.changed_products == ()
+
+
+def test_changing_an_unknown_product_raises():
+    catalog = stocked()
+
+    with pytest.raises(UnknownProduct):
+        catalog.rename_product("mercadona::nope", "x")
+    with pytest.raises(UnknownProduct):
+        catalog.set_category("mercadona::nope", Category.OTHER)
+
+
+def test_mark_saved_clears_the_changed_products():
+    catalog = stocked()
+    catalog.rename_product("mercadona::leche", "Oat milk")
+
+    catalog.mark_saved()
+
+    assert catalog.changed_products == ()
+
+
+def test_ensure_product_of_a_changed_product_keeps_the_change():
+    catalog = stocked()
+    catalog.rename_product("mercadona::leche", "Oat milk")
+
+    again = ensure_milk(catalog, name="Whole milk")
+
+    assert again.name == "Oat milk"
+    assert len(catalog.changed_products) == 1
+
+
+def test_a_changed_product_marked_for_removal_is_not_saved_as_changed():
+    catalog = stocked()
+    catalog.rename_product("mercadona::leche", "Oat milk")
+
+    catalog.remove_unreferenced({"mercadona::leche"})
+
+    assert catalog.changed_products == ()

@@ -127,6 +127,40 @@ def test_an_invalid_edit_is_rejected(edit):
         Edit(**edit)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("quantity", "0"),
+        ("quantity", "-1"),
+        ("unit_price", "-0.01"),
+        ("reference_price", "-1"),
+        ("line_total", "-2.5"),
+        ("discount", "-0.10"),
+    ],
+)
+def test_an_item_edit_refuses_a_non_positive_quantity_and_negative_prices(field, value):
+    with pytest.raises(InvalidEdit):
+        Edit(target=EditTarget.ITEM, item_ref="x#1", field=field, value=value)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("quantity", "0.001"),
+        ("unit_price", "0"),
+        ("reference_price", "3.20"),
+        ("line_total", "0"),
+        ("discount", "0.10"),
+    ],
+)
+def test_an_item_edit_accepts_a_positive_quantity_and_non_negative_prices(field, value):
+    Edit(target=EditTarget.ITEM, item_ref="x#1", field=field, value=value)
+
+
+def test_a_receipt_money_field_keeps_its_rules():
+    Edit(target=EditTarget.RECEIPT, field="discount_total", value="-1")
+
+
 # --- guards -----------------------------------------------------------------------------
 
 
