@@ -51,7 +51,7 @@ async def test_the_button_sits_in_the_row_of_the_category_button(harness):
 
     rows = [[b.text for b in row] for row in harness.last_keyboard()[1].inline_keyboard]
     assert rows == [
-        ["📋 Items", "⚠️ Review (3)"],
+        ["📋 Items", "⚠️ Review (1)"],
         [CATEGORY, TAGS],
         ["🖼 Photo", "🗑 Delete"],
         [REPARSE],

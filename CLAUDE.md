@@ -75,10 +75,10 @@ src/
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo" (steps aside when the open window reads typed text)
       message/amount.py    # a message that is only an amount starts the ExpenseEntry dialog (unless the open window reads typed text)
       parse_task.py        # read_and_show_card: the background read (typing, parse, fresh card) shared by photo intake and the card's Re-parse
-      dialog/              # common.py (TransferKeys), cards.py (CardKeyboard, PlainKeyboardFactory: the resting buttons both cards share), widgets.py (I18nText), media.py (StoredPhoto + its message manager), pickers.py (payee, source and category pickers: widget factories + choices, shared by dialogs), one folder per dialog; `text_input_states()` lists the windows that read typed text, `no_window_reads_text` is the filter built on it
+      dialog/              # common.py (TransferKeys), cards.py (CardKeyboard, PlainKeyboardFactory: the resting buttons both cards share), widgets.py (I18nText), media.py (StoredPhoto + its message manager), pickers.py (payee, source and category pickers: widget factories + choices, shared by dialogs), tags.py (the tags window both cards share: prompt data, the comma line, the window factory), one folder per dialog; `text_input_states()` lists the windows that read typed text, `no_window_reads_text` is the filter built on it
         expense_card/      # dialog.py, getters.py, click_event.py, common.py, keyboard.py: the card of an expense typed by hand (main, amount, payee, payee_name, source, new_card, source_rename, category, date, date_text, tags, delete_confirm)
         expense_entry/     # dialog.py, getters.py, click_event.py, common.py: manual entry (payee, payee_name, source, new_card, category, date, date_text, tags); the last step calls ExpenseService.add_manual and starts the ExpenseCard dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (the card's plain buttons) (main, items, item, item_input, item_category, category, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (the card's plain buttons) (main, items, item, item_input, item_category, category, tags, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
     keyboards/expense.py   # the expense card's inline keyboard, ExpenseCallback (prefix "expense")
     keyboards/cards.py     # is_card_markup: true for either card's resting keyboard
@@ -271,7 +271,7 @@ card, however old: a tap on the dialog's last message restarts the dialog with `
 (in place), a tap on an older card with `ShowMode.SEND` and leaves that card's keyboard alone
 (`StoredPhotoMessageManager` skips aiogram-dialog's keyboard removal for those sends). **The card
 never calls `done()`**: it would strip the buttons. Every exit goes `switch_to(ReceiptCardSG.main)`,
-which is also where a deleted receipt ends. `✖ Close` (a plain card button) hides the buttons and keeps the text.
+which is also where a deleted receipt ends. `ReceiptCard.tags` (the expense's tags, read with the expense `card` already loads for `expense_id`) feeds the `Tags:` line; the `#️⃣ Tags` button sits beside `🏷 Category` under the same condition (a live expense), and the `tags` window is the shared `dialog/tags.py` window: a typed line edits the card in place. `✖ Close` (a plain card button) hides the buttons and keeps the text.
 
 The expense card (`ExpenseCardSG`, `bot/handlers/dialog/expense_card/`) is the same kind of card for an
 expense without a receipt: plain `ExpenseCallback` buttons, handled by `callback/expense.py`. What both
