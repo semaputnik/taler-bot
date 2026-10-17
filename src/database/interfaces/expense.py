@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Protocol
 
-from src.database.read_models import HistoryPage, SpendingPeriod
+from src.database.read_models import HistoryPage, PayeeOption, SpendingPeriod
 from src.domain.expense import Expense
 
 
@@ -49,6 +49,11 @@ class ExpenseRepository(Protocol):
     async def spending(self, user_id: int, start: date, end: date) -> SpendingPeriod:
         """What the user spent on the local days `[start, end)`, per currency, over the not
         deleted expenses by `spent_at`. A fixed number of statements."""
+        ...
+
+    async def recent_payees(self, user_id: int, limit: int) -> list[PayeeOption]:
+        """At most `limit` of the user's payees, the one of the latest not deleted expense
+        first (by the expense's day), ties by name. A payee with no live expense is left out."""
         ...
 
     async def earliest_spent_at(self, user_id: int) -> date | None:

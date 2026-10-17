@@ -1,11 +1,13 @@
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.mapping.catalog import to_catalog, to_payee_row, to_product_row, to_source_row
 from src.database.models import Payee as PayeeRow
 from src.database.models import PaymentSource as SourceRow
 from src.database.models import StoreProduct as ProductRow
+from src.database.read_models import SourceOption
 from src.domain.catalog import Catalog
+from src.domain.enums import PaymentSourceKind
 
 
 class SqlAlchemyCatalogRepository:
@@ -23,6 +25,18 @@ class SqlAlchemyCatalogRepository:
             select(ProductRow).where(ProductRow.user_id == user_id)
         )
         return to_catalog(user_id, payees, sources, products)
+
+    async def payment_sources(self, user_id: int) -> list[SourceOption]:
+        rows = await self._session.execute(
+            select(SourceRow.id, SourceRow.name, SourceRow.kind)
+            .where(SourceRow.user_id == user_id)
+            .order_by(
+                (SourceRow.kind != PaymentSourceKind.CASH.value),
+                func.lower(SourceRow.name),
+                SourceRow.id,
+            )
+        )
+        return [SourceOption(id=i, name=n, kind=k) for i, n, k in rows]
 
     async def save(self, catalog: Catalog) -> None:
         removed_ids = [p.id for p in catalog.removed_products if p.id is not None]

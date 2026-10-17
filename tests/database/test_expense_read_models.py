@@ -405,6 +405,7 @@ async def test_the_payee_filter_narrows_rows_counts_and_totals_but_not_the_payee
     assert page.payee_name == "Lidl"
     assert [p.name for p in page.payees] == ["Aldi", "Lidl"]
     assert page.payees[1].payee_id == lidl
+    assert [p.payee_key for p in page.payees] == ["aldi", "lidl"]
 
 
 async def test_the_payees_are_those_with_an_expense_in_the_month(make_uow):

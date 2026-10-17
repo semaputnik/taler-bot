@@ -216,7 +216,7 @@ class SqlAlchemyExpenseRepository:
             .order_by(ExpenseRow.currency)
         )
         month_payees = await self._session.execute(
-            select(Payee.id, Payee.name)
+            select(Payee.id, Payee.payee_key, Payee.name)
             .where(
                 Payee.user_id == user_id,
                 exists().where(union.c.payee_id == Payee.id, *in_range),
@@ -230,11 +230,29 @@ class SqlAlchemyExpenseRepository:
             total_rows=total_rows,
             expense_count=expense_count,
             totals=[CurrencyTotal(currency=c, amount=a) for c, a in sums],
-            payees=[PayeeOption(payee_id=i, name=n) for i, n in month_payees],
+            payees=[PayeeOption(payee_id=i, payee_key=k, name=n) for i, k, n in month_payees],
             has_earlier=earlier,
             has_later=later,
             payee_name=payee_name,
         )
+
+    async def recent_payees(self, user_id: int, limit: int) -> list[PayeeOption]:
+        """The payees of the user's latest not deleted expenses: one SELECT, ordered by the
+        day of each payee's latest expense (newest first), then by name."""
+        latest = func.max(ExpenseRow.spent_at)
+        found = await self._session.execute(
+            select(Payee.id, Payee.payee_key, Payee.name)
+            .join(ExpenseRow, ExpenseRow.payee_id == Payee.id)
+            .where(
+                Payee.user_id == user_id,
+                ExpenseRow.user_id == user_id,
+                ExpenseRow.deleted_at.is_(None),
+            )
+            .group_by(Payee.id)
+            .order_by(latest.desc(), Payee.name, Payee.id)
+            .limit(limit)
+        )
+        return [PayeeOption(payee_id=i, payee_key=k, name=n) for i, k, n in found]
 
     async def spending(self, user_id: int, start: date, end: date) -> SpendingPeriod:
         """Five SELECTs, whatever the number of expenses: totals per currency, amounts per
