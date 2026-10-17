@@ -1,4 +1,6 @@
-from sqlalchemy import delete, insert, select, update
+from typing import Any
+
+from sqlalchemy import ColumnElement, delete, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,7 +55,7 @@ class SqlAlchemyExpenseRepository:
             await self._write_tags(expense)
         expense.mark_saved()
 
-    async def _load(self, condition) -> Expense | None:
+    async def _load(self, condition: ColumnElement[bool]) -> Expense | None:
         found = (
             await self._session.execute(
                 select(ExpenseRow, Payee.payee_key)
@@ -73,7 +75,7 @@ class SqlAlchemyExpenseRepository:
         )
         return mapping.expense_from_rows(row, payee_key, tags.all())
 
-    async def _values(self, expense: Expense) -> dict:
+    async def _values(self, expense: Expense) -> dict[str, Any]:
         payee_id = None
         if expense.payee_key is not None:
             payee_id = await self._session.scalar(
