@@ -5,6 +5,7 @@ from typing import Self
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.repositories.catalog import SqlAlchemyCatalogRepository
+from src.database.repositories.expense import SqlAlchemyExpenseRepository
 from src.database.repositories.receipt import SqlAlchemyReceiptRepository
 from src.database.repositories.user import SqlAlchemyUserRepository
 
@@ -24,6 +25,7 @@ class SqlAlchemyUnitOfWork:
         self.users = SqlAlchemyUserRepository(self._session)
         self.catalog = SqlAlchemyCatalogRepository(self._session)
         self.receipts = SqlAlchemyReceiptRepository(self._session)
+        self.expenses = SqlAlchemyExpenseRepository(self._session)
         return self
 
     async def __aexit__(

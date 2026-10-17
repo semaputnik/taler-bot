@@ -656,3 +656,36 @@ def test_top_issues_are_the_most_severe_first_in_parse_order():
         "medium-5",
         "low-0",
     ]
+
+
+# --- backs_expense ----------------------------------------------------------------------
+
+
+def test_only_a_parsed_receipt_that_is_not_deleted_backs_an_expense():
+    receipt = started()
+    assert receipt.backs_expense is False  # pending
+
+    receipt.apply_parse(parse())
+    assert receipt.backs_expense is True
+
+    receipt.mark_duplicate(7)
+    assert receipt.backs_expense is False
+
+
+def test_a_not_receipt_and_a_failed_receipt_back_no_expense():
+    receipt = started()
+    receipt.mark_parsing()
+    receipt.mark_failed("timeout")
+    assert receipt.backs_expense is False
+
+    other = started()
+    other.apply_parse(parse(is_receipt=False))
+    assert other.status is ReceiptStatus.NOT_RECEIPT
+    assert other.backs_expense is False
+
+
+def test_a_deleted_receipt_backs_no_expense():
+    receipt = started()
+    receipt.apply_parse(parse())
+    receipt.soft_delete()
+    assert receipt.backs_expense is False

@@ -11,17 +11,27 @@ from pydantic import BaseModel, ConfigDict
 
 
 class HistoryRow(BaseModel):
-    """One receipt of the month. `day` is in the user's time zone; the amount is empty for a
-    receipt that was not read."""
+    """One row of the month: an expense, or a receipt that has no expense. `day` is the local
+    day.
+
+    A row backed by a receipt carries `receipt_id` and the receipt's `status`, so the history
+    can show a status icon and open the receipt card; an expense without a receipt has
+    `has_receipt` false and both empty. A receipt that is not a purchase (failed, not a receipt,
+    duplicate, pending, parsing) has no expense: `expense_id`, `amount`, `currency` and
+    `category` are empty and `has_receipt` is true.
+    """
 
     model_config = ConfigDict(frozen=True)
 
-    receipt_id: int
+    expense_id: int | None
+    receipt_id: int | None
+    has_receipt: bool
     day: date
-    store_name: str | None
-    total: Decimal | None
+    payee_name: str | None
+    amount: Decimal | None
     currency: str | None
-    status: str
+    category: str | None  # an `ExpenseCategory` value
+    status: str | None
 
 
 class CurrencyTotal(BaseModel):
@@ -31,22 +41,23 @@ class CurrencyTotal(BaseModel):
     amount: Decimal
 
 
-class StoreOption(BaseModel):
+class PayeeOption(BaseModel):
     model_config = ConfigDict(frozen=True)
 
-    store_id: int
+    payee_id: int
     name: str
 
 
 class HistoryPage(BaseModel):
-    """One page of one month of a user's receipts, with what the header and the buttons need.
+    """One page of one month of a user's expenses and receipts without an expense, with what
+    the header and the buttons need.
 
-    `rows` is the requested page of the month under the store filter, newest first;
-    `total_rows` counts all of the month's rows under the filter (for paging). `parsed_count`
-    and `totals` (one entry per currency) count parsed receipts only. `stores` are the stores
-    with a receipt in the month, whatever the filter. `has_earlier` / `has_later` say whether
-    any receipt of the user lies before / after the month, whatever the filter. `store_name` is
-    the filter's store, None without a filter or for a store that is not the user's.
+    `rows` is the requested page of the month under the payee filter, newest first;
+    `total_rows` counts all of the month's rows under the filter (for paging), `expense_count`
+    those that are expenses. `totals` (one entry per currency) sum the expenses only. `payees`
+    are the payees with a row in the month, whatever the filter. `has_earlier` / `has_later` say
+    whether any row of the user lies before / after the month, whatever the filter. `payee_name`
+    is the filter's payee, None without a filter or for a payee that is not the user's.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -55,12 +66,12 @@ class HistoryPage(BaseModel):
     month: int
     rows: list[HistoryRow]
     total_rows: int
-    parsed_count: int
+    expense_count: int
     totals: list[CurrencyTotal]
-    stores: list[StoreOption]
+    payees: list[PayeeOption]
     has_earlier: bool
     has_later: bool
-    store_name: str | None
+    payee_name: str | None
 
 
 class ReparseCandidates(BaseModel):
@@ -77,11 +88,12 @@ class ReparseCandidates(BaseModel):
 
 
 class Amount(BaseModel):
-    """One line of a breakdown: a category, a store or a card with what was spent on it.
+    """One line of a breakdown: a category, a payee or a payment source with what was spent.
 
-    `key` is stable across periods (a category value, a store id, a card ending, `cash`) so two
-    periods can be compared by it. `label` is the text to show; it is empty when the view owns
-    the text (the `cash` card and a receipt without a store).
+    `key` is stable across periods (a category value, a payee id, a card ending, `cash`; `none`
+    for an expense without a payee or a source) so two periods can be compared by it. `label`
+    is the text to show: the payee's or the source's name, the category value for a category.
+    It is empty for `none`.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -92,20 +104,26 @@ class Amount(BaseModel):
 
 
 class CurrencyBlock(BaseModel):
-    """One currency of a period. `total` and `receipt_count` are over parsed receipts;
-    `categories` come from item lines (non-zero only, largest first); `not_itemised` is what the
-    categories do not cover; `stores` and `cards` come from receipt totals, largest first (cards
-    without an ending are under key `cash`)."""
+    """One currency of a period, over the user's not deleted expenses.
+
+    `total` and `expense_count` count every expense. `categories` are by expense category
+    (`ExpenseCategory` values, non-zero only, largest first); `products` are by product
+    category over the item lines of the receipt-backed expenses (`ProductCategory` values,
+    non-zero only, largest first); `not_itemised` is what the receipt-backed expenses spent
+    beyond those item lines. `payees` and `sources` are by expense amount, largest first; the
+    cash source has key `cash`.
+    """
 
     model_config = ConfigDict(frozen=True)
 
     currency: str
     total: Decimal
-    receipt_count: int
+    expense_count: int
     categories: list[Amount]
+    products: list[Amount]
     not_itemised: Decimal
-    stores: list[Amount]
-    cards: list[Amount]
+    payees: list[Amount]
+    sources: list[Amount]
 
 
 class SpendingPeriod(BaseModel):

@@ -21,7 +21,8 @@ receipt-summary =
     { $date }
     Total: <b>{ $amount }</b>
     Payment: { $payment }
-    Items: { $items }
+receipt-category = Category: { $category }
+receipt-items = Items: { $items }
 receipt-store-tag = #{ $tag }
 receipt-unknown-store = Unknown store
 receipt-amount = { $total } { $currency }
@@ -60,6 +61,7 @@ item-gone = This item is no longer on the receipt.
 item-row = { $name } · { $quantity } { $unit } · { $total }
 
 category-produce = Produce
+category-greens = Greens
 category-meat = Meat
 category-fish = Fish
 category-dairy = Dairy
@@ -75,6 +77,20 @@ category-baby = Baby
 category-pet = Pet
 category-other = Other
 category-current = ✓ { $name }
+expense-category-groceries = Groceries
+expense-category-restaurants = Restaurants
+expense-category-transport = Transport
+expense-category-rent = Rent
+expense-category-utilities = Utilities
+expense-category-health = Health
+expense-category-entertainment = Entertainment
+expense-category-subscriptions = Subscriptions
+expense-category-clothing = Clothing
+expense-category-travel = Travel
+expense-category-gifts = Gifts
+expense-category-other = Other
+expense-category-prompt = Pick the category of this expense
+category-not-possible = This receipt has no expense to categorise.
 item-category-prompt = Pick the category for { $name }
 item-input-prompt =
     Enter the { $field } ({ $hint })
@@ -167,8 +183,9 @@ stats-headline-no-previous = { $total } · { $count ->
 stats-previous-week = previous week
 stats-empty = No purchases in this period.
 stats-section-categories = <b>Categories</b>
-stats-section-stores = <b>Stores</b>
-stats-section-cards = <b>Cards</b>
+stats-section-products = <b>Groceries by product</b>
+stats-section-payees = <b>Payees</b>
+stats-section-sources = <b>Payment sources</b>
 stats-currency-block = <b>{ $currency }</b>
 stats-line = • { $label } { $amount } · { $share }% · { $change }
 stats-line-no-change = • { $label } { $amount } · { $share }%
@@ -179,4 +196,3 @@ stats-change-down = ▼ { $percent }%
 stats-change-same = ▬ 0%
 stats-change-new = new
 stats-not-itemised = Not itemised
-stats-cash = cash

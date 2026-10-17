@@ -11,6 +11,7 @@ class MainPreview(BaseModel):
     has_items: bool
     review_count: int
     can_reparse: bool
+    has_expense: bool
 
     def to_data(self) -> dict:
         return {
@@ -19,6 +20,7 @@ class MainPreview(BaseModel):
             PreviewDataKeys.HAS_ITEMS: self.has_items,
             PreviewDataKeys.REVIEW_COUNT: self.review_count,
             PreviewDataKeys.CAN_REPARSE: self.can_reparse,
+            PreviewDataKeys.HAS_EXPENSE: self.has_expense,
         }
 
 
@@ -59,7 +61,7 @@ class CategoryChoice(BaseModel):
 
 
 class CategoriesPreview(BaseModel):
-    """What the `item_category` window shows: the prompt and the 15 categories."""
+    """What the `item_category` and `category` windows show: the prompt and the categories."""
 
     text: str
     categories: list[CategoryChoice]

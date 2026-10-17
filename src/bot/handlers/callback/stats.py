@@ -30,7 +30,7 @@ async def show_stats(
         shown = callback_data.model_copy(update={"action": StatsAction.SHOW})
         await send_stats(query.message, shown, user, services, i18n)
         return
-    report = await services.receipts.spending(
+    report = await services.expenses.spending(
         user.id, callback_data.kind.value, callback_data.anchor
     )
     try:

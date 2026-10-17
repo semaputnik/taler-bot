@@ -30,7 +30,7 @@ class Receipt(Timestamps, Base):
     """One purchase receipt with one photo and at most one parse (ADR-0002). Replaces n8n
     `receipt_payments`.
 
-    The header columns (store_id … card_last4) are a denormalized copy of the parse with the
+    The header columns (payee_id … card_last4) are a denormalized copy of the parse with the
     user's edits applied, so lists and stats never read JSON.
     """
 
@@ -51,7 +51,7 @@ class Receipt(Timestamps, Base):
             postgresql_where=text("status = 'parsed' AND deleted_at IS NULL"),
         ),
         Index("ix_receipts_user_id_purchased_at", "user_id", "purchased_at"),
-        Index("ix_receipts_user_id_store_id_purchased_at", "user_id", "store_id", "purchased_at"),
+        Index("ix_receipts_user_id_payee_id_purchased_at", "user_id", "payee_id", "purchased_at"),
     )
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
@@ -62,7 +62,7 @@ class Receipt(Timestamps, Base):
         ForeignKey("receipts.id", ondelete="SET NULL")
     )
 
-    store_id: Mapped[int | None] = mapped_column(ForeignKey("stores.id", ondelete="SET NULL"))
+    payee_id: Mapped[int | None] = mapped_column(ForeignKey("payees.id", ondelete="SET NULL"))
     receipt_key: Mapped[str | None]
     receipt_number: Mapped[str | None]
     purchased_at: Mapped[datetime | None]

@@ -51,21 +51,30 @@ failures, the same photo sent twice and the same receipt photographed twice.
    384.20 € · 12 receipts · ▲ 8% vs September (355.10 €)
 
    Categories
-   • Produce 146.00 € · 38% · ▲ 12%
-   • Dairy 73.00 € · 19% · ▼ 5%
-   • Not itemised 3.20 € · 1%
+   • Groceries 300.00 € · 78% · ▲ 9%
+   • Rent 80.00 € · 21% · new
+   • Restaurants 4.20 € · 1%
 
-   Stores
+   Groceries by product
+   • Produce 146.00 € · 49% · ▲ 12%
+   • Dairy 73.00 € · 24% · ▼ 5%
+   • Not itemised 81.00 € · 27%
+
+   Payees
    • Mercadona 210.00 € · 55% · ▲ 3%
-   • Consum 98.00 € · 26% · new
+   • Landlord 80.00 € · 21% · new
+   • Consum 90.00 € · 23% · new
 
-   Cards
+   Payment sources
    • VISA •0848 300.00 € · ▲ 10%
-   • cash 84.20 €
+   • Cash 84.20 €
    ```
+   Since stage 3 the sections are: expense categories over all expenses, `Groceries by
+   product` (hidden when no receipt has items), payees (the top five) and payment sources
+   (cards and cash by name).
    - A week reads `📊 Week 42 · 13.10–19.10.2026` (ISO week number, Monday to Sunday).
-   - Categories come from the item lines, as a bulleted list with the share in percent; the part no item covers is `Not itemised`. Stores (the top five) and
-     cards come from the receipt totals. A line shows `▲ 12%`, `▼ 5%` or `new`; nothing is
+   - Stage 2 read categories from the item lines, as a bulleted list with the share in percent; the part no item covers is `Not itemised`. Stores (the top five) and
+     cards came from the receipt totals. A line shows `▲ 12%`, `▼ 5%` or `new`; nothing is
      compared when the previous period has no receipts.
    - One block per currency, headed by the currency when there is more than one. An empty
      period shows its title and "No purchases in this period."
@@ -74,13 +83,47 @@ failures, the same photo sent twice and the same receipt photographed twice.
      other kind, anchored on this period's start), and `[🧾 Receipts]` on the month screen,
      which sends that month's history as a new message. Taps edit the message in place.
 
-**Stage 3: later**
+**Stage 3: the bot becomes an expense manager** (agreed on 2026-10-17, ADR-0003)
 
-7. Manual receipt entry without a photo.
-8. Monthly budgets per category, with a notice when a budget is exceeded.
-9. CSV / XLSX export.
-10. Shopping list from purchase frequency.
-11. Whitelist management from the bot, for the admin only.
+Receipts are no longer entered by hand; instead every outflow of money is an **expense**, and
+a receipt is one way of entering an expense with full detail. An expense has an amount (the
+default currency for now), a date, a payee, a payment source (a card or cash), an expense
+category, tags, and optionally the receipt it came from.
+
+7. **Expense model and migration.** `Expense`, `Payee` (generalises `Store`), `PaymentSource`
+   (cards from receipts and by hand, plus cash), `ExpenseCategory` (groceries, restaurants,
+   transport, rent, utilities, health, entertainment, subscriptions, clothing, travel, gifts,
+   other) and tags. Every existing receipt becomes an expense (`groceries`, payee = its store,
+   source by its card ending or cash, date = purchase date; a deleted receipt gives a deleted
+   expense). `/stats` reports by expense category first, then "Groceries by product", payees and
+   payment sources. **Done.** The receipt card shows `Category: Groceries` after the payment
+   line and a `🏷 Category` button (the twelve categories, two per row, `✓` on the current one)
+   when the receipt has an expense; a failed, duplicate or not-a-receipt card shows neither.
+   `/receipts` lists the expenses of the month plus the receipts that have no expense (with
+   their status icon), so a failed or duplicate receipt stays reachable for deleting.
+8. **Manual entry.** A message that is only a number (`12.50`, `12,50`, `7`) starts the entry
+   with that amount: payee (the five most recent as buttons, or typed; a typed name matching an
+   existing payee reuses it) → payment source (cards, `Cash`, `➕ New card`) → category → date
+   (`Today`, `Yesterday`, `dd.mm`) → tags (comma-separated or `Skip`) → the expense card. Every
+   step has `◀ Back`. Only expenses: amounts are positive.
+9. **Expense card.** One card for every expense. With a receipt it is the receipt card plus
+   `Category` and `Tags`. Without one: amount, payee, source, category, date, tags; buttons
+   `✏️ Amount` `🏪 Payee` / `💳 Source` `🏷 Category` / `📅 Date` `#️⃣ Tags` / `🗑 Delete` /
+   `✖ Close`; no items, photo, review or re-parse. `💳 Source` offers `✏️ Rename` for a card.
+10. **History `/expenses`** replaces `/receipts`: every expense of the month, a receipt icon on
+    those read from a photo; filter by payee.
+11. **Expiring screens.** Screens opened by a command or a menu button (`/start`, `/expenses`,
+    `/stats`, the `/reparse` summary, an unfinished entry) are deleted after
+    `SCREEN_TTL_MINUTES` (30) without a tap; a tap extends the time. Cards, "Saved, reading…",
+    error replies and re-parse results stay. Tracked in Redis so it survives a restart.
+
+**Later**
+
+- Menus to rename and merge payees and to rename cards (today only from an expense card).
+- Attaching a receipt photo to an existing expense; a currency per expense; one-line entry
+  (`12.50 Mercadona`); income and refunds.
+- Monthly budgets per expense category with a notice when exceeded; CSV / XLSX export;
+  shopping list from purchase frequency; whitelist management from the bot.
 
 ## Duplicate photos and receipts
 
@@ -133,11 +176,12 @@ that can no longer be read again (duplicate, deleted) answers an alert.
 
 | window | content |
 |---|---|
-| `main` | the parse reply: the summary and buttons (`Items`, `⚠️ Review (n)` when n > 0, `Photo`, `Delete`, and `🔄 Re-parse` on its own row when the receipt is `parsed`, `failed` or `not_receipt`); the error line (`⚠️ The last reading failed: …`) is added when the last read failed, also on a parsed card that kept its previous reading; a receipt that is not `parsed` shows the outcome text (not a receipt, failed, duplicate with the receipt it repeats, waiting, being read) and the photo's date; a deleted receipt shows "🗑 This receipt was deleted." and no buttons |
+| `main` | the parse reply: the summary and buttons (`Items`, `⚠️ Review (n)` when n > 0, `🏷 Category` when the receipt has an expense, `Photo`, `Delete`, and `🔄 Re-parse` on its own row when the receipt is `parsed`, `failed` or `not_receipt`); a `Category: Groceries` line after the payment line when the receipt has an expense (a failed, duplicate or not-a-receipt card has neither line nor button); the error line (`⚠️ The last reading failed: …`) is added when the last read failed, also on a parsed card that kept its previous reading; a receipt that is not `parsed` shows the outcome text (not a receipt, failed, duplicate with the receipt it repeats, waiting, being read) and the photo's date; a deleted receipt shows "🗑 This receipt was deleted." and no buttons |
 | `items` | paginated item list (`ScrollingGroup`, 8 per page); a tap opens `item` |
 | `item` | all parsed fields, and the edit buttons `[✏️ Name] [🏷 Category]`, `[🔢 Quantity] [💶 Unit price]`, `[🧾 Line total]`, `[◀ Back]` |
 | `item_input` | "Enter the quantity (a number with a point, like 1.5)" with the current value, and a text input; `◀ Back` returns to `item`. Read like the review's input (`text` for the name, `number` for quantity and unit price, `money` for the line total). A wrong value (text, empty name, zero or negative quantity, negative price) keeps the window with an error line and changes nothing. The name is saved to the catalog and changes the product on every receipt of the store; the numbers are saved as edits of this receipt and survive a re-parse. A good value returns to `item` with the new value; a receipt deleted meanwhile gives the deleted alert and `main` |
 | `item_category` | the 15 categories, two per row, the current one marked `✓`, and `◀ Back` to `item`. A tap saves the category to the catalog (every receipt showing the product) and returns to `item` |
+| `category` | the twelve expense categories, two per row, the current one marked `✓`, and `◀ Back` to `main`. A tap sets the expense category and returns to `main`; a receipt deleted meanwhile, or one without an expense, gives the deleted alert and `main` |
 | `issue` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip] [◀ Back]`; `✏️ Enter value` only for an editable issue, and `✏️ Rename` in its place for a name issue whose item is matched to a product (never both). `Correct` and `Skip` move on to the next issue |
 | `issue_rename` | "Enter the name (free text)" with the product's current name, and a text input; `◀ Back` returns to `issue` with the issue open. A good name renames the product in the catalog (every receipt of the store), marks the issue corrected and moves the walk on; an empty name or a non-text message keeps the window with an error line; a receipt deleted meanwhile gives the deleted alert and `main`; an issue resolved elsewhere meanwhile is skipped silently |
 | `issue_input` | "Enter the total (a number with a point, like 12.50)" and a text input; `◀ Back` returns to `issue`. The text is read by the issue's input kind (date and time `dd.mm.yyyy hh:mm` in the user's time zone, number with a point or comma, four digits, 3-letter currency, free text). A wrong value or a non-text message keeps the window with an error line and the issue open; a good one is saved as an edit, the issue is marked corrected and the walk moves on |
@@ -192,4 +236,4 @@ message keeps working however old it is and however many cards were opened from 
 ### Main menu (`/start`)
 
 The greeting carries `[🧾 Receipts]` and `[📊 Spending]`, which send the current month's history
-and stats as new messages.
+and stats as new messages. Stage 3 renames the first to `[💸 Expenses]`.

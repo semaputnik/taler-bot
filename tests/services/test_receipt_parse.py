@@ -66,7 +66,7 @@ async def test_a_parsed_receipt_gets_items_catalog_and_a_parse_row_with_usage(
     assert stored.parse.duration_ms == 2500
     async with make_uow() as uow:
         catalog = await uow.catalog.get(1)
-    assert "consum" in catalog.stores
+    assert "consum" in catalog.payees
     assert {i.product_key for i in stored.items} <= set(catalog.products)
 
 

@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from src.bot.handlers.dialog.receipt_card.common import CATEGORIES
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.services.container import Services
 from tests.stubs import fixture, output_of
 
@@ -90,11 +90,11 @@ async def test_the_category_list_marks_the_current_one_and_a_pick_applies_everyw
     await harness.tap(USER, CATEGORY)
 
     texts = harness.button_texts()
-    assert len(texts) == 16
+    assert len(texts) == 17  # 16 categories and Back
     assert "✓ Drinks" in texts
     assert texts[-1] == BACK
     rows = [len(row) for row in harness.last_keyboard()[1].inline_keyboard]
-    assert rows == [2] * 7 + [1, 1]
+    assert rows == [2] * 8 + [1]
     await harness.tap(USER, "Snacks")
     assert "<b>Category:</b> Snacks" in harness.last_text()
     await harness.tap(USER, CATEGORY)
@@ -282,5 +282,5 @@ async def test_a_stranger_cannot_edit(harness, session_factory):
 
 
 def test_the_bots_category_list_is_the_domains():
-    assert set(CATEGORIES) == {str(c) for c in Category}
+    assert set(CATEGORIES) == {str(c) for c in ProductCategory}
     assert len(CATEGORIES) == len(set(CATEGORIES))

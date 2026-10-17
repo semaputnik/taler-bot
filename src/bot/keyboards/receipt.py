@@ -13,6 +13,7 @@ class CardWindow(StrEnum):
     MAIN = "main"
     ITEMS = "items"
     REVIEW = "review"
+    CATEGORY = "category"
     PHOTO = "photo"
     DELETE_CONFIRM = "delete_confirm"
     REPARSE = "reparse"  # not a window: reads the receipt again, then sends a fresh card
@@ -31,13 +32,16 @@ def receipt_keyboard(
     item_count: int = 0,
     review_count: int = 0,
     can_reparse: bool = False,
+    can_categorise: bool = False,
 ) -> InlineKeyboardMarkup:
     """Buttons under the parse reply: Items (only when the receipt has items), Review (only when
-    issues wait for the user), Photo, Delete; Re-parse on its own row (only when the receipt can
-    be read again), then Close."""
+    issues wait for the user), Category (only when the receipt has an expense), Photo, Delete;
+    Re-parse on its own row (only when the receipt can be read again), then Close."""
     windows = [CardWindow.ITEMS] if item_count > 0 else []
     if review_count > 0:
         windows.append(CardWindow.REVIEW)
+    if can_categorise:
+        windows.append(CardWindow.CATEGORY)
     windows += [CardWindow.PHOTO, CardWindow.DELETE_CONFIRM]
 
     def button(window: CardWindow) -> InlineKeyboardButton:
@@ -61,6 +65,7 @@ _BUTTON_KEYS = {
     CardWindow.PHOTO: "button-photo",
     CardWindow.DELETE_CONFIRM: "button-delete",
     CardWindow.REVIEW: "button-review",
+    CardWindow.CATEGORY: "button-category",
     CardWindow.REPARSE: "button-reparse",
     CardWindow.CLOSE: "button-close",
 }

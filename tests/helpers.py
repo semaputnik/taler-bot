@@ -6,9 +6,12 @@ Later tickets add their seeding helpers here, so tests do not repeat setup code.
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.database.dto.user import NewUserDTO
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
+from src.domain.enums import ReceiptStatus
+from src.domain.expense import Expense
 from src.domain.parse import Parse
 from src.domain.receipt import Receipt
 from tests.domain.builders import parse, photo, product
@@ -38,15 +41,52 @@ async def add_allowed_user(
 
 
 async def add_receipt(
-    make_uow: MakeUow, receipt: Receipt | None = None, *, user_id: int = 1, **fields: Any
+    make_uow: MakeUow,
+    receipt: Receipt | None = None,
+    *,
+    user_id: int = 1,
+    with_expense: bool = True,
+    **fields: Any,
 ) -> Receipt:
     """Add a receipt (given, or built from `fields`) in its own Unit of Work: a rejected row
-    poisons the transaction."""
+    poisons the transaction. A parsed receipt gets its expense, as it does in the app."""
     receipt = receipt or Receipt(user_id=user_id, photo=fields.pop("photo", photo()), **fields)
     async with make_uow() as uow:
         receipt = await uow.receipts.add(receipt)
         await uow.commit()
+    if with_expense:
+        await add_expense_of(make_uow, receipt)
     return receipt
+
+
+async def add_expense_of(make_uow: MakeUow, receipt: Receipt) -> Expense | None:
+    """The expense the app keeps for a stored parsed receipt (deleted with it); none for any
+    other status. Its payee and payment source are created as the service does."""
+    if receipt.status is not ReceiptStatus.PARSED:
+        return None
+    assert receipt.id is not None
+    async with make_uow() as uow:
+        user = await uow.users.get(receipt.user_id)
+        assert user is not None
+        catalog = await uow.catalog.get(receipt.user_id)
+        header = receipt.header
+        source = catalog.source_for(header.card_brand, header.card_last4)
+        await uow.catalog.save(catalog)
+        expense = Expense.from_receipt(
+            receipt.user_id,
+            receipt.id,
+            header,
+            payee_key=header.store_key,
+            payment_source_id=source.id,
+            received_at=receipt.photo.received_at,
+            tz=ZoneInfo(user.timezone),
+            default_currency=user.default_currency,
+        )
+        if receipt.deleted_at is not None:
+            expense.soft_delete(receipt.deleted_at)
+        expense = await uow.expenses.add(expense)
+        await uow.commit()
+    return expense
 
 
 async def seed_catalog(
@@ -61,7 +101,7 @@ async def seed_catalog(
         for bought in parses:
             if bought.store_key is None:
                 continue
-            catalog.ensure_store(bought.store_key, bought.store_name or bought.store_key)
+            catalog.ensure_payee(bought.store_key, bought.store_name or bought.store_key)
             for item in bought.items:
                 catalog.ensure_product(
                     bought.store_key,
@@ -73,7 +113,7 @@ async def seed_catalog(
                 )
         await uow.catalog.save(catalog)
         await uow.commit()
-    stores = {key: store.id for key, store in catalog.stores.items() if store.id is not None}
+    stores = {key: store.id for key, store in catalog.payees.items() if store.id is not None}
     products = {key: p.id for key, p in catalog.products.items() if p.id is not None}
     return stores, products
 

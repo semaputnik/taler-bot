@@ -6,7 +6,7 @@ A product that is not in the user's own catalog counts as not found (`UnknownPro
 
 from src.database.interfaces.uow import UnitOfWorkFactory
 from src.domain.catalog import Product
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.exception import InvalidEdit
 from src.services.results import ProductCard
 
@@ -27,7 +27,7 @@ class CatalogService:
     async def set_category(self, user_id: int, product_key: str, category: str) -> ProductCard:
         """Set the product's category from its name (`produce`, `dairy`, ...)."""
         try:
-            parsed = Category(category)
+            parsed = ProductCategory(category)
         except ValueError:
             raise InvalidEdit(f"unknown category {category!r}") from None
         async with self._uow_factory() as uow:
@@ -41,7 +41,7 @@ class CatalogService:
 def _card(product: Product) -> ProductCard:
     return ProductCard(
         product_key=product.product_key,
-        store_key=product.store_key,
+        store_key=product.payee_key,
         printed_name=product.name_raw,
         name=product.name,
         category=str(product.category),

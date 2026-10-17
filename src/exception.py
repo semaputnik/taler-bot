@@ -50,16 +50,36 @@ class InvalidReceiptData(DomainException):
     """A value breaks a model invariant (for example a naive datetime)."""
 
 
-class UnknownStore(DomainException):
-    """The catalog has no store with this key."""
+class UnknownPayee(DomainException):
+    """The catalog has no payee with this key."""
 
 
 class UnknownProduct(DomainException):
     """The catalog has no product with this key."""
 
 
+class UnknownPaymentSource(DomainException):
+    """The catalog has no payment source with this id."""
+
+
+class InvalidPaymentSource(DomainException):
+    """A payment source breaks a rule (a card needs four digits, a name cannot be empty)."""
+
+
+class InvalidExpense(DomainException):
+    """A value breaks an expense rule (amount, currency, tags)."""
+
+
+class ExpenseFollowsReceipt(InvalidExpense):
+    """The fact comes from the expense's receipt; change the receipt, not the expense."""
+
+
 class ReceiptNotFound(AppException):
     """No receipt with this id belongs to the user (another user's receipt counts as missing)."""
+
+
+class ExpenseNotFound(AppException):
+    """No expense with this id belongs to the user (another user's expense counts as missing)."""
 
 
 class UserNotFound(AppException):

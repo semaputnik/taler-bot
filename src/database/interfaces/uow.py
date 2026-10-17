@@ -2,6 +2,7 @@ from types import TracebackType
 from typing import Protocol, Self
 
 from src.database.interfaces.catalog import CatalogRepository
+from src.database.interfaces.expense import ExpenseRepository
 from src.database.interfaces.receipt import ReceiptRepository
 from src.database.interfaces.user import UserRepository
 
@@ -12,6 +13,7 @@ class UnitOfWork(Protocol):
     users: UserRepository
     catalog: CatalogRepository
     receipts: ReceiptRepository
+    expenses: ExpenseRepository
 
     async def __aenter__(self) -> Self: ...
 

@@ -34,11 +34,11 @@ async def show_history(
         shown = callback_data.model_copy(update={"action": HistoryAction.SHOW})
         await send_history(query.message, shown, user, services, i18n)
         return
-    page = await services.receipts.history(
+    page = await services.expenses.history(
         user.id,
         callback_data.year,
         callback_data.month,
-        store_id=callback_data.store_id or None,
+        payee_id=callback_data.store_id or None,
         page=callback_data.page,
     )
     text = view.show_text(page, i18n)

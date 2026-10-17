@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.exception import InvalidEdit, UnknownProduct
 from src.services.catalog import CatalogService
 from src.services.results import ProductCard
@@ -42,14 +42,14 @@ async def test_set_category_returns_the_card_and_persists(service, make_uow):
     card = await service.set_category(1, "mercadona::leche", "drinks")
 
     assert (card.category, card.name) == ("drinks", "Leche")
-    assert (await stored(make_uow)).category is Category.DRINKS
+    assert (await stored(make_uow)).category is ProductCategory.DRINKS
 
 
 async def test_an_unknown_category_is_refused_and_changes_nothing(service, make_uow):
     with pytest.raises(InvalidEdit):
         await service.set_category(1, "mercadona::leche", "bread")
 
-    assert (await stored(make_uow)).category is Category.DAIRY
+    assert (await stored(make_uow)).category is ProductCategory.DAIRY
 
 
 async def test_an_empty_name_is_refused(service, make_uow):

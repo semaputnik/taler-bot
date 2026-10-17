@@ -1,7 +1,7 @@
 # taler-bot
 
-A Telegram bot that reads photos of household purchase receipts and keeps what was
-bought, where and for how much.
+A Telegram bot that keeps a household's expenses: every expense is entered by hand or
+read from a receipt photo, with where the money went, what paid for it, and when.
 
 ## Language
 
@@ -46,9 +46,44 @@ _Avoid_: refine, refresh
 The text that identifies a receipt: store, receipt number, day and total. Two parsed
 receipts of one user never share it, so the same receipt photographed twice is refused.
 
+**Expense**:
+One outflow of money: amount, date, payee, payment source, expense category, tags, and
+optionally the receipt it was read from. The root of everything the bot keeps (ADR-0003).
+_Avoid_: transaction, payment, spending (the report)
+
+**Payee**:
+Who received the money: a shop, a landlord, a streaming service. Identified per user by
+the slug of its name. A payee that issues receipts has a catalog of products; most payees
+have none. Replaces "store" as the general term; "store" remains the word for a payee with
+a catalog.
+_Avoid_: merchant, vendor, expense account (the Firefly III name), place
+
 **Store**:
-A shop, identified per user by the slug of its trading name.
+A payee with a product catalog, identified per user by the slug of its trading name.
 _Avoid_: merchant, vendor
+
+**Payment source**:
+What the money left from: a card (brand and last four digits, with a name the user may
+change) or cash. Cards are created from receipts automatically and by hand.
+_Avoid_: asset account (the Firefly III name), account, wallet
+
+**Expense category**:
+One of a fixed list of kinds of spending (groceries, restaurants, rent, …) set on an
+expense. An expense read from a receipt starts as groceries. Not the product category.
+_Avoid_: category alone when the product category could be meant
+
+**Product category**:
+One of a fixed list of kinds of goods (produce, dairy, …) set on a product in the
+catalog; the breakdown inside groceries.
+
+**Tag**:
+A free word the user attaches to expenses to group them across categories ("holiday",
+"kids"). Many per expense, the user's own.
+
+**Screen**:
+A bot message with buttons that was opened by a command or a menu button (history,
+spending, the re-parse summary, an unfinished expense entry). Screens expire after a time
+without a tap; cards do not.
 
 **Product**:
 A catalogue entry for one store: the printed line text, a readable name and a category.

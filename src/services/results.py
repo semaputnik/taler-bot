@@ -12,9 +12,9 @@ from src.database.read_models import (
     CurrencyTotal,
     HistoryPage,
     HistoryRow,
+    PayeeOption,
     ReparseCandidates,
     SpendingPeriod,
-    StoreOption,
 )
 
 __all__ = [
@@ -26,6 +26,7 @@ __all__ = [
     "Compared",
     "ComparedBlock",
     "CurrentUser",
+    "ExpenseCard",
     "HistoryPage",
     "HistoryRow",
     "IssueCard",
@@ -33,6 +34,7 @@ __all__ = [
     "ItemRow",
     "NewPhoto",
     "ParseResult",
+    "PayeeOption",
     "PhotoRef",
     "ProductCard",
     "ReceiptCard",
@@ -40,7 +42,6 @@ __all__ = [
     "ReparseSummary",
     "SpendingPeriod",
     "SpendingReport",
-    "StoreOption",
 ]
 
 PAGE_SIZE = 8  # rows of the history per page
@@ -92,10 +93,32 @@ class ReceiptCard(BaseModel):
     card_last4: str | None
     item_count: int
     open_issue_count: int
+    expense_id: int | None  # the receipt's expense; None while it is not a purchase
+    expense_category: str | None  # an `ExpenseCategory` value
+    payment_source_name: str | None  # the expense's card or cash, by its name
     review_count: int  # open issues of severity high or medium: what the review walk visits
     can_reparse: bool  # the photo can be read again: parsed, failed or not_receipt, not deleted
     error_message: str | None  # why the last read failed; kept on a restored receipt too
     duplicate_of: ReceiptCard | None = None  # set by `ReceiptService.card` for a duplicate
+
+
+class ExpenseCard(BaseModel):
+    """What an expense shows. A receipt-backed expense has `receipt_id`; its amount, date, payee
+    and payment source follow the receipt. `category` is an `ExpenseCategory` value, `tags` are
+    sorted, `spent_at` is the user's local day."""
+
+    model_config = ConfigDict(frozen=True)
+
+    expense_id: int
+    amount: Decimal
+    currency: str
+    spent_at: date
+    payee_name: str | None
+    payment_source_name: str | None
+    category: str
+    tags: list[str]
+    receipt_id: int | None
+    deleted: bool
 
 
 class ItemRow(BaseModel):
@@ -232,9 +255,10 @@ class Compared(BaseModel):
 
 class ComparedBlock(BaseModel):
     """One currency of a period against the previous period. `previous_total` is None when the
-    previous period had no receipts in this currency; `change` is the whole percent of the total
-    against it, None when it is missing or zero. `categories` ends with the `not_itemised` line
-    when it is at least 0.01 in size; `stores` holds the five largest; `cards` all of them."""
+    previous period had no expenses in this currency; `change` is the whole percent of the total
+    against it, None when it is missing or zero. `categories` are by expense category; `products`
+    are by product category and end with the `not_itemised` line when it is at least 0.01 in
+    size; `payees` holds the five largest; `sources` all of them."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -242,17 +266,18 @@ class ComparedBlock(BaseModel):
     total: Decimal
     previous_total: Decimal | None
     change: int | None
-    receipt_count: int
+    expense_count: int
     categories: list[Compared]
-    stores: list[Compared]
-    cards: list[Compared]
+    products: list[Compared]
+    payees: list[Compared]
+    sources: list[Compared]
 
 
 class SpendingReport(BaseModel):
     """A week or month of spending for the stats screen, in the user's time zone. `[start, end)`
-    are local dates; `is_current` says the period holds today; `has_earlier` says a parsed
-    receipt was bought before `start`. `blocks` hold the user's default currency first, then the
-    others alphabetically; a period with no receipts has none."""
+    are local dates; `is_current` says the period holds today; `has_earlier` says an expense was
+    made before `start`. `blocks` hold the user's default currency first, then the others
+    alphabetically; a period with no expenses has none."""
 
     model_config = ConfigDict(frozen=True)
 

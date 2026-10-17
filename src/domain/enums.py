@@ -16,8 +16,9 @@ class ParseStatus(StrEnum):
     FAILED = "failed"
 
 
-class Category(StrEnum):
+class ProductCategory(StrEnum):
     PRODUCE = "produce"
+    GREENS = "greens"  # herbs and leafy greens; added 2026-10-17 at the user's request
     MEAT = "meat"
     FISH = "fish"
     DAIRY = "dairy"
@@ -32,6 +33,28 @@ class Category(StrEnum):
     BABY = "baby"
     PET = "pet"
     OTHER = "other"
+
+
+class ExpenseCategory(StrEnum):
+    """What kind of spending an expense is. Not the product category (ADR-0003)."""
+
+    GROCERIES = "groceries"
+    RESTAURANTS = "restaurants"
+    TRANSPORT = "transport"
+    RENT = "rent"
+    UTILITIES = "utilities"
+    HEALTH = "health"
+    ENTERTAINMENT = "entertainment"
+    SUBSCRIPTIONS = "subscriptions"
+    CLOTHING = "clothing"
+    TRAVEL = "travel"
+    GIFTS = "gifts"
+    OTHER = "other"
+
+
+class PaymentSourceKind(StrEnum):
+    CARD = "card"
+    CASH = "cash"
 
 
 class IssueSource(StrEnum):

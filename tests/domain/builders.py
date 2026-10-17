@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.domain.receipt import Parse, ParsedItem, Photo
 
 WHEN = datetime(2026, 10, 14, 18, 32, tzinfo=UTC)
@@ -23,7 +23,7 @@ def product(
         product_key=key,
         printed_name=key.split("::")[1].upper(),
         readable_name=key.split("::")[1].capitalize(),
-        category=Category.DAIRY,
+        category=ProductCategory.DAIRY,
         quantity=Decimal(quantity),
         unit="pcs",
         unit_price=Decimal(total) / Decimal(quantity),

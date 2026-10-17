@@ -12,6 +12,27 @@ from enum import StrEnum
 from pydantic import BaseModel, Field
 
 
+class ItemCategory(StrEnum):
+    """The product categories the model may assign; kept equal to `ProductCategory` by a test."""
+
+    PRODUCE = "produce"
+    GREENS = "greens"
+    MEAT = "meat"
+    FISH = "fish"
+    DAIRY = "dairy"
+    BAKERY = "bakery"
+    DRINKS = "drinks"
+    ALCOHOL = "alcohol"
+    SNACKS = "snacks"
+    FROZEN = "frozen"
+    PANTRY = "pantry"
+    HOUSEHOLD = "household"
+    PERSONAL_CARE = "personal_care"
+    BABY = "baby"
+    PET = "pet"
+    OTHER = "other"
+
+
 class IssueType(StrEnum):
     UNREADABLE = "unreadable"
     AMBIGUOUS = "ambiguous"
@@ -54,7 +75,7 @@ with warnings.catch_warnings():
 class RawItem(BaseModel):
     name_raw: str  # line text exactly as printed
     name_normalized: str  # clean readable name, no prices or codes
-    category: str | None
+    category: ItemCategory | None
     quantity: Decimal | None
     unit: str | None  # pcs, kg, g, l or ml
     unit_price: Decimal | None

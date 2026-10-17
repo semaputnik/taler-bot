@@ -5,6 +5,7 @@ from src.database.interfaces.uow import UnitOfWorkFactory
 from src.integration.llm import ReceiptParser
 from src.integration.storage import PhotoStorage
 from src.services.catalog import CatalogService
+from src.services.expense import ExpenseService
 from src.services.receipt import ReceiptService
 from src.services.user import UserService
 
@@ -16,6 +17,7 @@ class Services:
     users: UserService
     receipts: ReceiptService
     catalog: CatalogService
+    expenses: ExpenseService
 
     @classmethod
     def build(
@@ -25,4 +27,5 @@ class Services:
             users=UserService(uow_factory),
             receipts=ReceiptService(uow_factory, storage, parser),
             catalog=CatalogService(uow_factory),
+            expenses=ExpenseService(uow_factory),
         )

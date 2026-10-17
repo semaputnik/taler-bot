@@ -13,7 +13,9 @@ from src.bot.handlers.parse_task import read_and_show_card, send_reply
 from src.bot.states.receipt_card import ReceiptCardSG
 from src.bot.tasks import TaskRegistry
 from src.exception import (
+    ExpenseNotFound,
     InvalidEdit,
+    InvalidExpense,
     InvalidIssueResolution,
     InvalidReceiptTransition,
     ReceiptNotFound,
@@ -98,6 +100,25 @@ async def pick_category(
     except InvalidEdit, UnknownProduct:
         await query.answer(i18n.get("item-gone"), show_alert=True)
     await manager.switch_to(ReceiptCardSG.item)
+
+
+async def pick_expense_category(
+    query: CallbackQuery, widget: Select, manager: DialogManager, item_id: str
+) -> None:
+    """Set the receipt's expense category and go back to the card. A receipt deleted meanwhile,
+    or one that lost its expense, alerts instead."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    receipt_id = manager.dialog_data[DialogDataKeys.RECEIPT_ID]
+    try:
+        card = await services.receipts.card(user.id, receipt_id)
+        if card.deleted or card.expense_id is None:
+            raise ExpenseNotFound(receipt_id)
+        await services.expenses.set_category(user.id, card.expense_id, item_id)
+    except ReceiptNotFound, ExpenseNotFound, InvalidExpense:
+        await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
+    await manager.switch_to(ReceiptCardSG.main)
 
 
 async def on_item_value(message: Message, widget: MessageInput, manager: DialogManager) -> None:

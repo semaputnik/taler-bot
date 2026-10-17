@@ -5,10 +5,11 @@ from src.domain.catalog import Catalog
 
 class CatalogRepository(Protocol):
     async def get(self, user_id: int) -> Catalog:
-        """The user's catalog; empty when they have no stores yet."""
+        """The user's catalog; empty when they have no payees, payment sources or products yet."""
         ...
 
     async def save(self, catalog: Catalog) -> None:
-        """Insert the new stores and products, delete the ones marked for removal and update the
-        name and category of the changed products (hand edits). Nothing else is updated."""
+        """Insert the new payees, payment sources (they get their ids) and products, delete the
+        products marked for removal, and update the name and category of the changed products
+        and the name of the renamed sources (hand edits). Nothing else is updated."""
         ...

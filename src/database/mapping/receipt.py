@@ -22,12 +22,12 @@ from src.database.models import (
 )
 from src.domain.edits import Edit
 from src.domain.enums import (
-    Category,
     EditTarget,
     IssueResolution,
     IssueSeverity,
     IssueSource,
     ParseStatus,
+    ProductCategory,
     ReceiptStatus,
 )
 from src.domain.parse import Parse, ParsedIssue, ParsedItem
@@ -50,13 +50,13 @@ _HEADER_COLUMNS = (
 )
 
 
-def receipt_values(receipt: Receipt, *, store_id: int | None) -> dict[str, Any]:
+def receipt_values(receipt: Receipt, *, payee_id: int | None) -> dict[str, Any]:
     """The `receipts` row of the aggregate (everything but its own id and timestamps)."""
     return {
         "user_id": receipt.user_id,
         "status": receipt.status.value,
         "duplicate_of_id": receipt.duplicate_of_id,
-        "store_id": store_id,
+        "payee_id": payee_id,
         "error_message": receipt.error_message,
         "deleted_at": receipt.deleted_at,
         **{column: getattr(receipt.header, column) for column in _HEADER_COLUMNS},
@@ -215,7 +215,7 @@ def _dump(value: Any) -> Any:
         return str(value)
     if isinstance(value, datetime):
         return value.isoformat()
-    if isinstance(value, Category | IssueSource | IssueSeverity):
+    if isinstance(value, ProductCategory | IssueSource | IssueSeverity):
         return value.value
     return value
 
@@ -236,7 +236,7 @@ def _load_item(name: str, value: Any) -> Any:
     if name in _ITEM_NUMBERS:
         return Decimal(value)
     if name == "category":
-        return Category(value)
+        return ProductCategory(value)
     return value
 
 
@@ -282,7 +282,7 @@ def _items_from_rows(rows: Sequence[tuple[ReceiptItem, StoreProduct]]) -> list[I
                 product_key=product.product_key,
                 printed_name=row.name_raw,
                 readable_name=product.name,
-                category=Category(product.category),
+                category=ProductCategory(product.category),
                 quantity=row.quantity,
                 unit=row.unit,
                 unit_price=row.unit_price,
