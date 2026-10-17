@@ -153,3 +153,30 @@ month-short-9 = Sep
 month-short-10 = Oct
 month-short-11 = Nov
 month-short-12 = Dec
+
+stats-title-month = 📊 { $month } { $year }
+stats-title-week = 📊 Week { $week } · { $from }–{ $to }
+stats-headline = { $total } · { $count ->
+    [one] 1 receipt
+   *[other] { $count } receipts
+  } · { $change } vs { $previous } ({ $previous_total })
+stats-headline-no-previous = { $total } · { $count ->
+    [one] 1 receipt
+   *[other] { $count } receipts
+  }
+stats-previous-week = previous week
+stats-empty = No purchases in this period.
+stats-section-categories = <b>Categories</b>
+stats-section-stores = <b>Stores</b>
+stats-section-cards = <b>Cards</b>
+stats-currency-block = <b>{ $currency }</b>
+stats-line = { $label } { $amount } · { $share }% · { $change }
+stats-line-no-change = { $label } { $amount } · { $share }%
+stats-card-line = { $label } { $amount } · { $change }
+stats-card-line-no-change = { $label } { $amount }
+stats-change-up = ▲ { $percent }%
+stats-change-down = ▼ { $percent }%
+stats-change-same = ▬ 0%
+stats-change-new = new
+stats-not-itemised = Not itemised
+stats-cash = cash
