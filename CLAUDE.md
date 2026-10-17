@@ -62,7 +62,7 @@ in `docs/adr/`; the project vocabulary is in `GLOSSARY.md`. Use those terms in c
 src/
   __main__.py              # App(settings).run()
   exception.py             # AppException → DatabaseException, DomainException, IntegrationException, …
-  config/                  # settings.py (root Settings) + bot.py, database.py, redis.py,
+  config/                  # settings.py (root Settings, incl. LOG_LEVEL) + bot.py, database.py, redis.py,
                            # llm.py, storage.py (nested models); standalone DatabaseSettings for Alembic
   bot/                     # everything that knows about aiogram
     app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, Services, lifespan
@@ -102,7 +102,7 @@ src/
     periods.py             # week/month arithmetic for the stats (pure: period, previous, is_current, anchors)
     results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult, SpendingReport: the services' own pydantic types
   integration/
-    llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
+    llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse, prompt.md (system prompt)
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
@@ -111,6 +111,11 @@ src/
     edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
     catalog.py             # Catalog aggregate: Store, Product; rename_product, set_category
 alembic/                   # migrations (alembic.ini at the repo root)
+Dockerfile, .dockerignore  # the production image (see Deploy)
+docker-compose.prod.yml    # production stack; docker-compose.yml is dev-only
+.env.prod.template         # the server's .env
+docs/deploy.md             # runbook: install, deploy, rollback, backup, tokens
+.github/workflows/ci.yml   # CI: `test` (ruff, pytest on postgres:18, alembic check) and `publish` (image to GHCR on a green main)
 .env.template, .env        # settings template (committed) and local values (git-ignored)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```
@@ -201,13 +206,18 @@ the history dialog.
   and file I/O goes through `asyncio.to_thread`.
 - Getters must not query in a loop (N+1). Load what a window needs in one repository
   call.
+- `LOG_LEVEL` (top-level setting, default `INFO`, one of CRITICAL/ERROR/WARNING/INFO/DEBUG,
+  case-insensitive) sets the root log level in `src/__main__.py`.
 - Config, not code: no whitelist ids or tokens in source. Access is `users.is_allowed`
   in the DB.
 - Long-lived clients (the LLM agent, the HTTP sessions, `PhotoStorage`) are created once
   in `App` and closed in its lifespan, never per update.
 - The pydantic-ai agent uses `output_type` = a pydantic model that mirrors
   `docs/n8n-reference/receipt_schema.json`. Images go in as `BinaryContent`. The system
-  prompt is ported verbatim from `docs/n8n-reference/system_prompt.md`.
+  prompt is `src/integration/llm/prompt.md`, read by `openai_parser.py` through
+  `importlib.resources` so it ships inside the package. It is a verbatim port of
+  `docs/n8n-reference/system_prompt.md`; `tests/integration/llm/test_prompt.py` keeps the two
+  files byte-identical (change both together, and bump `PARSER_VERSION`).
 
 ### Dialogs (aiogram-dialog)
 
@@ -342,6 +352,27 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   (SQLSTATE class 22) or `DatabaseException`. Repositories carry no wrappers. A test engine
   must call `install_error_translation` too.
 
+### Deploy
+
+Full runbook: [docs/deploy.md](docs/deploy.md).
+
+- `Dockerfile`: two stages on `python:3.14-slim`; uv is copied from a pinned `ghcr.io/astral-sh/uv`
+  image and installs the locked, non-dev dependencies (`--frozen`). The image holds only the
+  venv, `src/`, `alembic/` and `alembic.ini` (the prompt and `.ftl` files are inside `src/`), and
+  runs as user `app` (uid 1000). `.dockerignore` excludes everything else.
+- `docker-compose.prod.yml`: `postgres`, `redis`, one-shot `migrate` (`alembic upgrade head`) and
+  `bot` (starts only after `migrate` succeeded; `stop_signal: SIGINT`, grace period 30 s). No
+  ports are published. All data is in bind mounts under `DATA_DIR` (`postgres/`, `redis/`,
+  `receipts/`; `receipts/` must be writable for uid 1000).
+- Secrets live only in the server's `.env` (from `.env.prod.template`), never in the image.
+  Compose does not interpolate `${...}` inside `env_file` values, so the compose file builds
+  `DATABASE__URL` from `${POSTGRES_PASSWORD}` in `environment:`, and also fixes `REDIS__URL` and
+  `STORAGE__RECEIPTS_DIR`.
+- The image is built by CI on a green `main` and published to `ghcr.io/semaputnik/taler-bot`
+  (`latest`, `sha-<short>`). A deploy is `docker compose pull && docker compose up -d`; a rollback
+  pins `TALER_TAG`.
+- Production and development use different bots: one token has one polling consumer.
+
 ### Photo storage
 
 - Root directory: the `STORAGE__RECEIPTS_DIR` setting (`settings.storage.receipts_dir`), mounted as a docker volume.
@@ -425,7 +456,8 @@ pantry, household, personal_care, baby, pet, other.
 ### Reference files
 
 `docs/n8n-reference/` is a verbatim snapshot of the workflow taken on 2026-10-16:
-`system_prompt.md`, `receipt_schema.json` and `normalize_receipt.js`. Port the behaviour
+`system_prompt.md` (also packaged as `src/integration/llm/prompt.md`, kept identical by a
+test), `receipt_schema.json` and `normalize_receipt.js`. Port the behaviour
 from these files, not from memory. If the n8n workflow changes, refresh the snapshot
 through the n8n MCP server (`get_workflow_details`).
 

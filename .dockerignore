@@ -1,0 +1,9 @@
+# Everything is excluded except what the Dockerfile copies.
+*
+!pyproject.toml
+!uv.lock
+!alembic.ini
+!alembic/
+!src/
+**/__pycache__
+**/*.py[oc]

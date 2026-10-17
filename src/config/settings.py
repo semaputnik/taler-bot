@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.config.bot import BotConfig
@@ -47,11 +47,23 @@ class DatabaseSettings(_BaseSettings):
     database: DatabaseConfig
 
 
+_LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
+
+
 class Settings(DatabaseSettings):
+    log_level: str = "INFO"
     bot: BotConfig
     redis: RedisConfig = RedisConfig()
     llm: LLMConfig
     storage: StorageConfig = StorageConfig()
+
+    @field_validator("log_level")
+    @classmethod
+    def _validate_log_level(cls, value: str) -> str:
+        name = value.strip().upper()
+        if name not in _LOG_LEVELS:
+            raise ValueError(f"LOG_LEVEL must be one of {', '.join(_LOG_LEVELS)}; got {value!r}")
+        return name
 
 
 @lru_cache

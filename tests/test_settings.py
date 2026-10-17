@@ -10,6 +10,7 @@ from src.config.settings import ENV_FILE, DatabaseSettings, Settings
 DB_URL = "postgresql+asyncpg://u:p@db:5432/app"
 
 KEYS = [
+    "LOG_LEVEL",
     "BOT__TOKEN",
     "DATABASE__URL",
     "REDIS__URL",
@@ -137,3 +138,22 @@ def test_env_template_has_every_key_and_no_secrets(monkeypatch: pytest.MonkeyPat
     for key, value in values.items():
         monkeypatch.setenv(key, value or "secret")
     assert Settings(_env_file=None).database.url
+
+
+@pytest.mark.usefixtures("full_env")
+def test_log_level_defaults_to_info_and_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert Settings(_env_file=None).log_level == "INFO"
+
+    monkeypatch.setenv("LOG_LEVEL", "debug")
+
+    assert Settings(_env_file=None).log_level == "DEBUG"
+
+
+@pytest.mark.usefixtures("full_env")
+def test_an_unknown_log_level_is_refused_with_the_valid_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "LOUD")
+
+    with pytest.raises(ValidationError, match="LOG_LEVEL must be one of"):
+        Settings(_env_file=None)

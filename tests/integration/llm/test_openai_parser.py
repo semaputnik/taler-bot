@@ -16,7 +16,7 @@ from pydantic_ai.messages import ModelResponse, ToolCallPart
 from pydantic_ai.models.function import FunctionModel
 
 from src.config.llm import LLMConfig
-from src.integration.llm import SYSTEM_PROMPT, LLMError, OpenAIReceiptParser
+from src.integration.llm import LLMError, OpenAIReceiptParser
 from src.integration.llm.schema import RawParse
 
 IMAGES = Path(__file__).parents[2] / "fixtures" / "images"
@@ -58,11 +58,6 @@ async def test_a_successful_call_yields_the_raw_parse_model_and_usage():
     assert output.model == "gpt-6-luna"
     assert output.input_tokens is not None and output.output_tokens is not None
     assert output.duration_ms >= 0
-
-
-def test_the_system_prompt_is_the_n8n_file_verbatim():
-    reference = Path(__file__).parents[3] / "docs" / "n8n-reference" / "system_prompt.md"
-    assert SYSTEM_PROMPT == reference.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize(
