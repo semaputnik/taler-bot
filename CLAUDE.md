@@ -86,7 +86,7 @@ src/
     engine.py              # create_engine / create_sessionmaker; install_error_translation
     errors.py              # SQLSTATE → app exception mapping
     models/                # SQLAlchemy ORM; never leaves database/
-    read_models.py         # HistoryPage, HistoryRow, …: screen-shaped query results (re-exported by services)
+    read_models.py         # HistoryPage, SpendingPeriod, …: screen-shaped query results (re-exported by services)
     dto/                   # UserDTO / NewUserDTO (the user repository's plain-data types)
     interfaces/            # Protocols for the UoW and the three repositories (typing)
     repositories/          # one per aggregate: ReceiptRepository, CatalogRepository, UserRepository
@@ -96,8 +96,9 @@ src/
     container.py           # Services (users, receipts, catalog): built once by App
     user.py                # UserService.ensure, .allow
     catalog.py             # CatalogService: rename_product, set_category (hand edits of products)
-    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes
-    results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult: the services' own pydantic types
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes, history, spending, reparse_*
+    periods.py             # week/month arithmetic for the stats (pure: period, previous, is_current, anchors)
+    results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult, SpendingReport: the services' own pydantic types
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
@@ -298,6 +299,19 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   filter narrows rows, counts and totals but not `stores`; `parsed_count` and `totals` count
   parsed receipts only. `ReceiptService.history` pages by `PAGE_SIZE = 8`, clamps a page past
   the end and clears `has_later` for the current month.
+- `ReceiptRepository.spending(user_id, start, end, timezone)` is the stats read model
+  (`SpendingPeriod`, `CurrencyBlock`, `Amount`): four SELECTs whatever the number of receipts.
+  `[start, end)` are local dates; a receipt belongs to the period of `purchased_at` in the
+  time zone, and only parsed, not deleted receipts count. One block per currency (by code):
+  `total` and `receipt_count`, `categories` from item line totals through
+  `store_products.category` at query time (non-zero only, largest first), `not_itemised`
+  (`total` minus the categories), `stores` and `cards` from receipt totals (largest first; a
+  receipt without a card ending is the card `cash`, its label left to the view). Items carry no
+  currency: the receipt's applies. `earliest_purchase(user_id, timezone)` is the local date of
+  the first parsed purchase. `ReceiptService.spending(user_id, kind, anchor)` loads the period
+  and the previous one (`services/periods.py`) in one Unit of Work and returns a
+  `SpendingReport` of `ComparedBlock`/`Compared` lines with whole-number shares and changes
+  (`None` when the previous value is missing or zero), five stores, the user's currency first.
 - Deleting a receipt is soft (`deleted_at`). Every list, stats query and uniqueness check
   must filter `deleted_at IS NULL`.
 - Money is `numeric(12,2)` and unit prices/quantities are `numeric(12,4)`, both `Decimal`
