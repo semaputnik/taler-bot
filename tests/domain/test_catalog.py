@@ -440,3 +440,26 @@ def test_payee_and_source_look_up_what_the_catalog_holds_or_raise():
         catalog.payee("aldi")
     with pytest.raises(UnknownPaymentSource):
         catalog.source(7)
+
+
+def test_the_name_cash_is_reserved_for_the_cash_source_even_before_it_exists():
+    catalog = Catalog(user_id=1)
+
+    with pytest.raises(InvalidPaymentSource):
+        catalog.add_card("Cash")
+    card = catalog.add_card("Wallet")
+    with pytest.raises(InvalidPaymentSource):
+        catalog.rename_source(next(iter(catalog.payment_sources)), "CASH")
+    assert card.name == "Wallet"
+    cash = catalog.cash()
+    assert catalog.rename_source("cash", "CASH").name == "CASH"
+    assert cash.name == "CASH"
+
+
+def test_a_receipt_card_whose_name_a_hand_added_card_has_gets_a_distinct_name():
+    catalog = Catalog(user_id=1)
+    catalog.add_card("visa •0848")
+
+    card = catalog.ensure_card("VISA", "0848")
+
+    assert card.name == "VISA •0848 (receipt)"

@@ -143,12 +143,10 @@ class Catalog:
             if source.kind is PaymentSourceKind.CARD and source.last4 == last4:
                 return source
         brand = (brand or "").strip().upper() or None
-        source = PaymentSource(
-            kind=PaymentSourceKind.CARD,
-            name=f"{brand} •{last4}" if brand else f"•{last4}",
-            brand=brand,
-            last4=last4,
-        )
+        name = f"{brand} •{last4}" if brand else f"•{last4}"
+        if self._name_taken(name):  # a card added by hand already has this name: keep both apart
+            name = f"{name} (receipt)"
+        source = PaymentSource(kind=PaymentSourceKind.CARD, name=name, brand=brand, last4=last4)
         self.payment_sources[f"card:{last4}"] = source
         return source
 
@@ -210,10 +208,19 @@ class Catalog:
         self.payment_sources[source_id] = source
 
     def _ensure_name_free(self, name: str, besides: PaymentSource | None = None) -> None:
+        if name.lower() == CASH_NAME.lower() and (
+            besides is None or besides.kind is not PaymentSourceKind.CASH
+        ):  # the cash source may not exist yet, but its name is reserved
+            raise InvalidPaymentSource(f"the name {CASH_NAME!r} belongs to the cash source")
+        if self._name_taken(name, besides):
+            raise InvalidPaymentSource(f"a payment source named {name!r} exists")
+
+    def _name_taken(self, name: str, besides: PaymentSource | None = None) -> bool:
         taken = name.lower()
-        for other in self.payment_sources.values():
-            if other is not besides and other.name.lower() == taken:
-                raise InvalidPaymentSource(f"a payment source named {other.name!r} exists")
+        return any(
+            other is not besides and other.name.lower() == taken
+            for other in self.payment_sources.values()
+        )
 
     # --- products ----------------------------------------------------------------------
 
