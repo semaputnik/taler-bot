@@ -141,7 +141,7 @@ the value entry of the issue review (`issue_input` is a placeholder) and the his
   - Read models for lists and stats (`ReceiptListRow`, …) are separate query methods
     that return pydantic models shaped for the screen, not aggregates.
 - **services** are application services (one class per entity, action methods:
-  `ReceiptService.save_photo`, `.edit_item`, `.soft_delete`; `UserService.ensure`). Every
+  `ReceiptService.save_photo`, `.edit_item`, `.soft_delete`; `CatalogService.rename_product`; `UserService.ensure`). Every
   method takes the `user_id`, and another user's receipt counts as not found.
   - A method does: load the aggregate → call the LLM or storage outside any transaction
     → call **one** aggregate method → save → commit. It contains no receipt rules; if a
