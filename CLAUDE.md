@@ -95,12 +95,13 @@ src/
     mapping/               # ORM rows ↔ domain aggregates (the only place both are known)
     uow/                   # SqlAlchemyUnitOfWork
   services/                # application services: one class per entity, action methods
-    container.py           # Services (users, receipts, catalog): built once by App
+    container.py           # Services (users, receipts, catalog, expenses): built once by App
     user.py                # UserService.ensure, .allow
     catalog.py             # CatalogService: rename_product, set_category (hand edits of products)
-    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes, history, spending, reparse_*
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes, reparse_*; every write that changes the header keeps the receipt's expense in step
+    expense.py             # ExpenseService: card, for_receipt, set_category, set_tags, history, spending (lists and stats over expenses)
     periods.py             # week/month arithmetic for the stats (pure: period, previous, is_current, anchors)
-    results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult, SpendingReport: the services' own pydantic types
+    results.py             # CurrentUser, NewPhoto, ReceiptCard, ExpenseCard, IssueCard, ParseResult, SpendingReport: the services' own pydantic types
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse, prompt.md (system prompt)
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
@@ -154,10 +155,10 @@ the history dialog.
   - Commit only explicitly with `await uow.commit()`. Leaving the block without a
     commit rolls back.
   - Repositories never commit and never return ORM objects.
-  - Read models for lists and stats (`ReceiptListRow`, …) are separate query methods
+  - Read models for lists and stats (`HistoryPage`, `SpendingPeriod`, …) are separate query methods
     that return pydantic models shaped for the screen, not aggregates.
 - **services** are application services (one class per entity, action methods:
-  `ReceiptService.save_photo`, `.edit_item`, `.soft_delete`; `CatalogService.rename_product`; `UserService.ensure`). Every
+  `ReceiptService.save_photo`, `.edit_item`, `.soft_delete`; `ExpenseService.set_category`, `.history`; `CatalogService.rename_product`; `UserService.ensure`). Every
   method takes the `user_id`, and another user's receipt counts as not found.
   - A method does: load the aggregate → call the LLM or storage outside any transaction
     → call **one** aggregate method → save → commit. It contains no receipt rules; if a
@@ -167,6 +168,17 @@ the history dialog.
   - A write that sets or replaces the parse also applies the `ParseOutcome` to the catalog
     in the same transaction: new stores and products first (the receipt's store and items
     refer to them), the receipt, then the released products this receipt created.
+  - **The receipt → expense mirror** (ADR-0003). A write that changes the receipt header
+    (`_store_parse` on a first parse and on a re-parse, `correct_issue`, `edit_header`, and
+    `soft_delete`) also loads the expense by `receipt_id` and brings it in step, in the same
+    Unit of Work as the receipt save: the catalog is saved first (new payees, products and
+    payment sources get their ids; `catalog.source_for(brand, last4)` gives the card or
+    cash), then the receipt, then the expense (`Expense.from_receipt` on the first parse,
+    `sync_with_receipt` after, `restore` if it was deleted). A receipt that is not a purchase
+    (`Receipt.backs_expense` is false: `not_receipt`, `failed`, `duplicate`, deleted) has no
+    live expense; an earlier one is soft-deleted. The rule "the expense mirrors the header"
+    is on `Expense`; the service only wires it. The user's own facts (category, tags) are
+    never touched by a receipt, and `ExpenseService` never changes the mirrored ones.
   - Results are the service's own pydantic types (e.g. `CurrentUser`, `ReceiptCard`, `ProductCard`),
     so the bot never depends on `database` or `domain` internals.
 - **bot**:
@@ -260,7 +272,7 @@ the list as a new message instead of editing the greeting.
 `/stats` works the same way: `StatsCallback` buttons carry the kind and an anchor date inside the
 period, `callback/stats.py` edits the message in place (`StatsAction.SHOW`) and the `/start`
 `📊 Spending` button uses `StatsAction.OPEN` to send a new message. The view only formats what
-`ReceiptService.spending` returns (whole-percent shares and changes, `new` when `previous` is
+`ExpenseService.spending` returns (whole-percent shares and changes, `new` when `previous` is
 None); the `🧾 Receipts` button of a month screen is a `HistoryCallback` with `OPEN`.
 
 The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
@@ -333,28 +345,31 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   duplicate, pending and parsing receipts get none),
   a cash source per user with a card-less receipt and a card per distinct `(user, last4)`
   (most frequent brand). It is tested on a seeded database in `tests/test_expense_migration.py`.
-- `ReceiptRepository.history(user_id, year, month, timezone, store_id, offset, limit)` is the
-  month read model (`HistoryPage`, `HistoryRow`, `CurrencyTotal`, `StoreOption` in
+- `ExpenseRepository.history(user_id, year, month, payee_id, offset, limit)` is the month read
+  model (`HistoryPage`, `HistoryRow`, `CurrencyTotal`, `PayeeOption` in
   `database/read_models.py`, re-exported by `services/results.py`): four SELECTs whatever the
-  month's size. A receipt belongs to the month of `coalesce(purchased_at, photo.received_at)`
-  in the user's time zone (purchase date first, the day the photo arrived as the fallback, so
-  a failed receipt is still findable). Deleted receipts are excluded everywhere; the store
-  filter narrows rows, counts and totals but not `stores`; `parsed_count` and `totals` count
-  parsed receipts only. `ReceiptService.history` pages by `PAGE_SIZE = 8`, clamps a page past
-  the end and clears `has_later` for the current month.
-- `ReceiptRepository.spending(user_id, start, end, timezone)` is the stats read model
-  (`SpendingPeriod`, `CurrencyBlock`, `Amount`): four SELECTs whatever the number of receipts.
-  `[start, end)` are local dates; a receipt belongs to the period of `purchased_at` in the
-  time zone, and only parsed, not deleted receipts count. One block per currency (by code):
-  `total` and `receipt_count`, `categories` from item line totals through
-  `store_products.category` at query time (non-zero only, largest first), `not_itemised`
-  (`total` minus the categories), `stores` and `cards` from receipt totals (largest first; a
-  receipt without a card ending is the card `cash`, its label left to the view). Items carry no
-  currency: the receipt's applies. `earliest_purchase(user_id, timezone)` is the local date of
-  the first parsed purchase. `ReceiptService.spending(user_id, kind, anchor)` loads the period
-  and the previous one (`services/periods.py`) in one Unit of Work and returns a
-  `SpendingReport` of `ComparedBlock`/`Compared` lines with whole-number shares and changes
-  (`None` when the previous value is missing or zero), five stores, the user's currency first.
+  month's size. A row is an expense, in the month of its `spent_at` (already the user's local
+  day, fixed when the expense was written). Rows carry `has_receipt`, `receipt_id` and the
+  receipt's `status` (all None/false for an expense without a receipt). Only parsed receipts
+  have expenses, so a failed, pending, duplicate or not-a-receipt receipt has no row. Deleted
+  expenses are excluded everywhere; the payee filter narrows rows, counts and totals but not
+  `payees`. `ExpenseService.history` pages by `PAGE_SIZE = 8`, clamps a page past the end and
+  clears `has_later` for the current month.
+- `ExpenseRepository.spending(user_id, start, end)` is the stats read model (`SpendingPeriod`,
+  `CurrencyBlock`, `Amount`): five SELECTs whatever the number of expenses. `[start, end)` are
+  local dates over `spent_at`; deleted expenses are excluded. One block per currency (by code):
+  `total` and `expense_count`; `categories` by `ExpenseCategory` over all expenses; `products`
+  by `ProductCategory` from item line totals of the receipt-backed expenses, through
+  `store_products.category` at query time; `not_itemised` (what the receipt-backed expenses
+  spent beyond their item lines); `payees` and `sources` from expense amounts (largest first;
+  the cash source has key `cash` and its name as label, an expense without a payee or a source
+  has key `none` and an empty label). `earliest_spent_at(user_id)` is the first expense day.
+  `ExpenseService.spending(user_id, kind, anchor)` loads the period and the previous one
+  (`services/periods.py`) in one Unit of Work and returns a `SpendingReport` of
+  `ComparedBlock`/`Compared` lines with whole-number shares and changes (`None` when the
+  previous value is missing or zero), five payees, the user's currency first. Until the stats
+  screen is redone the bot renders `products` (with the `not_itemised` line) under
+  "Categories".
 - Deleting a receipt is soft (`deleted_at`). Every list, stats query and uniqueness check
   must filter `deleted_at IS NULL`.
 - Money is `numeric(12,2)` and unit prices/quantities are `numeric(12,4)`, both `Decimal`
