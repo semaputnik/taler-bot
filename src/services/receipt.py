@@ -13,7 +13,8 @@ import asyncio
 import logging
 import weakref
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -34,9 +35,14 @@ from src.exception import (
 )
 from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
+from src.services import periods
 from src.services.results import (
     PAGE_SIZE,
+    Amount,
     BulkResult,
+    Compared,
+    ComparedBlock,
+    CurrencyBlock,
     HistoryPage,
     IssueCard,
     IssueLine,
@@ -46,6 +52,7 @@ from src.services.results import (
     PhotoRef,
     ReceiptCard,
     ReparseSummary,
+    SpendingReport,
 )
 
 logger = logging.getLogger(__name__)
@@ -298,6 +305,39 @@ class ReceiptService:
             found = found.model_copy(update={"has_later": False})
         return found
 
+    # --- spending ----------------------------------------------------------------------
+
+    async def spending(
+        self, user_id: int, kind: Literal["week", "month"], anchor: date
+    ) -> SpendingReport:
+        """The week or month of `anchor` (local dates, Monday weeks), against the period before.
+
+        Both periods are read in one Unit of Work: a fixed number of statements. Percentages are
+        whole numbers, computed here; blocks are those of the period itself, the user's default
+        currency first.
+        """
+        start, end = periods.period(kind, anchor)
+        before_start, before_end = periods.previous(start, end)
+        async with self._uow_factory() as uow:
+            user = await uow.users.get(user_id)
+            if user is None:
+                raise UserNotFound(user_id)
+            current = await uow.receipts.spending(user_id, start, end, user.timezone)
+            before = await uow.receipts.spending(user_id, before_start, before_end, user.timezone)
+            earliest = await uow.receipts.earliest_purchase(user_id, user.timezone)
+        today = datetime.now(ZoneInfo(user.timezone)).date()
+        earlier = {block.currency: block for block in before.blocks}
+        blocks = [_compare(block, earlier.get(block.currency)) for block in current.blocks]
+        blocks.sort(key=lambda b: (b.currency != user.default_currency, b.currency))
+        return SpendingReport(
+            kind=kind,
+            start=start,
+            end=end,
+            is_current=periods.is_current(start, end, today),
+            has_earlier=earliest is not None and earliest < start,
+            blocks=blocks,
+        )
+
     # --- re-parse ----------------------------------------------------------------------
 
     async def reparse_candidates(self, user_id: int) -> ReparseSummary:
@@ -545,4 +585,62 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         item_count=len(receipt.items),
         open_issue_count=sum(1 for i in receipt.issues if i.resolution is IssueResolution.OPEN),
         review_count=len(receipt.reviewable_issues()),
+    )
+
+
+# --- spending comparison -------------------------------------------------------------------
+
+_STORES_SHOWN = 5
+_NOT_ITEMISED = "not_itemised"
+_NOT_ITEMISED_FROM = Decimal("0.01")
+
+
+def _percent(part: Decimal, whole: Decimal) -> int | None:
+    """`part` as a whole percent of `whole`, halves rounded up; None when `whole` is zero."""
+    if whole == 0:
+        return None
+    return int((part / whole * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def _compared(amounts: list[Amount], total: Decimal, before: list[Amount] | None) -> list[Compared]:
+    """Each amount with its share of `total` and its change against the same key in `before`
+    (None when there is no earlier period or line)."""
+    earlier = {a.key: a.value for a in before or []}
+    found = []
+    for amount in amounts:
+        previous = earlier.get(amount.key)
+        found.append(
+            Compared(
+                key=amount.key,
+                label=amount.label,
+                value=amount.value,
+                share=_percent(amount.value, total) or 0,
+                previous=previous,
+                change=None
+                if previous is None
+                else _percent(amount.value - previous, abs(previous)),
+            )
+        )
+    return found
+
+
+def _compare(block: CurrencyBlock, before: CurrencyBlock | None) -> ComparedBlock:
+    categories = _compared(block.categories, block.total, before.categories if before else None)
+    if abs(block.not_itemised) >= _NOT_ITEMISED_FROM:
+        remainder = Amount(key=_NOT_ITEMISED, label="", value=block.not_itemised)
+        previous = (
+            [Amount(key=_NOT_ITEMISED, label="", value=before.not_itemised)] if before else None
+        )
+        categories += _compared([remainder], block.total, previous)
+    return ComparedBlock(
+        currency=block.currency,
+        total=block.total,
+        previous_total=before.total if before else None,
+        change=_percent(block.total - before.total, abs(before.total)) if before else None,
+        receipt_count=block.receipt_count,
+        categories=categories,
+        stores=_compared(block.stores, block.total, before.stores if before else None)[
+            :_STORES_SHOWN
+        ],
+        cards=_compared(block.cards, block.total, before.cards if before else None),
     )

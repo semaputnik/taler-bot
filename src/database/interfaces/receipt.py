@@ -1,6 +1,7 @@
+from datetime import date
 from typing import Protocol
 
-from src.database.read_models import HistoryPage, ReparseCandidates
+from src.database.read_models import HistoryPage, ReparseCandidates, SpendingPeriod
 from src.domain.receipt import Receipt
 
 
@@ -50,6 +51,18 @@ class ReceiptRepository(Protocol):
         A receipt belongs to the month of `coalesce(purchased_at, photo.received_at)` in the
         IANA time zone `timezone`. A fixed number of statements, whatever the month's size.
         """
+        ...
+
+    async def spending(self, user_id: int, start: date, end: date, timezone: str) -> SpendingPeriod:
+        """What the user spent in the local-date period `[start, end)`, per currency.
+
+        A receipt belongs to the period of its `purchased_at` in the IANA time zone `timezone`;
+        only parsed, not deleted receipts count. A fixed number of statements.
+        """
+        ...
+
+    async def earliest_purchase(self, user_id: int, timezone: str) -> date | None:
+        """The local date of the user's earliest parsed, not deleted purchase, if any."""
         ...
 
     async def reparse_candidates(self, user_id: int, current_version: str) -> ReparseCandidates:

@@ -28,3 +28,6 @@ button-prev-page = ◀
 button-next-page = ▶
 button-reparse-failed = 🔁 Re-parse failed ({ $count })
 button-reparse-outdated = 🔁 Re-parse outdated ({ $count })
+button-spending = 📊 Spending
+button-stats-week = 📅 Week
+button-stats-month = 📅 Month

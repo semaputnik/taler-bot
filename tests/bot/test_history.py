@@ -266,7 +266,7 @@ async def test_a_row_tap_sends_a_fresh_card_and_the_history_keeps_its_buttons(ha
 async def test_start_carries_the_receipts_button_and_it_opens_the_list(harness, make_uow):
     await bought(make_uow, 14)
     await harness.send_text("/start", user_id=USER)
-    assert harness.button_texts() == [RECEIPTS]
+    assert harness.button_texts() == [RECEIPTS, "📊 Spending"]
 
     await harness.tap(USER, RECEIPTS)
 

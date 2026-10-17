@@ -44,8 +44,35 @@ failures, the same photo sent twice and the same receipt photographed twice.
 
 **Stage 2: analytics**
 
-6. **Spending** `/stats`. Week, month or a custom period. Broken down by category, store
-   and card, compared with the previous period.
+6. **Spending** `/stats`. One week or month of spending against the previous period. The
+   message is plain text with plain callback buttons, like the history:
+   ```
+   📊 October 2026
+   384.20 € · 12 receipts · ▲ 8% vs September (355.10 €)
+
+   Categories
+   • Produce 146.00 € · 38% · ▲ 12%
+   • Dairy 73.00 € · 19% · ▼ 5%
+   • Not itemised 3.20 € · 1%
+
+   Stores
+   • Mercadona 210.00 € · 55% · ▲ 3%
+   • Consum 98.00 € · 26% · new
+
+   Cards
+   • VISA •0848 300.00 € · ▲ 10%
+   • cash 84.20 €
+   ```
+   - A week reads `📊 Week 42 · 13.10–19.10.2026` (ISO week number, Monday to Sunday).
+   - Categories come from the item lines, as a bulleted list with the share in percent; the part no item covers is `Not itemised`. Stores (the top five) and
+     cards come from the receipt totals. A line shows `▲ 12%`, `▼ 5%` or `new`; nothing is
+     compared when the previous period has no receipts.
+   - One block per currency, headed by the currency when there is more than one. An empty
+     period shows its title and "No purchases in this period."
+   - Buttons: `[◀ Sep] [Nov ▶]` (`◀` always, an empty period says so; `▶` only in a past
+     period; a week's labels are its neighbours' start dates), `[📅 Week]` or `[📅 Month]` (the
+     other kind, anchored on this period's start), and `[🧾 Receipts]` on the month screen,
+     which sends that month's history as a new message. Taps edit the message in place.
 
 **Stage 3: later**
 
@@ -164,5 +191,5 @@ message keeps working however old it is and however many cards were opened from 
 
 ### Main menu (`/start`)
 
-The greeting carries `[🧾 Receipts]`, which sends the current month as a new message. The
-spending button comes with the stats feature.
+The greeting carries `[🧾 Receipts]` and `[📊 Spending]`, which send the current month's history
+and stats as new messages.

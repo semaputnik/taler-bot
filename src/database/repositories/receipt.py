@@ -1,5 +1,6 @@
 from dataclasses import replace
-from datetime import datetime
+from datetime import date, datetime, time
+from decimal import Decimal
 
 from sqlalchemy import Date, cast, delete, exists, func, insert, null, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -19,10 +20,13 @@ from src.database.models import (
     StoreProduct,
 )
 from src.database.read_models import (
+    Amount,
+    CurrencyBlock,
     CurrencyTotal,
     HistoryPage,
     HistoryRow,
     ReparseCandidates,
+    SpendingPeriod,
     StoreOption,
 )
 from src.domain.enums import ReceiptStatus
@@ -425,6 +429,105 @@ class SqlAlchemyReceiptRepository:
             store_name=store_name,
         )
 
+    async def spending(self, user_id: int, start: date, end: date, timezone: str) -> SpendingPeriod:
+        """Four SELECTs, whatever the number of receipts: totals per currency, item lines per
+        category, receipt totals per store, receipt totals per card.
+
+        Membership is `purchased_at` converted to `timezone` (a naive local timestamp), compared
+        with the naive local bounds. Items carry no currency: the receipt's applies.
+        """
+        local = func.timezone(timezone, ReceiptRow.purchased_at)
+        counted = (
+            ReceiptRow.user_id == user_id,
+            ReceiptRow.deleted_at.is_(None),
+            ReceiptRow.status == ReceiptStatus.PARSED.value,
+            ReceiptRow.currency.is_not(None),
+            ReceiptRow.total.is_not(None),
+            local >= datetime.combine(start, time.min),
+            local < datetime.combine(end, time.min),
+        )
+        value = func.sum(ReceiptRow.total)
+        totals = await self._session.execute(
+            select(ReceiptRow.currency, value, func.count())
+            .where(*counted)
+            .group_by(ReceiptRow.currency)
+        )
+        by_currency = {c: (t, n) for c, t, n in totals}
+
+        lines = await self._session.execute(
+            select(ReceiptRow.currency, StoreProduct.category, func.sum(ReceiptItem.line_total))
+            .select_from(ReceiptItem)
+            .join(ReceiptRow, ReceiptRow.id == ReceiptItem.receipt_id)
+            .join(StoreProduct, StoreProduct.id == ReceiptItem.store_product_id)
+            .where(*counted)
+            .group_by(ReceiptRow.currency, StoreProduct.category)
+            .having(func.coalesce(func.sum(ReceiptItem.line_total), 0) != 0)
+        )
+        categories: dict[str, list[Amount]] = {}
+        for currency, category, amount in lines:
+            categories.setdefault(currency, []).append(
+                Amount(key=category, label=category, value=amount)
+            )
+
+        shops = await self._session.execute(
+            select(ReceiptRow.currency, ReceiptRow.store_id, func.max(Store.name), value)
+            .select_from(ReceiptRow)
+            .outerjoin(Store, Store.id == ReceiptRow.store_id)
+            .where(*counted)
+            .group_by(ReceiptRow.currency, ReceiptRow.store_id)
+        )
+        stores: dict[str, list[Amount]] = {}
+        for currency, store_id, name, amount in shops:
+            stores.setdefault(currency, []).append(
+                Amount(
+                    key="none" if store_id is None else str(store_id),
+                    label=name or "",
+                    value=amount,
+                )
+            )
+
+        paid = await self._session.execute(
+            select(
+                ReceiptRow.currency, ReceiptRow.card_last4, func.max(ReceiptRow.card_brand), value
+            )
+            .where(*counted)
+            .group_by(ReceiptRow.currency, ReceiptRow.card_last4)
+        )
+        cards: dict[str, list[Amount]] = {}
+        for currency, last4, brand, amount in paid:
+            if last4 is None:
+                amount_line = Amount(key="cash", label="", value=amount)
+            else:
+                label = f"{brand} •{last4}" if brand else f"•{last4}"
+                amount_line = Amount(key=last4, label=label, value=amount)
+            cards.setdefault(currency, []).append(amount_line)
+
+        blocks = []
+        for currency in sorted(by_currency):
+            total, count = by_currency[currency]
+            itemised = sorted(categories.get(currency, []), key=_largest_first)
+            blocks.append(
+                CurrencyBlock(
+                    currency=currency,
+                    total=total,
+                    receipt_count=count,
+                    categories=itemised,
+                    not_itemised=total - sum((a.value for a in itemised), Decimal(0)),
+                    stores=sorted(stores.get(currency, []), key=_largest_first),
+                    cards=sorted(cards.get(currency, []), key=_largest_first),
+                )
+            )
+        return SpendingPeriod(start=start, end=end, blocks=blocks)
+
+    async def earliest_purchase(self, user_id: int, timezone: str) -> date | None:
+        return await self._session.scalar(
+            select(cast(func.min(func.timezone(timezone, ReceiptRow.purchased_at)), Date)).where(
+                ReceiptRow.user_id == user_id,
+                ReceiptRow.deleted_at.is_(None),
+                ReceiptRow.status == ReceiptStatus.PARSED.value,
+            )
+        )
+
     async def reparse_candidates(self, user_id: int, current_version: str) -> ReparseCandidates:
         mine = (ReceiptRow.user_id == user_id, ReceiptRow.deleted_at.is_(None))
         failed = await self._session.scalars(
@@ -453,3 +556,7 @@ class SqlAlchemyReceiptRepository:
             .order_by(ReceiptRow.id)
         )
         return list(found)
+
+
+def _largest_first(amount: Amount) -> tuple[Decimal, str, str]:
+    return -amount.value, amount.label, amount.key

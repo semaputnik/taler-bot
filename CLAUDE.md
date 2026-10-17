@@ -70,15 +70,17 @@ src/
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
     middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
-      command/             # one module per command (/start, /receipts, /reparse), each exposes register_xxx(dp)
-      callback/            # taps on plain buttons: receipt.py edits the current card in place or sends a fresh one; history.py edits the history message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
+      command/             # one module per command (/start, /receipts, /reparse, /stats), each exposes register_xxx(dp)
+      callback/            # taps on plain buttons: receipt.py edits the current card in place or sends a fresh one; history.py edits the history message in place; stats.py edits the stats message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       parse_task.py        # read_and_show_card: the background read (typing, parse, fresh card) shared by photo intake and the card's Re-parse
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
         receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, item_input, item_category, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
     keyboards/history.py   # HistoryCallback (prefix "history": year, month, store_id, page, action)
+    keyboards/stats.py     # StatsCallback (prefix "stats": kind week|month, the anchor date as year/month/day, action)
     views/history.py       # the history message: text and keyboard of the month and store chooser screens
+    views/stats.py         # the stats message: text (bars, shares, changes) and keyboard (arrows, week/month, Receipts)
     render.py              # receipt texts (currency sign, header) used by the card
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
@@ -86,7 +88,7 @@ src/
     engine.py              # create_engine / create_sessionmaker; install_error_translation
     errors.py              # SQLSTATE → app exception mapping
     models/                # SQLAlchemy ORM; never leaves database/
-    read_models.py         # HistoryPage, HistoryRow, …: screen-shaped query results (re-exported by services)
+    read_models.py         # HistoryPage, SpendingPeriod, …: screen-shaped query results (re-exported by services)
     dto/                   # UserDTO / NewUserDTO (the user repository's plain-data types)
     interfaces/            # Protocols for the UoW and the three repositories (typing)
     repositories/          # one per aggregate: ReceiptRepository, CatalogRepository, UserRepository
@@ -96,8 +98,9 @@ src/
     container.py           # Services (users, receipts, catalog): built once by App
     user.py                # UserService.ensure, .allow
     catalog.py             # CatalogService: rename_product, set_category (hand edits of products)
-    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes
-    results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult: the services' own pydantic types
+    receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes, history, spending, reparse_*
+    periods.py             # week/month arithmetic for the stats (pure: period, previous, is_current, anchors)
+    results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult, SpendingReport: the services' own pydantic types
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
@@ -233,12 +236,18 @@ card, however old: a tap on the dialog's last message restarts the dialog with `
 never calls `done()`**: it would strip the buttons. Every exit goes `switch_to(ReceiptCardSG.main)`,
 which is also where a deleted receipt ends. `✖ Close` (a plain card button) hides the buttons and keeps the text.
 
-**Exception: the history and the card's resting buttons are plain callback keyboards, because their
+**Exception: the history, the stats and the card's resting buttons are plain callback keyboards, because their
 buttons must outlive any dialog stack.** `/receipts` is a plain message whose `HistoryCallback`
 buttons carry the whole view state (month, store, page); `callback/history.py` edits the message in
 place. Its row buttons are `ReceiptCallback`s, so a tap goes through `open_card`, which sends a fresh
 card and leaves the history keyboard alone. The `/start` button uses `HistoryAction.OPEN`: it sends
 the list as a new message instead of editing the greeting.
+
+`/stats` works the same way: `StatsCallback` buttons carry the kind and an anchor date inside the
+period, `callback/stats.py` edits the message in place (`StatsAction.SHOW`) and the `/start`
+`📊 Spending` button uses `StatsAction.OPEN` to send a new message. The view only formats what
+`ReceiptService.spending` returns (whole-percent shares and changes, `new` when `previous` is
+None); the `🧾 Receipts` button of a month screen is a `HistoryCallback` with `OPEN`.
 
 The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
 `position`, `current_issue_id` and the counters, loaded once by `click_event.start_review`.
@@ -298,6 +307,19 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   filter narrows rows, counts and totals but not `stores`; `parsed_count` and `totals` count
   parsed receipts only. `ReceiptService.history` pages by `PAGE_SIZE = 8`, clamps a page past
   the end and clears `has_later` for the current month.
+- `ReceiptRepository.spending(user_id, start, end, timezone)` is the stats read model
+  (`SpendingPeriod`, `CurrencyBlock`, `Amount`): four SELECTs whatever the number of receipts.
+  `[start, end)` are local dates; a receipt belongs to the period of `purchased_at` in the
+  time zone, and only parsed, not deleted receipts count. One block per currency (by code):
+  `total` and `receipt_count`, `categories` from item line totals through
+  `store_products.category` at query time (non-zero only, largest first), `not_itemised`
+  (`total` minus the categories), `stores` and `cards` from receipt totals (largest first; a
+  receipt without a card ending is the card `cash`, its label left to the view). Items carry no
+  currency: the receipt's applies. `earliest_purchase(user_id, timezone)` is the local date of
+  the first parsed purchase. `ReceiptService.spending(user_id, kind, anchor)` loads the period
+  and the previous one (`services/periods.py`) in one Unit of Work and returns a
+  `SpendingReport` of `ComparedBlock`/`Compared` lines with whole-number shares and changes
+  (`None` when the previous value is missing or zero), five stores, the user's currency first.
 - Deleting a receipt is soft (`deleted_at`). Every list, stats query and uniqueness check
   must filter `deleted_at IS NULL`.
 - Money is `numeric(12,2)` and unit prices/quantities are `numeric(12,4)`, both `Decimal`
