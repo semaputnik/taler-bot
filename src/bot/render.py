@@ -26,9 +26,18 @@ def amount(card: ReceiptCard, i18n: TranslatorRunner) -> str:
     return i18n.get("receipt-amount", total=format(card.total, ".2f"), currency=currency)
 
 
-def money(value: Decimal | None, i18n: TranslatorRunner) -> str:
-    """A bare amount with 2 decimals, or "not specified"."""
-    return format(value, ".2f") if value is not None else i18n.get("item-not-specified")
+_CURRENCY_SIGNS = {"EUR": "€", "USD": "$", "GBP": "£", "RUB": "₽", "UAH": "₴", "CHF": "CHF"}
+
+
+def money(value: Decimal | None, i18n: TranslatorRunner, currency: str | None = None) -> str:
+    """An amount with 2 decimals and the currency sign (`12.30 €`), or "not specified"."""
+    if value is None:
+        return i18n.get("item-not-specified")
+    amount = format(value, ".2f")
+    if not currency:
+        return amount
+    sign = _CURRENCY_SIGNS.get(currency.upper(), escape(currency))
+    return i18n.get("item-amount", amount=amount, sign=sign)
 
 
 def quantity(value: Decimal) -> str:

@@ -250,6 +250,7 @@ class ReceiptService:
         return [
             ItemRow(
                 ref=i.ref,
+                currency=receipt.header.currency,
                 printed_name=i.printed_name,
                 readable_name=i.readable_name,
                 category=str(i.category),

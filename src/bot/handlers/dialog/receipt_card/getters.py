@@ -81,7 +81,7 @@ def _row_text(row: ItemRow, i18n: TranslatorRunner) -> str:
         name=row.readable_name,
         quantity=render.quantity(row.quantity),
         unit=row.unit,
-        total=render.money(row.line_total, i18n),
+        total=render.money(row.line_total, i18n, row.currency),
     )
 
 
@@ -91,18 +91,18 @@ def _item_text(row: ItemRow, i18n: TranslatorRunner) -> str:
         i18n.get("item-printed", name=escape(row.printed_name)),
         i18n.get("item-category", category=i18n.get(f"category-{row.category.replace('_', '-')}")),
         i18n.get("item-quantity", quantity=render.quantity(row.quantity), unit=escape(row.unit)),
-        i18n.get("item-unit-price", price=render.money(row.unit_price, i18n)),
+        i18n.get("item-unit-price", price=render.money(row.unit_price, i18n, row.currency)),
         i18n.get(
             "item-reference-price",
-            price=render.money(row.reference_price, i18n),
+            price=render.money(row.reference_price, i18n, row.currency),
             unit=escape(row.reference_unit) if row.reference_unit else "",
         )
         if row.reference_price is not None
         else None,
-        i18n.get("item-discount", amount=render.money(row.discount, i18n))
+        i18n.get("item-discount", amount=render.money(row.discount, i18n, row.currency))
         if row.discount
         else None,
-        i18n.get("item-line-total", amount=render.money(row.line_total, i18n)),
+        i18n.get("item-line-total", amount=render.money(row.line_total, i18n, row.currency)),
         i18n.get("item-vat", rate=render.quantity(row.vat_rate))
         if row.vat_rate is not None
         else None,

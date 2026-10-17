@@ -41,15 +41,18 @@ card-cannot-delete-parsing = This receipt is still being read. Try again in a mo
 
 card-items-title = 📋 Items ({ $count })
 
-item-title = <b>{ $name }</b>
-item-printed = Printed as: { $name }
-item-category = Category: { $category }
-item-quantity = Quantity: { $quantity } { $unit }
-item-unit-price = Unit price: { $price }
-item-reference-price = Reference price: { $price } per { $unit }
-item-discount = Discount: { $amount }
-item-line-total = Line total: <b>{ $amount }</b>
-item-vat = VAT: { $rate }%
+item-title =
+    <b>{ $name }</b>
+    { "" }
+item-printed = <b>Printed as:</b> { $name }
+item-category = <b>Category:</b> { $category }
+item-quantity = <b>Quantity:</b> { $quantity } { $unit }
+item-unit-price = <b>Unit price:</b> { $price }
+item-reference-price = <b>Reference price:</b> { $price } per { $unit }
+item-discount = <b>Discount:</b> { $amount }
+item-line-total = <b>Line total:</b> { $amount }
+item-vat = <b>VAT:</b> { $rate }%
+item-amount = { $amount } { $sign }
 item-not-specified = not specified
 item-gone = This item is no longer on the receipt.
 item-row = { $name } · { $quantity } { $unit } · { $total }

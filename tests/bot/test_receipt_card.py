@@ -232,8 +232,8 @@ async def test_a_receipt_that_is_being_read_cannot_be_deleted(harness, session_f
 
 # --- items ---------------------------------------------------------------------------------
 
-PELLEGRINO = "Aigua amb gas Pellegrino · 2 pcs · 2.78"
-FREE_LIMO = "Cervesa Free Limo · 6 pcs · 4.80"
+PELLEGRINO = "Aigua amb gas Pellegrino · 2 pcs · 2.78 €"
+FREE_LIMO = "Cervesa Free Limo · 6 pcs · 4.80 €"
 
 
 def many_items(count: int, *, number: str = "N1") -> dict:
@@ -289,8 +289,9 @@ async def test_a_row_tap_shows_the_item_details(harness):
     assert "CERV FREE LIMO." in body
     assert "Drinks" in body
     assert "6 pcs" in body
-    assert "0.80" in body
-    assert "4.80" in body
+    assert "<b>Unit price:</b> 0.80 €" in body
+    assert "<b>Line total:</b> 4.80 €" in body
+    assert body.startswith("<b>Cervesa Free Limo</b>\n\n")
     assert "21%" in body
     assert "Discount" not in body  # zero discount is hidden
     assert harness.button_texts() == ["◀ Back"]
@@ -332,7 +333,7 @@ async def test_a_tap_on_the_second_page_opens_that_item(harness):
     await harness.tap(USER, ITEMS)
     await harness.tap(USER, ">")
 
-    await harness.tap(USER, "Item 10 · 2 pcs · 2.78")
+    await harness.tap(USER, "Item 10 · 2 pcs · 2.78 €")
 
     assert "<b>Item 10</b>" in last_text(harness)
 
@@ -345,11 +346,11 @@ async def test_a_discount_and_unknown_vat_render_when_present(harness):
     await parsed(harness)
     await harness.tap(USER, ITEMS)
 
-    await harness.tap(USER, "Aigua amb gas Pellegrino · 2 pcs · 2.78")
+    await harness.tap(USER, "Aigua amb gas Pellegrino · 2 pcs · 2.78 €")
 
     body = last_text(harness)
-    assert "Discount: 0.50" in body
-    assert "1.95 per l" in body
+    assert "<b>Discount:</b> 0.50 €" in body
+    assert "1.95 € per l" in body
     assert "VAT" not in body
 
 

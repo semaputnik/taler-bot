@@ -61,6 +61,7 @@ class ItemRow(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     ref: str
+    currency: str | None  # the receipt's; items carry no currency of their own
     printed_name: str
     readable_name: str
     category: str
