@@ -323,7 +323,7 @@ class ReceiptService:
             found = await uow.receipts.reparse_candidates(user_id, PARSER_VERSION)
         ids = found.failed_ids if reason == "failed" else found.outdated_ids
         ok = failed = 0
-        for receipt_id in ids[:limit]:
+        for receipt_id in ids[: max(limit, 0)]:
             try:
                 result = await self.parse(user_id, receipt_id)
             except Exception:
