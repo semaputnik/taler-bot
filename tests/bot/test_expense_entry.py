@@ -121,12 +121,28 @@ async def test_a_number_in_a_choice_step_restarts_the_entry_with_the_new_amount(
     assert harness.last_text() == f"💸 <b>3.00 €</b>\n\n{i18n.get('entry-payee')}"
 
 
+async def test_a_stray_word_in_the_payee_name_step_is_the_name(harness):
+    await harness.send_text("12.50", user_id=USER)
+    await harness.tap(USER, TYPE_NAME)
+
+    await harness.send_text("hello", user_id=USER)
+
+    assert i18n.get("entry-source") in harness.last_text()
+    assert PHOTO_PROMPT not in [m.text for m in harness.sent_messages]
+
+
 def test_the_steps_that_read_typed_text_are_known():
     assert {state.state for state in text_input_states()} == {
         "ExpenseEntrySG:payee_name",
         "ExpenseEntrySG:new_card",
         "ExpenseEntrySG:date_text",
         "ExpenseEntrySG:tags",
+        "ExpenseCardSG:amount",
+        "ExpenseCardSG:payee_name",
+        "ExpenseCardSG:new_card",
+        "ExpenseCardSG:source_rename",
+        "ExpenseCardSG:date_text",
+        "ExpenseCardSG:tags",
         "ReceiptCardSG:item_input",
         "ReceiptCardSG:issue_input",
         "ReceiptCardSG:issue_rename",
@@ -304,7 +320,9 @@ async def test_a_future_or_garbage_date_is_refused_with_a_hint(harness, session_
 # --- tags and the result --------------------------------------------------------------------
 
 
-async def test_typed_tags_are_saved_normalised_and_the_summary_is_sent(harness, session_factory):
+async def test_typed_tags_are_saved_normalised_and_the_expense_card_is_sent(
+    harness, session_factory
+):
     await to_tags(harness)
     assert i18n.get("entry-tags") in harness.last_text()
     assert harness.button_texts() == [SKIP, BACK]
@@ -325,7 +343,16 @@ async def test_typed_tags_are_saved_normalised_and_the_summary_is_sent(harness, 
     ]
     sent = harness.sent_messages[-1]
     assert sent.parse_mode == "HTML"
-    assert sent.reply_markup is None
+    assert [b.text for row in sent.reply_markup.inline_keyboard for b in row] == [
+        "✏️ Amount",
+        "🏪 Payee",
+        "💳 Source",
+        "🏷 Category",
+        "📅 Date",
+        "#️⃣ Tags",
+        "🗑 Delete",
+        "✖ Close",
+    ]
     assert sent.text.splitlines() == [
         "💸 <b>Mercadona</b>",
         "",

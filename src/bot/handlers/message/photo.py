@@ -11,6 +11,7 @@ from aiogram.types import Message
 from aiogram_dialog import DialogManager
 from fluentogram import TranslatorRunner
 
+from src.bot.handlers.dialog import no_window_reads_text
 from src.bot.handlers.parse_task import read_and_show_card, send_reply
 from src.bot.tasks import TaskRegistry
 from src.exception import DuplicatePhoto
@@ -90,8 +91,10 @@ def register_photo(dp) -> None:
 
 
 def register_not_a_photo(dp) -> None:
-    """The catch-all: after the dialogs, so it never swallows a dialog's text input."""
+    """The catch-all: before the dialogs, so a card resting in its `main` window (or any window
+    that does not read text) does not take a stray word and send itself again. It steps aside
+    when the open window reads typed text, so the dialog gets that input."""
     router = Router(name="not-a-photo")
     # Any message that is not a command (commands are handled before this router).
-    router.message.register(not_a_photo, ~F.text.startswith("/"))
+    router.message.register(not_a_photo, ~F.text.startswith("/"), no_window_reads_text)
     dp.include_router(router)

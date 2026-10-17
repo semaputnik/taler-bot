@@ -3,3 +3,4 @@ class TransferKeys:
 
     RECEIPT_ID = "receipt_id"
     AMOUNT = "amount"
+    EXPENSE_ID = "expense_id"

@@ -47,6 +47,16 @@ entry-date-text-error = ❌ Not accepted. Send a date like 05.10 or 05.10.2026, 
 entry-tags = Add tags separated by commas, like kids, holiday, or skip.
 entry-tags-error = ❌ Not accepted. Use up to 10 tags of up to 32 characters each.
 entry-pick-gone = That choice is no longer available. Pick again.
+
+expense-deleted = 🗑 This expense was deleted.
+expense-deleted-alert = This expense was deleted.
+expense-delete-confirm = Delete this expense? It leaves your lists and statistics.
+expense-edit-amount = Type the new amount. Now: <b>{ $amount }</b>
+expense-edit-amount-error = ❌ Not accepted. Send an amount above zero, like 12.50.
+expense-edit-rename = Type a new name for the card { $name }. It changes on every expense paid with it.
+expense-edit-rename-error = ❌ You already have a source with this name, or the name is empty. Type another.
+expense-edit-tags = Now: { $tags }. Type tags separated by commas, like kids, holiday, or clear them.
+expense-edit-tags-error = ❌ Not accepted. Use up to 10 tags of up to 32 characters each.
 receipt-items = Items: { $items }
 receipt-store-tag = #{ $tag }
 receipt-unknown-store = Unknown store
@@ -166,6 +176,7 @@ history-summary = { $count ->
 history-summary-none = No parsed receipts
 history-empty = No receipts this month.
 history-row = • { $day } { $store } · { $amount }
+history-row-manual = 💸 { $day } { $store } · { $amount }
 history-row-status = • { $day } { $store } · { $status }
 history-page = { $page }/{ $pages }
 

@@ -105,10 +105,8 @@ category, tags, and optionally the receipt it came from.
    2 decimals, above zero) starts the entry with that amount: payee (the five most recent as
    buttons, or typed; a typed name matching an existing payee reuses it) → payment source
    (cards, `Cash`, `➕ New card`) → category → date (`Today`, `Yesterday`, `dd.mm`) → tags
-   (comma-separated or `Skip`) → the expense. Only expenses: amounts are positive. **Done**
-   up to the last step: the entry ends by sending the expense as a plain message (no buttons)
-   until the expense card (item 9) replaces it. One message is edited in place; nothing is
-   saved before the last step. Each `ExpenseEntry` step shows the amount on top and asks:
+   (comma-separated or `Skip`) → the expense card (item 9). Only expenses: amounts are
+   positive. **Done.** One message is edited in place; nothing is saved before the last step. Each `ExpenseEntry` step shows the amount on top and asks:
 
    | state | question and buttons |
    |---|---|
@@ -124,8 +122,11 @@ category, tags, and optionally the receipt it came from.
    `◀ Back` goes one step back (`payee` is the first step and has none; `category` goes back
    to `source`, `tags` to `date`) and keeps the answers given. A photo or a command during the
    entry is handled as usual; the entry message stays, its buttons stop working. A number sent
-   in a step that reads text is that step's input; in any other window it starts a new entry.
-   The result message:
+   in a step that reads text is that step's input; in any other window it starts a new entry
+   (an open card keeps its buttons). Other text (`hello`) in any window that does not read text,
+   a card resting in `main` included, gets "Send me a photo of a receipt." and changes
+   nothing; in a window that reads text it is that window's input. The last step ends the
+   entry (its prompt loses its buttons) and sends the expense card:
 
    ```
    💸 <b>Mercadona</b>
@@ -138,10 +139,31 @@ category, tags, and optionally the receipt it came from.
 
    #mercadona
    ```
-9. **Expense card.** One card for every expense. With a receipt it is the receipt card plus
-   `Category` and `Tags`. Without one: amount, payee, source, category, date, tags; buttons
-   `✏️ Amount` `🏪 Payee` / `💳 Source` `🏷 Category` / `📅 Date` `#️⃣ Tags` / `🗑 Delete` /
-   `✖ Close`; no items, photo, review or re-parse. `💳 Source` offers `✏️ Rename` for a card.
+9. **Expense card.** **Done** for an expense without a receipt (the entry ends on it; a
+   history row of a manual expense opens it). With a receipt the card is the receipt card plus
+   `Category` and (later) `Tags`. The `ExpenseCard` dialog: the `main` text above, plain card
+   buttons (`ExpenseCallback`, prefix `expense`) `✏️ Amount` `🏪 Payee` / `💳 Source`
+   `🏷 Category` / `📅 Date` `#️⃣ Tags` / `🗑 Delete` / `✖ Close`; no items, photo, review or
+   re-parse. The card behaves like the receipt card: a tap on the current card edits it in
+   place, a tap on an older one sends a fresh copy and leaves the old buttons, `✖ Close` hides
+   the buttons and keeps the text, a deleted expense alerts and shows `🗑 This expense was
+   deleted.` with no buttons. The card never ends; every save returns to `main`, and a typed
+   value edits the card where it is. Windows:
+
+   | state | content |
+   |---|---|
+   | `main` | the expense text and the buttons above |
+   | `amount` | "Type the new amount. Now: 12.50 €" text input (above zero, two decimals; refused with an error line otherwise). `◀ Back` |
+   | `payee` | the five recent payees (`✓` on the current one), `✏️ Type a name`. `◀ Back` |
+   | `payee_name` | text input; a name matching a payee ignoring case reuses it, a new one creates it. `◀ Back` to `payee` |
+   | `source` | `Cash`, the cards by name (`✓` on the current one), `➕ New card`, and `✏️ Rename` when the expense is paid with a card. `◀ Back` |
+   | `new_card` | a name for the card to create and pay with; a taken or reserved (`Cash`) name is refused. `◀ Back` to `source` |
+   | `source_rename` | a new name for the current card; it changes on every expense paid with it. `◀ Back` to `source` |
+   | `category` | the twelve, two per row, `✓` on the current one. `◀ Back` |
+   | `date` | `Today` `Yesterday` / `✏️ Other date`. `◀ Back` |
+   | `date_text` | `dd.mm` or `dd.mm.yyyy`; a future or malformed date is refused. `◀ Back` to `date` |
+   | `tags` | the current tags and a text input (comma-separated, replaces them); `🧹 Clear`. `◀ Back` |
+   | `delete_confirm` | "Delete this expense?" `🗑 Yes, delete` / `◀ Back` |
 10. **History `/expenses`** replaces `/receipts`: every expense of the month, a receipt icon on
     those read from a photo; filter by payee.
 11. **Expiring screens.** Screens opened by a command or a menu button (`/start`, `/expenses`,
@@ -263,7 +285,9 @@ message keeps working however old it is and however many cards were opened from 
   where there is a page to go to.
 - `Store ▾` lists the stores with receipts in the month, `✓` on the selected one, `All stores`
   and `◀ Back`. The filter stays while moving between months and pages.
-- A row opens the receipt's card as a new message; the history keeps its buttons.
+- A row opens the receipt's card as a new message; the history keeps its buttons. An expense
+  typed by hand has no receipt: its row starts with 💸 instead of the bullet and opens the
+  expense card the same way.
 
 ### Main menu (`/start`)
 

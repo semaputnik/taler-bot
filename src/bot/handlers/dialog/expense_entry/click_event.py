@@ -3,17 +3,17 @@ from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot
-from aiogram.enums import ParseMode
 from aiogram.types import CallbackQuery, Message
-from aiogram_dialog import DialogManager
+from aiogram_dialog import DialogManager, ShowMode, StartMode
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import Button, Select
 from fluentogram import TranslatorRunner
 
-from src.bot import render
 from src.bot.handlers.dialog import pickers
+from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.handlers.dialog.expense_entry.common import DialogDataKeys
 from src.bot.handlers.dialog.receipt_card.values import InvalidValue, parse_value
+from src.bot.states.expense_card import ExpenseCardSG
 from src.bot.states.expense_entry import ExpenseEntrySG
 from src.exception import (
     InvalidEdit,
@@ -196,8 +196,8 @@ async def skip_tags(query: CallbackQuery, button: Button, manager: DialogManager
 
 
 async def _save(manager: DialogManager, chat_id: int, tags: list[str]) -> None:
-    """The last step: record the expense in one service call and send it as a message. Nothing
-    was written before this. A value the domain refuses sends the user back to the step that
+    """The last step: record the expense in one service call and show it as the expense card.
+    Nothing was written before this. A value the domain refuses sends the user back to the step that
     holds it, with its error line; the answers given so far are kept."""
     services: Services = manager.middleware_data["services"]
     user: CurrentUser = manager.middleware_data["user"]
@@ -234,8 +234,15 @@ async def _save(manager: DialogManager, chat_id: int, tags: list[str]) -> None:
             ExpenseEntrySG.payee if isinstance(error, UnknownPayee) else ExpenseEntrySG.source,
         )
         return
-    await bot.send_message(chat_id, render.expense_text(card, i18n), parse_mode=ParseMode.HTML)
-    await manager.done()
+    # The entry ends: its last prompt loses its buttons and the expense card is sent as a new
+    # message (a dialog of its own).
+    await manager.reset_stack(remove_keyboard=True)
+    await manager.start(
+        ExpenseCardSG.main,
+        data={TransferKeys.EXPENSE_ID: card.expense_id},
+        mode=StartMode.RESET_STACK,
+        show_mode=ShowMode.SEND,
+    )
 
 
 async def _back_with_error(manager: DialogManager, state) -> None:

@@ -7,16 +7,16 @@ A number sent in any other window starts a new entry, replacing the dialog.
 """
 
 import re
+from contextlib import ExitStack
 from zoneinfo import ZoneInfo
 
 from aiogram import Dispatcher, Router
 from aiogram.types import Message
 from aiogram_dialog import DialogManager, StartMode
-from aiogram_dialog.api.entities import Context
-from aiogram_dialog.api.internal import CONTEXT_KEY
 
-from src.bot.handlers.dialog import text_input_states
+from src.bot.handlers.dialog import no_window_reads_text
 from src.bot.handlers.dialog.common import TransferKeys
+from src.bot.handlers.dialog.media import keeping_previous_keyboard
 from src.bot.handlers.dialog.receipt_card.values import InvalidValue, parse_value
 from src.bot.states.expense_entry import ExpenseEntrySG
 from src.services.results import CurrentUser
@@ -36,21 +36,24 @@ def is_amount(text: str) -> bool:
 
 
 async def is_new_entry(message: Message, **data) -> bool:
-    """A bare amount, and no open dialog window that wants typed text. The dialogs' own
-    middleware puts the open context (the window on screen) into the handler data."""
-    if not is_amount(message.text or ""):
-        return False
-    context: Context | None = data.get(CONTEXT_KEY)
-    return context is None or context.state not in text_input_states()
+    """A bare amount, and no open dialog window that wants typed text."""
+    return is_amount(message.text or "") and await no_window_reads_text(**data)
 
 
 async def start_entry(message: Message, user: CurrentUser, dialog_manager: DialogManager) -> None:
     amount = parse_value("money", message.text or "", ZoneInfo(user.timezone))
-    await dialog_manager.start(
-        ExpenseEntrySG.payee,
-        data={TransferKeys.AMOUNT: format(amount, ".2f")},
-        mode=StartMode.RESET_STACK,  # an older entry's message keeps its text, its buttons die
-    )
+    with ExitStack() as stack:
+        # A card that is open keeps its buttons: it is a message of its own, not a step of a
+        # flow. An older entry's message keeps its text, but its buttons die.
+        if dialog_manager.has_context() and (
+            dialog_manager.current_context().state.group is not ExpenseEntrySG
+        ):
+            stack.enter_context(keeping_previous_keyboard())
+        await dialog_manager.start(
+            ExpenseEntrySG.payee,
+            data={TransferKeys.AMOUNT: format(amount, ".2f")},
+            mode=StartMode.RESET_STACK,
+        )
 
 
 def register_amount(dp: Dispatcher) -> None:
