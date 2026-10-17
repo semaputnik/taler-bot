@@ -74,7 +74,7 @@ src/
       callback/            # taps on the card's plain buttons: receipt.py edits the current card in place or sends a fresh one
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, photo, delete_confirm, issue, issue_input, review_done)
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, item_input, item_category, photo, delete_confirm, issue, issue_input, review_done)
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
     render.py              # receipt texts (currency sign, header) used by the card
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
