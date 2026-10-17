@@ -5,27 +5,19 @@ message sent while it is open, so a photo would never get through); the catch-al
 photo" is included after them, so it never swallows a dialog's text input.
 """
 
-import logging
-
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
-from aiogram.types import InlineKeyboardMarkup, Message, ReplyParameters
-from aiogram.utils.chat_action import ChatActionSender
-from aiogram_dialog import DialogManager, ShowMode, StartMode
-from aiogram_dialog.api.protocols import BaseDialogManager
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.types import Message
+from aiogram_dialog import DialogManager
 from fluentogram import TranslatorRunner
 
-from src.bot.handlers.dialog.common import TransferKeys
-from src.bot.states.receipt_card import ReceiptCardSG
+from src.bot.handlers.parse_task import read_and_show_card, send_reply
 from src.bot.tasks import TaskRegistry
 from src.exception import DuplicatePhoto
 from src.services.container import Services
 from src.services.results import CurrentUser, NewPhoto
 
-logger = logging.getLogger(__name__)
-
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024  # the Bot API cannot serve bigger files
-TYPING_INTERVAL = 4.0  # seconds; Telegram shows "typing" for about 5 s after each action
 
 
 async def photo_intake(
@@ -77,64 +69,16 @@ async def photo_intake(
         await message.reply(i18n.get("photo-already-have"))
         return
 
-    await _send(bot, message.chat.id, message.message_id, i18n.get("receipt-saved"))
+    await send_reply(bot, message.chat.id, message.message_id, i18n.get("receipt-saved"))
     bg = dialog_manager.bg()
     tasks.spawn(
-        _parse_and_reply(bot, bg, message.chat.id, user.id, card.receipt_id, services),
+        read_and_show_card(bot, bg, message.chat.id, user.id, card.receipt_id, services),
         name=f"parse-receipt-{card.receipt_id}",
     )
 
 
 async def not_a_photo(message: Message, i18n: TranslatorRunner) -> None:
     await message.reply(i18n.get("photo-send-me-one"))
-
-
-async def _parse_and_reply(
-    bot: Bot,
-    bg: BaseDialogManager,
-    chat_id: int,
-    user_id: int,
-    receipt_id: int,
-    services: Services,
-) -> None:
-    """Parse, then start the card: the parse reply is the dialog's `main` window. Nothing but
-    cancellation leaves this function."""
-    try:
-        # The sender's worker dies on a failed `sendChatAction` and the block still ends
-        # normally, so the typing status never affects the parse or the reply.
-        async with ChatActionSender.typing(bot=bot, chat_id=chat_id, interval=TYPING_INTERVAL):
-            await services.receipts.parse(user_id, receipt_id)
-    except Exception:
-        # The service has already marked the receipt failed; the card shows that.
-        logger.exception("Parsing receipt %s failed", receipt_id)
-    try:
-        await bg.start(
-            ReceiptCardSG.main,
-            data={TransferKeys.RECEIPT_ID: receipt_id},
-            mode=StartMode.RESET_STACK,  # the previous card keeps its keyboard
-            show_mode=ShowMode.SEND,
-        )
-    except Exception:
-        logger.exception("Could not send the card of receipt %s", receipt_id)
-
-
-async def _send(
-    bot: Bot,
-    chat_id: int,
-    reply_to: int,
-    text: str,
-    reply_markup: InlineKeyboardMarkup | None = None,
-) -> None:
-    """A Telegram failure is logged, never raised into the caller."""
-    try:
-        await bot.send_message(
-            chat_id,
-            text,
-            reply_markup=reply_markup,
-            reply_parameters=ReplyParameters(message_id=reply_to, allow_sending_without_reply=True),
-        )
-    except TelegramAPIError:
-        logger.exception("Could not send a reply to chat %s", chat_id)
 
 
 def register_photo(dp) -> None:

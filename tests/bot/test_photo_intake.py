@@ -202,7 +202,7 @@ async def test_a_sticker_is_asked_for_a_photo(harness):
 async def test_typing_is_shown_while_the_photo_is_read_and_ends_before_the_summary(
     harness, monkeypatch
 ):
-    monkeypatch.setattr("src.bot.handlers.message.photo.TYPING_INTERVAL", 0.01)
+    monkeypatch.setattr("src.bot.handlers.parse_task.TYPING_INTERVAL", 0.01)
     harness.parser.delay = 0.1
 
     await harness.send_photo(user_id=USER)
