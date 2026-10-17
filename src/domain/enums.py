@@ -34,6 +34,28 @@ class ProductCategory(StrEnum):
     OTHER = "other"
 
 
+class ExpenseCategory(StrEnum):
+    """What kind of spending an expense is. Not the product category (ADR-0003)."""
+
+    GROCERIES = "groceries"
+    RESTAURANTS = "restaurants"
+    TRANSPORT = "transport"
+    RENT = "rent"
+    UTILITIES = "utilities"
+    HEALTH = "health"
+    ENTERTAINMENT = "entertainment"
+    SUBSCRIPTIONS = "subscriptions"
+    CLOTHING = "clothing"
+    TRAVEL = "travel"
+    GIFTS = "gifts"
+    OTHER = "other"
+
+
+class PaymentSourceKind(StrEnum):
+    CARD = "card"
+    CASH = "cash"
+
+
 class IssueSource(StrEnum):
     MODEL = "model"
     WORKFLOW = "workflow"

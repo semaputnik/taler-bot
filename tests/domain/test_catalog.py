@@ -3,13 +3,19 @@
 import pytest
 
 from src.domain.catalog import Catalog, Product
-from src.domain.enums import ProductCategory
-from src.exception import InvalidEdit, UnknownProduct, UnknownStore
+from src.domain.enums import PaymentSourceKind, ProductCategory
+from src.exception import (
+    InvalidEdit,
+    InvalidPaymentSource,
+    UnknownPayee,
+    UnknownPaymentSource,
+    UnknownProduct,
+)
 
 
 def ensure_milk(catalog: Catalog, **fields) -> Product:
     args = {
-        "store_key": "mercadona",
+        "payee_key": "mercadona",
         "product_key": "mercadona::leche",
         "name_raw": "LECHE ENTERA",
         "name": "Whole milk",
@@ -19,20 +25,20 @@ def ensure_milk(catalog: Catalog, **fields) -> Product:
     return catalog.ensure_product(**args)
 
 
-def test_ensure_store_creates_it_on_first_sight():
+def test_ensure_payee_creates_it_on_first_sight():
     catalog = Catalog(user_id=1)
 
-    store = catalog.ensure_store("mercadona", "Mercadona", tax_id="A-46103834")
+    payee = catalog.ensure_payee("mercadona", "Mercadona", tax_id="A-46103834")
 
-    assert catalog.stores["mercadona"] is store
-    assert (store.name, store.tax_id, store.id) == ("Mercadona", "A-46103834", None)
+    assert catalog.payees["mercadona"] is payee
+    assert (payee.name, payee.tax_id, payee.id) == ("Mercadona", "A-46103834", None)
 
 
-def test_ensure_store_never_overwrites_an_existing_store():
+def test_ensure_payee_never_overwrites_an_existing_payee():
     catalog = Catalog(user_id=1)
-    first = catalog.ensure_store("mercadona", "My Mercadona")
+    first = catalog.ensure_payee("mercadona", "My Mercadona")
 
-    again = catalog.ensure_store("mercadona", "MERCADONA, S.A.", legal_name="Mercadona S.A.")
+    again = catalog.ensure_payee("mercadona", "MERCADONA, S.A.", legal_name="Mercadona S.A.")
 
     assert again is first
     assert (again.name, again.legal_name) == ("My Mercadona", None)
@@ -40,12 +46,12 @@ def test_ensure_store_never_overwrites_an_existing_store():
 
 def test_ensure_product_creates_it_on_first_sight():
     catalog = Catalog(user_id=1)
-    catalog.ensure_store("mercadona", "Mercadona")
+    catalog.ensure_payee("mercadona", "Mercadona")
 
     product = ensure_milk(catalog, created_by_receipt_id=7)
 
     assert catalog.products["mercadona::leche"] is product
-    assert (product.store_key, product.name, product.category, product.unit) == (
+    assert (product.payee_key, product.name, product.category, product.unit) == (
         "mercadona",
         "Whole milk",
         ProductCategory.DAIRY,
@@ -56,7 +62,7 @@ def test_ensure_product_creates_it_on_first_sight():
 
 def test_second_ensure_product_with_a_different_name_does_not_overwrite():
     catalog = Catalog(user_id=1)
-    catalog.ensure_store("mercadona", "Mercadona")
+    catalog.ensure_payee("mercadona", "Mercadona")
     first = ensure_milk(catalog, name="Milk (my name)", category=ProductCategory.DRINKS)
 
     again = ensure_milk(catalog, name="Whole milk", category=ProductCategory.DAIRY, unit="pcs")
@@ -70,16 +76,16 @@ def test_second_ensure_product_with_a_different_name_does_not_overwrite():
     assert len(catalog.products) == 1
 
 
-def test_ensure_product_needs_its_store_in_the_catalog():
+def test_ensure_product_needs_its_payee_in_the_catalog():
     catalog = Catalog(user_id=1)
 
-    with pytest.raises(UnknownStore):
+    with pytest.raises(UnknownPayee):
         ensure_milk(catalog)
 
 
 def test_remove_unreferenced_marks_only_keys_the_catalog_knows():
     catalog = Catalog(user_id=1)
-    catalog.ensure_store("mercadona", "Mercadona")
+    catalog.ensure_payee("mercadona", "Mercadona")
     ensure_milk(catalog)
     ensure_milk(catalog, product_key="mercadona::pan", name_raw="PAN")
 
@@ -91,7 +97,7 @@ def test_remove_unreferenced_marks_only_keys_the_catalog_knows():
 
 def test_ensuring_a_product_marked_for_removal_keeps_it():
     catalog = Catalog(user_id=1)
-    catalog.ensure_store("mercadona", "Mercadona")
+    catalog.ensure_payee("mercadona", "Mercadona")
     first = ensure_milk(catalog)
     catalog.remove_unreferenced({"mercadona::leche"})
 
@@ -104,7 +110,7 @@ def test_ensuring_a_product_marked_for_removal_keeps_it():
 
 def stocked() -> Catalog:
     catalog = Catalog(user_id=1)
-    catalog.ensure_store("mercadona", "Mercadona")
+    catalog.ensure_payee("mercadona", "Mercadona")
     ensure_milk(catalog)
     ensure_milk(catalog, product_key="mercadona::pan", name_raw="PAN", name="Bread")
     return catalog
@@ -174,3 +180,120 @@ def test_a_changed_product_marked_for_removal_is_not_saved_as_changed():
     catalog.remove_unreferenced({"mercadona::leche"})
 
     assert catalog.changed_products == ()
+
+
+def test_has_catalog_is_true_for_a_payee_with_products_only():
+    catalog = Catalog(user_id=1)
+    catalog.ensure_payee("mercadona", "Mercadona")
+    catalog.ensure_payee("landlord", "Landlord")
+    ensure_milk(catalog)
+
+    assert catalog.has_catalog("mercadona")
+    assert not catalog.has_catalog("landlord")
+    assert not catalog.has_catalog("nobody")
+
+
+# --- payment sources --------------------------------------------------------------------
+
+
+def test_ensure_card_names_it_by_brand_and_digits():
+    catalog = Catalog(user_id=1)
+
+    card = catalog.ensure_card("visa", "0848")
+
+    assert (card.kind, card.name, card.brand, card.last4, card.id) == (
+        PaymentSourceKind.CARD,
+        "VISA •0848",
+        "VISA",
+        "0848",
+        None,
+    )
+    assert list(catalog.payment_sources.values()) == [card]
+
+
+def test_ensure_card_without_a_brand_is_named_by_the_digits():
+    catalog = Catalog(user_id=1)
+
+    assert catalog.ensure_card(None, "1111").name == "•1111"
+    assert catalog.ensure_card("  ", "2222").name == "•2222"
+
+
+def test_ensure_card_is_idempotent_by_last4_and_never_overwrites():
+    catalog = Catalog(user_id=1)
+    first = catalog.ensure_card("VISA", "0848")
+    catalog.rename_source("card:0848", "Ann's card")
+
+    again = catalog.ensure_card("MASTERCARD", "0848")
+
+    assert again is first
+    assert (again.name, again.brand) == ("Ann's card", "VISA")
+    assert len(catalog.payment_sources) == 1
+
+
+@pytest.mark.parametrize("last4", ["", "123", "12345", "12a4", "١٢٣٤"])
+def test_ensure_card_needs_four_digits(last4):
+    with pytest.raises(InvalidPaymentSource):
+        Catalog(user_id=1).ensure_card("VISA", last4)
+
+
+def test_there_is_one_cash_source_created_on_first_use():
+    catalog = Catalog(user_id=1)
+    assert catalog.payment_sources == {}
+
+    cash = catalog.cash()
+
+    assert (cash.kind, cash.name, cash.last4) == (PaymentSourceKind.CASH, "Cash", None)
+    assert catalog.cash() is cash
+    assert len(catalog.payment_sources) == 1
+
+
+def test_rename_source_strips_the_name_and_marks_it_changed():
+    catalog = Catalog(user_id=1)
+    catalog.ensure_card("VISA", "0848")
+
+    renamed = catalog.rename_source("card:0848", "  Joint card ")
+
+    assert renamed.name == "Joint card"
+    assert catalog.renamed_sources == (renamed,)
+
+
+@pytest.mark.parametrize("name", ["", "  "])
+def test_rename_source_refuses_an_empty_name(name):
+    catalog = Catalog(user_id=1)
+    catalog.ensure_card("VISA", "0848")
+
+    with pytest.raises(InvalidEdit):
+        catalog.rename_source("card:0848", name)
+
+    assert catalog.payment_sources["card:0848"].name == "VISA •0848"
+    assert catalog.renamed_sources == ()
+
+
+def test_rename_unknown_source_raises():
+    with pytest.raises(UnknownPaymentSource):
+        Catalog(user_id=1).rename_source(5, "x")
+
+
+def test_assign_source_id_moves_a_new_source_under_its_id_and_keeps_its_rename():
+    catalog = Catalog(user_id=1)
+    card = catalog.ensure_card("VISA", "0848")
+    cash = catalog.cash()
+    catalog.rename_source("card:0848", "Joint card")
+
+    catalog.assign_source_id(card, 7)
+    catalog.assign_source_id(cash, 8)
+
+    assert catalog.payment_sources == {7: card, 8: cash}
+    assert (card.id, cash.id) == (7, 8)
+    assert catalog.renamed_sources == (card,)
+    assert catalog.rename_source(7, "Again").name == "Again"
+
+
+def test_mark_saved_clears_the_renamed_sources():
+    catalog = Catalog(user_id=1)
+    catalog.ensure_card("VISA", "0848")
+    catalog.rename_source("card:0848", "Joint card")
+
+    catalog.mark_saved()
+
+    assert catalog.renamed_sources == ()
