@@ -109,6 +109,13 @@ class Catalog:
             self.payees[payee_key] = payee
         return payee
 
+    def payee(self, payee_key: str) -> Payee:
+        """The payee with this key; `UnknownPayee` when the user has none."""
+        payee = self.payees.get(payee_key)
+        if payee is None:
+            raise UnknownPayee(f"No payee {payee_key!r} in the catalog of user {self.user_id}")
+        return payee
+
     def ensure_payee_named(self, name: str) -> Payee:
         """The payee a user typed: keyed by the slug of the name, so "mercadona" and "Mercadona"
         are one payee. An existing payee keeps its name."""
@@ -154,6 +161,16 @@ class Catalog:
         self.payment_sources[_CASH_KEY] = source
         return source
 
+    def source(self, source_id: int | str) -> PaymentSource:
+        """The payment source under this key (its id once stored); `UnknownPaymentSource`
+        when the user has none."""
+        source = self.payment_sources.get(source_id)
+        if source is None:
+            raise UnknownPaymentSource(
+                f"No payment source {source_id!r} in the catalog of user {self.user_id}"
+            )
+        return source
+
     def add_card(self, name: str) -> PaymentSource:
         """A card the user added by hand: no brand, no last four digits, a name that no other
         source of the user has (ignoring case)."""
@@ -173,11 +190,7 @@ class Catalog:
 
     def rename_source(self, source_id: int | str, name: str) -> PaymentSource:
         """Give a source a name by hand (stripped, not empty). `source_id` is its key."""
-        source = self.payment_sources.get(source_id)
-        if source is None:
-            raise UnknownPaymentSource(
-                f"No payment source {source_id!r} in the catalog of user {self.user_id}"
-            )
+        source = self.source(source_id)
         name = name.strip()
         if not name:
             raise InvalidEdit("a payment source name cannot be empty")
@@ -220,8 +233,7 @@ class Catalog:
         if product_key in self._removed:  # marked earlier and wanted again: keep it as it is
             product = self.products[product_key] = self._removed.pop(product_key)
             return product
-        if payee_key not in self.payees:
-            raise UnknownPayee(f"No payee {payee_key!r} in the catalog of user {self.user_id}")
+        self.payee(payee_key)
         product = Product(
             payee_key=payee_key,
             product_key=product_key,

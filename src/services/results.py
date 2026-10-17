@@ -14,6 +14,7 @@ from src.database.read_models import (
     HistoryRow,
     PayeeOption,
     ReparseCandidates,
+    SourceOption,
     SpendingPeriod,
 )
 
@@ -27,6 +28,7 @@ __all__ = [
     "ComparedBlock",
     "CurrentUser",
     "ExpenseCard",
+    "ExpenseDraft",
     "HistoryPage",
     "HistoryRow",
     "IssueCard",
@@ -40,6 +42,7 @@ __all__ = [
     "ReceiptCard",
     "ReparseCandidates",
     "ReparseSummary",
+    "SourceOption",
     "SpendingPeriod",
     "SpendingReport",
 ]
@@ -105,7 +108,11 @@ class ReceiptCard(BaseModel):
 class ExpenseCard(BaseModel):
     """What an expense shows. A receipt-backed expense has `receipt_id`; its amount, date, payee
     and payment source follow the receipt. `category` is an `ExpenseCategory` value, `tags` are
-    sorted, `spent_at` is the user's local day."""
+    sorted, `spent_at` is the user's local day.
+
+    `payee_key` and `payment_source_id` name the payee and the source (for pickers that mark the
+    current one); `can_edit_facts` is true for an expense typed by hand, whose amount, payee,
+    source and date the user may change (those of a receipt follow the receipt)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -113,12 +120,37 @@ class ExpenseCard(BaseModel):
     amount: Decimal
     currency: str
     spent_at: date
+    payee_key: str | None
     payee_name: str | None
+    payment_source_id: int | None
     payment_source_name: str | None
     category: str
     tags: list[str]
     receipt_id: int | None
+    can_edit_facts: bool
     deleted: bool
+
+
+class ExpenseDraft(BaseModel):
+    """An expense the user typed, as the entry dialog collects it.
+
+    The payee is `payee_key` (one picked from the list) or `payee_name` (typed; an existing
+    payee with the same slug is reused), or neither. The source is `payment_source_id` (one
+    picked), `cash`, or `new_card_name` (a card to create), or none. At most one of each group.
+    `category` is an `ExpenseCategory` value; `tags` are free words, normalised by the domain.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    amount: Decimal
+    spent_at: date
+    category: str = "other"
+    payee_key: str | None = None
+    payee_name: str | None = None
+    payment_source_id: int | None = None
+    new_card_name: str | None = None
+    cash: bool = False
+    tags: list[str] = []
 
 
 class ItemRow(BaseModel):

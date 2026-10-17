@@ -218,6 +218,14 @@ class Expense:
             raise InvalidExpense("the expense is already deleted")
         self.deleted_at = at or datetime.now(UTC)
 
+    def delete_by_hand(self, at: datetime | None = None) -> None:
+        """The user deletes an expense they typed. One with a receipt is deleted with the
+        receipt (`soft_delete`, called by the receipt's service), never alone."""
+        self._ensure_open()
+        if self.receipt_id is not None:
+            raise ExpenseFollowsReceipt("the expense belongs to a receipt; delete the receipt")
+        self.soft_delete(at)
+
     def restore(self) -> None:
         """Reopen a deleted expense, as it was (a receipt that is a purchase again)."""
         if self.deleted_at is None:

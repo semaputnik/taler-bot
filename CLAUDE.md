@@ -97,11 +97,11 @@ src/
   services/                # application services: one class per entity, action methods
     container.py           # Services (users, receipts, catalog, expenses): built once by App
     user.py                # UserService.ensure, .allow
-    catalog.py             # CatalogService: rename_product, set_category (hand edits of products)
+    catalog.py             # CatalogService: rename_product, set_category (hand edits of products), add_card, rename_source (payment sources)
     receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes, reparse_*; every write that changes the header keeps the receipt's expense in step
-    expense.py             # ExpenseService: card, for_receipt, set_category, set_tags, history, spending (lists and stats over expenses)
+    expense.py             # ExpenseService: card, for_receipt, add_manual (one Unit of Work: catalog saved before the expense), set_amount/set_payee/set_source/set_date (typed expenses only), set_category, set_tags, soft_delete (typed expenses only), recent_payees, payment_sources, history, spending (lists and stats over expenses)
     periods.py             # week/month arithmetic for the stats (pure: period, previous, is_current, anchors)
-    results.py             # CurrentUser, NewPhoto, ReceiptCard, ExpenseCard, IssueCard, ParseResult, SpendingReport: the services' own pydantic types
+    results.py             # CurrentUser, NewPhoto, ReceiptCard, ExpenseCard, ExpenseDraft, SourceOption, IssueCard, ParseResult, SpendingReport: the services' own pydantic types
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse, prompt.md (system prompt)
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
@@ -110,8 +110,9 @@ src/
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
     parse.py               # Parse, ParsedItem, ParsedIssue, ParseOutcome (value objects)
     edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
-    expense.py             # Expense aggregate (ADR-0003): from_receipt, sync_with_receipt, set_*, tags
-    catalog.py             # Catalog aggregate: Payee, PaymentSource, Product; ensure_card, cash, rename_*
+    expense.py             # Expense aggregate (ADR-0003): start_manual, from_receipt, sync_with_receipt, set_*, delete_by_hand, tags
+    catalog.py             # Catalog aggregate: Payee, PaymentSource, Product; ensure_payee_named, ensure_card, add_card, cash, rename_*
+    slug.py                # slug/strip: the key of a payee, store or product (normalize and Catalog share it)
 alembic/                   # migrations (alembic.ini at the repo root)
 Dockerfile, .dockerignore  # the production image (see Deploy)
 docker-compose.prod.yml    # production stack; docker-compose.yml is dev-only
@@ -327,8 +328,12 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   A parse never overwrites `store_products` or `payees.name`.
 - ADR-0003 tables. `payees` (was `stores`: `payee_key`, and `payee_id` on `receipts` and
   `store_products`) are whoever received money; a payee with products is a store.
-  `payment_sources` are a user's cards (unique `(user_id, last4)`) and their one cash source
-  (partial unique index on `kind = 'cash'`). `expenses` hold `amount >= 0`, `currency`,
+  `payment_sources` are a user's cards (unique `(user_id, last4)`; a card added by hand has
+  no last4, so several may exist and receipts never link to them) and their one cash source
+  (partial unique index on `kind = 'cash'`). The CHECK `card_has_last4` only says "cash has no
+  last4" (migration `c4e8a1b9d3f5`, whose downgrade fails while a hand-added card exists), and
+  the unique index `uq_payment_sources_user_id_lower_name` keeps a user's source names apart
+  ignoring case. `expenses` hold `amount >= 0`, `currency`,
   `spent_at` (the user's local day), `payee_id`, `payment_source_id` (both `SET NULL`),
   `category` (`ExpenseCategory` CHECK), `receipt_id` (unique, at most one expense per
   receipt) and `deleted_at`. `tags` (unique `(user_id, name)`) link through `expense_tags`.
@@ -339,8 +344,11 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
   changes a receipt header saves the expense in the same Unit of Work. `receipts.card_brand`
   and `card_last4` stay as what was printed.
 - `Catalog.payment_sources` is keyed by id; a source not yet stored sits under a temporary key
-  (`"cash"`, `"card:<last4>"`) until `CatalogRepository.save` assigns its id. Read `source.id`
+  (`"cash"`, `"card:<last4>"`, `"new-card:<name>"`) until `CatalogRepository.save` assigns its id. Read `source.id`
   after saving the catalog.
+- Picker reads: `ExpenseRepository.recent_payees(user_id, limit)` (payees by the day of their
+  latest live expense, then name; `PayeeOption` carries id, key and name) and
+  `CatalogRepository.payment_sources(user_id)` (`SourceOption`: cash first, then cards by name).
 - The expense migration (`a3c91d5e7b42`) creates one expense per `parsed` receipt (deleted ones included; failed, not_receipt,
   duplicate, pending and parsing receipts get none),
   a cash source per user with a card-less receipt and a card per distinct `(user, last4)`

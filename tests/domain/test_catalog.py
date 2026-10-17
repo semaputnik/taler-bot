@@ -427,3 +427,16 @@ def test_rename_source_may_change_only_the_case_of_its_own_name():
     key = next(iter(catalog.payment_sources))
 
     assert catalog.rename_source(key, "Revolut").name == "Revolut"
+
+
+def test_payee_and_source_look_up_what_the_catalog_holds_or_raise():
+    catalog = Catalog(user_id=1)
+    payee = catalog.ensure_payee("lidl", "Lidl")
+    cash = catalog.cash()
+
+    assert catalog.payee("lidl") is payee
+    assert catalog.source("cash") is cash
+    with pytest.raises(UnknownPayee):
+        catalog.payee("aldi")
+    with pytest.raises(UnknownPaymentSource):
+        catalog.source(7)
