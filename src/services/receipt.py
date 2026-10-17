@@ -35,6 +35,7 @@ from src.exception import (
 from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
 from src.services.results import (
+    PAGE_SIZE,
     HistoryPage,
     IssueCard,
     IssueLine,
@@ -47,7 +48,6 @@ from src.services.results import (
 
 logger = logging.getLogger(__name__)
 
-PAGE_SIZE = 8  # rows of the history per page
 _NAME_FIELDS = frozenset({"items.name_raw", "items.name_normalized"})
 _EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 

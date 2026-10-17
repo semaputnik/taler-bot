@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from src.database.read_models import CurrencyTotal, HistoryPage, HistoryRow, StoreOption
 
 __all__ = [
+    "PAGE_SIZE",
     "CurrencyTotal",
     "CurrentUser",
     "HistoryPage",
@@ -23,6 +24,8 @@ __all__ = [
     "ReceiptCard",
     "StoreOption",
 ]
+
+PAGE_SIZE = 8  # rows of the history per page
 
 
 class CurrentUser(BaseModel):
