@@ -11,10 +11,11 @@ from aiogram.methods import EditMessageText
 
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
 from src.bot.keyboards.stats import StatsAction, StatsCallback, StatsKind
-from src.domain.enums import ProductCategory
+from src.domain.enums import ExpenseCategory, ProductCategory
+from src.domain.expense import Expense
 from src.domain.receipt import Receipt
 from tests.domain.builders import parse, photo, product
-from tests.helpers import MakeUow, add_receipt, seed_catalog
+from tests.helpers import MakeUow, add_receipt, add_user, seed_catalog
 
 USER = 7
 RECEIPTS = "🧾 Receipts"
@@ -136,18 +137,64 @@ async def test_stats_renders_the_month_with_the_comparison(harness, make_uow):
         f"48.00 € · 2 receipts · ▲ 140% vs {month_name(-1)} (20.00 €)\n"
         "\n"
         "<b>Categories</b>\n"
+        "• Groceries 48.00 € · 100% · ▲ 140%\n"
+        "\n"
+        "<b>Groceries by product</b>\n"
         "• Produce 35.00 € · 73% · ▲ 75%\n"
         "• Dairy 10.00 € · 21% · new\n"
         "• Not itemised 3.00 € · 6%\n"
         "\n"
-        "<b>Stores</b>\n"
+        "<b>Payees</b>\n"
         "• Mercadona 40.00 € · 83% · ▲ 100%\n"
         "• Lidl 8.00 € · 17% · new\n"
         "\n"
-        "<b>Cards</b>\n"
+        "<b>Payment sources</b>\n"
         "• VISA •0848 40.00 € · ▲ 100%\n"
-        "• cash 8.00 € · new"
+        "• Cash 8.00 € · new"
     )
+
+
+async def test_a_changed_expense_category_moves_its_amount_between_category_lines(
+    harness, make_uow
+):
+    await bought(make_uow, in_month(0), (ProductCategory.PRODUCE, "30.00"))
+    pharmacy = await bought(
+        make_uow, in_month(0), (ProductCategory.PERSONAL_CARE, "10.00"), store="Farmacia"
+    )
+    async with make_uow() as uow:
+        expense = await uow.expenses.find_by_receipt(pharmacy.id)
+        expense.set_category(ExpenseCategory.HEALTH)
+        await uow.expenses.save(expense)
+        await uow.commit()
+
+    await harness.send_text("/stats", user_id=USER)
+
+    lines = harness.last_text().splitlines()
+    assert "• Groceries 30.00 € · 75%" in lines
+    assert "• Health 10.00 € · 25%" in lines
+    # The product breakdown still covers every receipt's items, whatever the expense category.
+    assert "• Personal care 10.00 € · 25%" in lines
+
+
+async def test_the_product_section_is_hidden_without_receipts(harness, make_uow):
+    await add_user(make_uow, USER)
+    async with make_uow() as uow:
+        await uow.expenses.add(
+            Expense.start_manual(
+                USER,
+                amount=Decimal("850.00"),
+                currency="EUR",
+                spent_at=in_month(0, 1),
+                category=ExpenseCategory.RENT,
+            )
+        )
+        await uow.commit()
+
+    await harness.send_text("/stats", user_id=USER)
+
+    text = harness.last_text()
+    assert "• Rent 850.00 € · 100%" in text.splitlines()
+    assert "Groceries by product" not in text
 
 
 async def test_a_period_without_a_previous_one_shows_no_comparison(harness, make_uow):

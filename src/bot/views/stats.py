@@ -13,8 +13,7 @@ from src.services import periods
 from src.services.results import Compared, ComparedBlock, SpendingReport
 
 NOT_ITEMISED = "not_itemised"
-CASH = "cash"
-NO_STORE = "none"
+NONE = "none"  # an expense without a payee, or without a payment source
 
 
 def title(report: SpendingReport, i18n: TranslatorRunner) -> str:
@@ -84,19 +83,24 @@ def _line(
 
 
 def _category_label(line: Compared, i18n: TranslatorRunner) -> str:
+    """An expense category (`groceries`, `rent`, ...)."""
+    return i18n.get(f"expense-category-{line.key.replace('_', '-')}")
+
+
+def _product_label(line: Compared, i18n: TranslatorRunner) -> str:
+    """A product category (`produce`, `dairy`, ...), or the not-itemised remainder."""
     if line.key == NOT_ITEMISED:
-        name = i18n.get("stats-not-itemised")
-    else:
-        name = i18n.get(f"category-{line.key.replace('_', '-')}")
-    return name
+        return i18n.get("stats-not-itemised")
+    return i18n.get(f"category-{line.key.replace('_', '-')}")
 
 
-def _store_label(line: Compared, i18n: TranslatorRunner) -> str:
-    return i18n.get("receipt-unknown-store") if line.key == NO_STORE else escape(line.label)
+def _payee_label(line: Compared, i18n: TranslatorRunner) -> str:
+    return i18n.get("receipt-unknown-store") if line.key == NONE else escape(line.label)
 
 
-def _card_label(line: Compared, i18n: TranslatorRunner) -> str:
-    return i18n.get("stats-cash") if line.key == CASH else escape(line.label)
+def _source_label(line: Compared, i18n: TranslatorRunner) -> str:
+    """A card or cash by its name."""
+    return i18n.get("item-not-specified") if line.key == NONE else escape(line.label)
 
 
 def _block_text(report: SpendingReport, block: ComparedBlock, i18n: TranslatorRunner) -> str:
@@ -104,15 +108,19 @@ def _block_text(report: SpendingReport, block: ComparedBlock, i18n: TranslatorRu
     sections = [
         (
             "stats-section-categories",
-            [_line(_category_label(c, i18n), c, block, i18n, share=True) for c in block.products],
+            [_line(_category_label(c, i18n), c, block, i18n, share=True) for c in block.categories],
         ),
         (
-            "stats-section-stores",
-            [_line(_store_label(s, i18n), s, block, i18n, share=True) for s in block.payees],
+            "stats-section-products",
+            [_line(_product_label(p, i18n), p, block, i18n, share=True) for p in block.products],
         ),
         (
-            "stats-section-cards",
-            [_line(_card_label(c, i18n), c, block, i18n, share=False) for c in block.sources],
+            "stats-section-payees",
+            [_line(_payee_label(p, i18n), p, block, i18n, share=True) for p in block.payees],
+        ),
+        (
+            "stats-section-sources",
+            [_line(_source_label(s, i18n), s, block, i18n, share=False) for s in block.sources],
         ),
     ]
     for key, lines in sections:
