@@ -70,7 +70,7 @@ src/
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
     middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
-      command/             # one module per command (/start, /receipts, /reparse, /stats), each exposes register_xxx(dp)
+      command/             # one module per command (/start, /expenses, /reparse, /stats), each exposes register_xxx(dp)
       callback/            # taps on plain buttons: cards.py is what both cards share (in place vs fresh copy, Close, the gone-card alert); receipt.py and expense.py check the card and call it; history.py edits the history message in place; stats.py edits the stats message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo" (steps aside when the open window reads typed text)
       message/amount.py    # a message that is only an amount starts the ExpenseEntry dialog (unless the open window reads typed text)
@@ -82,10 +82,10 @@ src/
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
     keyboards/expense.py   # the expense card's inline keyboard, ExpenseCallback (prefix "expense")
     keyboards/cards.py     # is_card_markup: true for either card's resting keyboard
-    keyboards/history.py   # HistoryCallback (prefix "history": year, month, store_id, page, action)
+    keyboards/history.py   # HistoryCallback (prefix "history": year, month, payee_id, page, action)
     keyboards/stats.py     # StatsCallback (prefix "stats": kind week|month, the anchor date as year/month/day, action)
-    views/history.py       # the history message: text and keyboard of the month and store chooser screens
-    views/stats.py         # the stats message: text (bars, shares, changes) and keyboard (arrows, week/month, Receipts)
+    views/history.py       # the history message: text and keyboard of the month and payee chooser screens
+    views/stats.py         # the stats message: text (bars, shares, changes) and keyboard (arrows, week/month, Expenses)
     render.py              # receipt and expense texts (currency sign, header, expense_text) used by the cards and the manual entry
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG, expense_card.py: ExpenseCardSG, expense_entry.py: ExpenseEntrySG)
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
@@ -201,7 +201,7 @@ the history dialog.
     The amount handler and the catch-all step aside themselves when the open window reads typed text
     (`no_window_reads_text`, which reads the open dialog context and `text_input_states()`), so text typed
     there is that window's input. In any other window a number starts a new `ExpenseEntry` (an open card keeps
-    its buttons) and other text gets "Send me a photo of a receipt." while the card stays untouched. A new
+    its buttons) and other text, an unknown command such as the retired `/receipts` included, gets "Send me a photo of a receipt." while the card stays untouched. A new
     dialog with a text window must be listed in `_create_dialogs`, or the filter would not know it.
   - `App` builds the services once (`Services` in `services/container.py`, handler data key `services`), and a
     middleware puts them into handler data, so getters receive them as arguments. There
@@ -283,8 +283,8 @@ edits the card in place (`ShowMode.EDIT`), not a new message. The pickers are `d
 with the entry.
 
 **Exception: the history, the stats and the card's resting buttons are plain callback keyboards, because their
-buttons must outlive any dialog stack.** `/receipts` is a plain message whose `HistoryCallback`
-buttons carry the whole view state (month, store, page); `callback/history.py` edits the message in
+buttons must outlive any dialog stack.** `/expenses` is a plain message whose `HistoryCallback`
+buttons carry the whole view state (month, payee, page); `callback/history.py` edits the message in
 place. Its row buttons are `ReceiptCallback`s (or `ExpenseCallback`s for an expense typed by hand, shown
 with 💸), so a tap goes through `open_card` / `open_expense_card`, which send a fresh
 card and leaves the history keyboard alone. The `/start` button uses `HistoryAction.OPEN`: it sends
@@ -294,7 +294,7 @@ the list as a new message instead of editing the greeting.
 period, `callback/stats.py` edits the message in place (`StatsAction.SHOW`) and the `/start`
 `📊 Spending` button uses `StatsAction.OPEN` to send a new message. The view only formats what
 `ExpenseService.spending` returns (whole-percent shares and changes, `new` when `previous` is
-None); the `🧾 Receipts` button of a month screen is a `HistoryCallback` with `OPEN`.
+None); the `💸 Expenses` button of a month screen is a `HistoryCallback` with `OPEN`.
 
 The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
 `position`, `current_issue_id` and the counters, loaded once by `click_event.start_review`.

@@ -164,8 +164,8 @@ category, tags, and optionally the receipt it came from.
    | `date_text` | `dd.mm` or `dd.mm.yyyy`; a future or malformed date is refused. `◀ Back` to `date` |
    | `tags` | the current tags and a text input (comma-separated, replaces them); `🧹 Clear`. `◀ Back` |
    | `delete_confirm` | "Delete this expense?" `🗑 Yes, delete` / `◀ Back` |
-10. **History `/expenses`** replaces `/receipts`: every expense of the month, a receipt icon on
-    those read from a photo; filter by payee.
+10. **History `/expenses`** replaces `/receipts` (no alias): every expense of the month, a `•` on
+    those read from a photo and a `💸` on those typed by hand; filter by payee. Done.
 11. **Expiring screens.** Screens opened by a command or a menu button (`/start`, `/expenses`,
     `/stats`, the `/reparse` summary, an unfinished entry) are deleted after
     `SCREEN_TTL_MINUTES` (30) without a tap; a tap extends the time. Cards, "Saved, reading…",
@@ -173,6 +173,7 @@ category, tags, and optionally the receipt it came from.
 
 **Later**
 
+- History filter by tag; statistics by tag.
 - Menus to rename and merge payees and to rename cards (today only from an expense card).
 - Attaching a receipt photo to an existing expense; a currency per expense; one-line entry
   (`12.50 Mercadona`); income and refunds.
@@ -260,30 +261,32 @@ Current value: 4.80 €
 [⏭ Skip] [◀ Back]
 ```
 
-### History (`/receipts`)
+### History (`/expenses`)
 
-One month of the user's receipts (month by purchase date, the day the photo arrived as the
-fallback, in the user's time zone), newest first, eight rows per page. A plain callback
-keyboard, not a dialog: every button carries the month, the store filter and the page, so the
+One month of the user's expenses (month by the day of the expense; a receipt that is not a
+purchase by its purchase date, the day the photo arrived as the fallback, in the user's time
+zone), newest first, eight rows per page. A plain callback
+keyboard, not a dialog: every button carries the month, the payee filter and the page, so the
 message keeps working however old it is and however many cards were opened from it.
 
 ```
 🗓 October 2026 · Mercadona
-12 receipts · 384.20 €
+12 expenses · 384.20 €
 [• 14.10 Mercadona · 47.85 €]
 [• 12.10 Lidl · 23.10 €]
 [• 11.10 Consum · ❌]
-[◀ Sep] [Store ▾] [Nov ▶]
+[◀ Sep] [Payee ▾] [Nov ▶]
 [◀] [2/3] [▶]
 ```
 
-- The summary counts parsed receipts only, with one total per currency. A month without any
-  says so (`No receipts this month.`, or `No parsed receipts`).
+- The summary counts expenses, with one total per currency (`1 expense`, `3 expenses`). An empty
+  month says `No expenses this month.`; a month with only receipts that are not purchases says
+  `No expenses yet`.
 - A row without an amount shows ❌ failed, ♻️ duplicate, 🤔 not a receipt, ⏳ pending or parsing.
-- `◀ Sep` / `Nov ▶` appear only when a receipt lies before / after the month (never past the
+- `◀ Sep` / `Nov ▶` appear only when a row lies before / after the month (never past the
   current month). The paging row appears only with more than one page, and its arrows only
   where there is a page to go to.
-- `Store ▾` lists the stores with receipts in the month, `✓` on the selected one, `All stores`
+- `Payee ▾` lists the payees with a row in the month, `✓` on the selected one, `All payees`
   and `◀ Back`. The filter stays while moving between months and pages.
 - A row opens the receipt's card as a new message; the history keeps its buttons. An expense
   typed by hand has no receipt: its row starts with 💸 instead of the bullet and opens the
@@ -291,5 +294,5 @@ message keeps working however old it is and however many cards were opened from 
 
 ### Main menu (`/start`)
 
-The greeting carries `[🧾 Receipts]` and `[📊 Spending]`, which send the current month's history
-and stats as new messages. Stage 3 renames the first to `[💸 Expenses]`.
+The greeting carries `[💸 Expenses]` and `[📊 Spending]`, which send the current month's history
+and stats as new messages.
