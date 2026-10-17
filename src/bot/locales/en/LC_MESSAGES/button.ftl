@@ -7,6 +7,7 @@ button-photo = 🖼 Photo
 button-review = ⚠️ Review ({ $count })
 button-correct = ✅ Correct
 button-enter-value = ✏️ Enter value
+button-rename = ✏️ Rename
 button-skip = ⏭ Skip
 button-close = ✖ Close
 button-name = ✏️ Name

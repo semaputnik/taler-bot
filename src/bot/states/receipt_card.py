@@ -10,5 +10,6 @@ class ReceiptCardSG(StatesGroup):
     photo = State()
     issue = State()
     issue_input = State()
+    issue_rename = State()
     review_done = State()
     delete_confirm = State()

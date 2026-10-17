@@ -225,6 +225,11 @@ async def enter_value(query: CallbackQuery, button: Button, manager: DialogManag
     await manager.switch_to(ReceiptCardSG.issue_input)
 
 
+async def start_rename(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
+    await manager.switch_to(ReceiptCardSG.issue_rename)
+
+
 async def back_to_issue(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
     manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
     await manager.switch_to(ReceiptCardSG.issue)
@@ -258,6 +263,42 @@ async def on_value(message: Message, widget: MessageInput, manager: DialogManage
         return
     except UnknownIssue, InvalidIssueResolution:
         pass  # resolved from another device meanwhile: nothing to record, just move on
+    else:
+        data[DialogDataKeys.CORRECTED] += 1
+    data.pop(DialogDataKeys.INPUT_ERROR, None)
+    await advance(manager)
+
+
+async def on_rename(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    """The user typed the new name of the product behind the open issue. A good name renames
+    the product in the catalog, then the issue is marked corrected and the walk moves on."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    data = manager.dialog_data
+    receipt_id = data[DialogDataKeys.RECEIPT_ID]
+    cards = await services.receipts.review(user.id, receipt_id)
+    current = next((c for c in cards if c.issue_id == data[DialogDataKeys.CURRENT_ISSUE_ID]), None)
+    if current is None or not current.renamable or current.product_key is None:
+        await advance(manager)  # resolved elsewhere meanwhile
+        return
+    try:
+        if message.text is None:
+            raise InvalidValue("not a text")
+        name = str(parse_value("text", message.text, ZoneInfo(user.timezone)))
+        if not await _is_open(services, user.id, receipt_id):
+            raise ReceiptNotFound(receipt_id)
+        await services.catalog.rename_product(user.id, current.product_key, name)
+        await services.receipts.resolve_issue(user.id, receipt_id, current.issue_id, "corrected")
+    except InvalidValue, InvalidEdit:
+        data[DialogDataKeys.INPUT_ERROR] = True
+        return
+    except ReceiptNotFound, InvalidReceiptTransition:
+        await message.answer(i18n.get("card-deleted-alert"))
+        await manager.switch_to(ReceiptCardSG.main)
+        return
+    except UnknownProduct, UnknownIssue, InvalidIssueResolution:
+        pass  # product or issue gone meanwhile: nothing to record, just move on
     else:
         data[DialogDataKeys.CORRECTED] += 1
     data.pop(DialogDataKeys.INPUT_ERROR, None)

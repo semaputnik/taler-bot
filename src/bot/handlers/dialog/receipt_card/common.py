@@ -22,6 +22,7 @@ class PreviewDataKeys:
     REVIEW_COUNT = "review_count"
     HAS_ISSUE = "has_issue"
     CAN_ENTER_VALUE = "can_enter_value"
+    CAN_RENAME = "can_rename"
     REVIEWED = "reviewed"
     HAS_ITEM = "has_item"
     CATEGORIES = "categories"

@@ -11,6 +11,7 @@ from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewD
 from src.bot.handlers.dialog.receipt_card.getters import (
     issue_getter,
     issue_input_getter,
+    issue_rename_getter,
     item_categories_getter,
     item_getter,
     item_input_getter,
@@ -129,6 +130,12 @@ def create_receipt_card_dialog() -> Dialog:
                 when=PreviewDataKeys.CAN_ENTER_VALUE,
             ),
             Button(
+                I18nText("button-rename"),
+                id="rename",
+                on_click=click_event.start_rename,
+                when=PreviewDataKeys.CAN_RENAME,
+            ),
+            Button(
                 I18nText("button-skip"),
                 id="skip",
                 on_click=click_event.skip_issue,
@@ -145,6 +152,14 @@ def create_receipt_card_dialog() -> Dialog:
             Button(I18nText("button-back"), id="back", on_click=click_event.back_to_issue),
             getter=issue_input_getter,
             state=ReceiptCardSG.issue_input,
+            parse_mode=ParseMode.HTML,
+        ),
+        Window(
+            Format(f"{{{PreviewDataKeys.TEXT}}}"),
+            MessageInput(click_event.on_rename, content_types=ContentType.ANY),
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_issue),
+            getter=issue_rename_getter,
+            state=ReceiptCardSG.issue_rename,
             parse_mode=ParseMode.HTML,
         ),
         Window(

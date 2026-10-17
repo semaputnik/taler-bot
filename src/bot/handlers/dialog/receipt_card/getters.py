@@ -172,7 +172,10 @@ async def issue_getter(
     current = settle(dialog_manager, cards)
     if current is None:
         return IssuePreview(
-            text=_tally(data, i18n), has_issue=False, can_enter_value=False
+            text=_tally(data, i18n),
+            has_issue=False,
+            can_enter_value=False,
+            can_rename=False,
         ).to_data()
     card = await services.receipts.card(user.id, receipt_id)
     return IssuePreview(
@@ -186,6 +189,7 @@ async def issue_getter(
         ),
         has_issue=True,
         can_enter_value=current.editable,
+        can_rename=current.renamable,
     ).to_data()
 
 
@@ -206,6 +210,35 @@ async def issue_input_getter(
         return InputPreview(text=i18n.get("issue-input-gone")).to_data()
     hint = i18n.get(f"input-hint-{current.input_kind}")
     lines = [i18n.get("issue-input-prompt", field=_field_label(current, i18n), hint=hint)]
+    if data.get(DialogDataKeys.INPUT_ERROR):
+        lines += ["", i18n.get("issue-input-error", hint=hint)]
+    return InputPreview(text="\n".join(lines)).to_data()
+
+
+async def issue_rename_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The prompt to rename the product behind the issue on screen, with its current name."""
+    data = dialog_manager.dialog_data
+    cards = await services.receipts.review(user.id, data[DialogDataKeys.RECEIPT_ID])
+    current = next(
+        (c for c in cards if c.issue_id == data.get(DialogDataKeys.CURRENT_ISSUE_ID)), None
+    )
+    if current is None or not current.renamable:
+        return InputPreview(text=i18n.get("issue-input-gone")).to_data()
+    hint = i18n.get("input-hint-text")
+    lines = [
+        i18n.get(
+            "item-input-prompt",
+            field=i18n.get("field-name"),
+            hint=hint,
+            value=escape(current.item_name or ""),
+        )
+    ]
     if data.get(DialogDataKeys.INPUT_ERROR):
         lines += ["", i18n.get("issue-input-error", hint=hint)]
     return InputPreview(text="\n".join(lines)).to_data()

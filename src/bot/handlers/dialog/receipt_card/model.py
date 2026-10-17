@@ -73,12 +73,14 @@ class IssuePreview(BaseModel):
     text: str
     has_issue: bool
     can_enter_value: bool
+    can_rename: bool
 
     def to_data(self) -> dict:
         return {
             PreviewDataKeys.TEXT: self.text,
             PreviewDataKeys.HAS_ISSUE: self.has_issue,
             PreviewDataKeys.CAN_ENTER_VALUE: self.can_enter_value,
+            PreviewDataKeys.CAN_RENAME: self.can_rename,
         }
 
 
