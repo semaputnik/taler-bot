@@ -97,7 +97,7 @@ dialog's last message) edits it in place. A tap on an older card sends a fresh c
 and leaves the old card with its buttons. A tap on a deleted receipt answers with an alert
 and removes the keyboard. A photo sent while a card is open is still accepted. `✖ Close`
 hides the card's buttons and keeps its text; the resting state of a card is `main`.
-`🔄 Re-parse` replies "🔄 Reading again…" to the card, shows the typing status while the
+`🔄 Re-parse` first asks for a confirmation (a model call costs money); `🔄 Yes, read again` replies "🔄 Reading again…" to the card, shows the typing status while the
 receipt is read, then sends a fresh card with the new reading (or the old reading and the
 error line if the read failed); the old card keeps its buttons. A stale button on a receipt
 that can no longer be read again (duplicate, deleted) answers an alert.
@@ -116,6 +116,7 @@ that can no longer be read again (duplicate, deleted) answers an alert.
 | `issue_input` | "Enter the total (a number with a point, like 12.50)" and a text input; `◀ Back` returns to `issue`. The text is read by the issue's input kind (date and time `dd.mm.yyyy hh:mm` in the user's time zone, number with a point or comma, four digits, 3-letter currency, free text). A wrong value or a non-text message keeps the window with an error line and the issue open; a good one is saved as an edit, the issue is marked corrected and the walk moves on |
 | `review_done` | the tally ("3 reviewed: 1 corrected, 1 confirmed, 1 skipped") and `◀ Back` to `main` |
 | `photo` | the stored photo by Telegram file id, uploaded from disk if Telegram refuses the id |
+| `reparse_confirm` | "Read this receipt again? …" with `🔄 Yes, read again` and `◀ Back` |
 | `delete_confirm` | confirms the delete (soft delete; the photo moves to the trash). Refused while the receipt is being read. After a delete the card shows `main` in its deleted form |
 
 The `⚠️ Review (n)` button sits in `main` (between Items and Photo),

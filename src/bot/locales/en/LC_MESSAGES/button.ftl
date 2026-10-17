@@ -10,6 +10,7 @@ button-enter-value = ✏️ Enter value
 button-rename = ✏️ Rename
 button-skip = ⏭ Skip
 button-reparse = 🔄 Re-parse
+button-reparse-confirm = 🔄 Yes, read again
 button-close = ✖ Close
 button-name = ✏️ Name
 button-category = 🏷 Category

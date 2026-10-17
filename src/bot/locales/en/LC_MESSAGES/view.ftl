@@ -38,6 +38,7 @@ card-status-parsing = ⏳ Being read…
 card-error = ⚠️ The last reading failed: { $reason }
 card-received = Photo received: { $date }
 card-delete-confirm = Delete this receipt? The photo is kept in the trash.
+card-reparse-confirm = Read this receipt again? It takes up to two minutes and costs a model call. Your edits stay.
 card-cannot-delete-parsing = This receipt is still being read. Try again in a moment.
 
 card-items-title = 📋 Items ({ $count })

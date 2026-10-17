@@ -10,6 +10,7 @@ from tests.stubs import fixture, output_of
 
 USER = 7
 REPARSE = "🔄 Re-parse"
+CONFIRM = "🔄 Yes, read again"
 PHOTO = "🖼 Photo"
 
 i18n = create_translator_hub().get_translator_by_locale(DEFAULT_LOCALE)
@@ -69,6 +70,7 @@ async def test_a_tap_replies_reading_again_then_sends_a_fresh_card(harness, monk
     calls_before = len(harness.session.calls)
 
     await harness.tap(USER, REPARSE)
+    await harness.tap(USER, CONFIRM)
     await harness.tasks.drain()
 
     new_calls = harness.session.calls[calls_before:]
@@ -96,6 +98,7 @@ async def test_a_failed_reread_keeps_the_reading_and_the_card_shows_the_error(
     harness.parser.error = LLMError("timed out")
 
     await harness.tap(USER, REPARSE)
+    await harness.tap(USER, CONFIRM)
     await harness.tasks.drain()
 
     card = harness.last_text()
@@ -120,6 +123,7 @@ async def test_a_stale_button_on_a_receipt_that_became_a_duplicate_alerts(harnes
     stale = harness.last_keyboard()[1].inline_keyboard[-2][0].callback_data
     harness.parser.default = output_of(fixture("03")["raw"])
     await harness.tap(USER, REPARSE)  # the second receipt now repeats the first
+    await harness.tap(USER, CONFIRM)
     await harness.tasks.drain()
     assert await statuses(session_factory) == ["parsed", "duplicate"]
     sent_before = len(harness.sent_messages)
@@ -132,3 +136,18 @@ async def test_a_stale_button_on_a_receipt_that_became_a_duplicate_alerts(harnes
     assert len(harness.sent_messages) == sent_before
     assert harness.parser.events[-1][0] == "end"
     assert len([e for e in harness.parser.events if e[0] == "start"]) == 3
+
+
+async def test_reparse_asks_for_a_confirmation_and_back_reads_nothing(harness):
+    await parsed(harness)
+    starts_before = len([e for e in harness.parser.events if e[0] == "start"])
+
+    await harness.tap(USER, REPARSE)
+    assert harness.last_text() == i18n.get("card-reparse-confirm")
+    assert harness.button_texts() == [CONFIRM, "◀ Back"]
+
+    await harness.tap(USER, "◀ Back")
+    await harness.tasks.drain()
+
+    assert REPARSE in harness.button_texts()
+    assert len([e for e in harness.parser.events if e[0] == "start"]) == starts_before
