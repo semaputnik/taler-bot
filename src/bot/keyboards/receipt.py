@@ -31,17 +31,16 @@ def receipt_keyboard(
     if review_count > 0:
         windows.append(CardWindow.REVIEW)
     windows += [CardWindow.PHOTO, CardWindow.DELETE_CONFIRM]
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=i18n.get(_BUTTON_KEYS[window], **_button_args(window, review_count)),
-                    callback_data=ReceiptCallback(receipt_id=receipt_id, window=window).pack(),
-                )
-                for window in windows
-            ]
-        ]
-    )
+    buttons = [
+        InlineKeyboardButton(
+            text=i18n.get(_BUTTON_KEYS[window], **_button_args(window, review_count)),
+            callback_data=ReceiptCallback(receipt_id=receipt_id, window=window).pack(),
+        )
+        for window in windows
+    ]
+    # Two buttons per row: four in one row are unreadable on a phone.
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 _BUTTON_KEYS = {

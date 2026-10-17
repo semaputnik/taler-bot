@@ -6,7 +6,6 @@ photo" is included after them, so it never swallows a dialog's text input.
 """
 
 import logging
-from html import escape
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
@@ -165,23 +164,8 @@ def _render(result: ParseResult, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
 
 
 def _summary(result: ParseResult, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
-    card = result.card
-    text = render.header(card, i18n, tz)
-    if not result.issues:
-        return text
-    lines = []
-    for issue in result.issues:
-        message = escape(issue.message)
-        if issue.item_name:
-            lines.append(
-                i18n.get("receipt-issue-line", item=escape(issue.item_name), message=message)
-            )
-        else:
-            lines.append(i18n.get("receipt-issue-line-plain", message=message))
-    if card.open_issue_count > len(result.issues):
-        lines.append(i18n.get("receipt-issues-more"))
-    header = i18n.get("receipt-issues", count=str(card.open_issue_count))
-    return "\n\n".join((text, "\n".join((header, *lines))))
+    """The header only: the issues are reviewed from the Review button, not listed here."""
+    return render.header(result.card, i18n, tz)
 
 
 def register_photo(dp) -> None:

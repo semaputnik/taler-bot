@@ -21,10 +21,6 @@ receipt-payment-card-brand = card { $brand } •{ $last4 }
 receipt-payment-card = card •{ $last4 }
 receipt-payment-method = { $method }
 receipt-payment-none = not specified
-receipt-issues = ⚠️ Issues ({ $count }):
-receipt-issue-line = • { $item }: { $message }
-receipt-issue-line-plain = • { $message }
-receipt-issues-more = …
 
 card-deleted-alert = This receipt was deleted.
 card-deleted = 🗑 This receipt was deleted.

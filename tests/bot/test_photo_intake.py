@@ -41,7 +41,7 @@ async def test_a_photo_is_saved_then_summarised_as_replies_to_it(harness):
     assert "Total: <b>7.58 EUR</b>" in summary.text
     assert "card VISA •0848" in summary.text
     assert "Items: 2" in summary.text
-    assert "⚠️ Issues (2):\n• " in summary.text
+    assert "⚠️" not in summary.text  # issues are reviewed from the button, not listed
     assert re.search(r"\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}", summary.text)
 
 
