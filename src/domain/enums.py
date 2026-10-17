@@ -16,7 +16,7 @@ class ParseStatus(StrEnum):
     FAILED = "failed"
 
 
-class Category(StrEnum):
+class ProductCategory(StrEnum):
     PRODUCE = "produce"
     MEAT = "meat"
     FISH = "fish"

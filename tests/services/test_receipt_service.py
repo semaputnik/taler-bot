@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import text
 
 from src.database.repositories.receipt import SqlAlchemyReceiptRepository
-from src.domain.enums import Category, IssueResolution, IssueSeverity, IssueSource
+from src.domain.enums import IssueResolution, IssueSeverity, IssueSource, ProductCategory
 from src.domain.parse import Parse, ParsedIssue
 from src.domain.receipt import Receipt
 from src.exception import (
@@ -754,7 +754,7 @@ async def spent(
     purchased_at: datetime,
     amount: str,
     *,
-    category: Category = Category.DAIRY,
+    category: ProductCategory = ProductCategory.DAIRY,
     store: str = "mercadona",
     currency: str = "EUR",
     card: str | None = None,
@@ -795,11 +795,15 @@ def line(lines: list[Compared], key: str) -> Compared:
 
 
 async def test_spending_of_a_month_compares_with_the_previous_month(service, make_uow):
-    await spent(make_uow, october(), "120.00", category=Category.MEAT, store="a", card="0848")
-    await spent(make_uow, october(11), "30.00", category=Category.DAIRY, store="b")
-    await spent(make_uow, september(), "100.00", category=Category.MEAT, store="a", card="0848")
-    await spent(make_uow, september(11), "60.00", category=Category.DAIRY, store="b")
-    await spent(make_uow, september(12), "10.00", category=Category.PET, store="c")
+    await spent(
+        make_uow, october(), "120.00", category=ProductCategory.MEAT, store="a", card="0848"
+    )
+    await spent(make_uow, october(11), "30.00", category=ProductCategory.DAIRY, store="b")
+    await spent(
+        make_uow, september(), "100.00", category=ProductCategory.MEAT, store="a", card="0848"
+    )
+    await spent(make_uow, september(11), "60.00", category=ProductCategory.DAIRY, store="b")
+    await spent(make_uow, september(12), "10.00", category=ProductCategory.PET, store="c")
 
     report = await service.spending(1, "month", date(2026, 10, 14))
 
@@ -829,10 +833,10 @@ async def test_spending_of_a_month_compares_with_the_previous_month(service, mak
 async def test_a_line_without_a_previous_value_is_new_and_a_zero_previous_has_no_change(
     service, make_uow
 ):
-    await spent(make_uow, october(), "50.00", category=Category.MEAT, store="a")
-    await spent(make_uow, october(11), "20.00", category=Category.PET, store="b")
-    await spent(make_uow, september(), "10.00", category=Category.MEAT, store="a")
-    await spent(make_uow, september(11), "0.00", category=Category.PET, store="b")
+    await spent(make_uow, october(), "50.00", category=ProductCategory.MEAT, store="a")
+    await spent(make_uow, october(11), "20.00", category=ProductCategory.PET, store="b")
+    await spent(make_uow, september(), "10.00", category=ProductCategory.MEAT, store="a")
+    await spent(make_uow, september(11), "0.00", category=ProductCategory.PET, store="b")
 
     [block] = (await service.spending(1, "month", date(2026, 10, 14))).blocks
 
@@ -854,9 +858,9 @@ async def test_a_currency_new_this_period_has_no_previous_total(service, make_uo
 
 
 async def test_shares_sum_to_about_a_hundred_with_not_itemised_included(service, make_uow):
-    await spent(make_uow, october(), "10.00", category=Category.MEAT)
-    await spent(make_uow, october(), "10.00", category=Category.DAIRY)
-    await spent(make_uow, october(), "10.00", category=Category.PET, total="13.00")
+    await spent(make_uow, october(), "10.00", category=ProductCategory.MEAT)
+    await spent(make_uow, october(), "10.00", category=ProductCategory.DAIRY)
+    await spent(make_uow, october(), "10.00", category=ProductCategory.PET, total="13.00")
 
     [block] = (await service.spending(1, "month", date(2026, 10, 14))).blocks
 

@@ -19,7 +19,13 @@ from src.database.read_models import (
     SpendingPeriod,
 )
 from src.domain.edits import Edit
-from src.domain.enums import Category, EditTarget, IssueResolution, IssueSeverity, ReceiptStatus
+from src.domain.enums import (
+    EditTarget,
+    IssueResolution,
+    IssueSeverity,
+    ProductCategory,
+    ReceiptStatus,
+)
 from src.domain.parse import ParsedIssue
 from src.domain.receipt import Header, Photo, Receipt
 from src.exception import (
@@ -997,7 +1003,7 @@ D = Decimal
 async def spent(
     make_uow: MakeUow,
     purchased_at: datetime,
-    *lines: tuple[Category, str],
+    *lines: tuple[ProductCategory, str],
     store: str = "mercadona",
     total: str | None = None,
     currency: str = "EUR",
@@ -1048,15 +1054,20 @@ def only_block(period: SpendingPeriod) -> CurrencyBlock:
 
 
 async def test_spending_membership_is_the_purchase_date_in_the_time_zone(make_uow):
-    await spent(make_uow, at(10), (Category.DAIRY, "5.00"))
+    await spent(make_uow, at(10), (ProductCategory.DAIRY, "5.00"))
     # 23:30 UTC on the last day of October is already 00:30 on 1 November in Madrid.
-    await spent(make_uow, at(31, 23), (Category.DAIRY, "7.00"), store="late")
-    await spent(make_uow, datetime(2026, 10, 31, 23, 30, tzinfo=UTC), (Category.DAIRY, "9.00"))
+    await spent(make_uow, at(31, 23), (ProductCategory.DAIRY, "7.00"), store="late")
+    await spent(
+        make_uow, datetime(2026, 10, 31, 23, 30, tzinfo=UTC), (ProductCategory.DAIRY, "9.00")
+    )
     # 23:30 UTC on 30 September is 01:30 on 1 October in Madrid (CEST, UTC+2).
     await spent(
-        make_uow, datetime(2026, 9, 30, 23, 30, tzinfo=UTC), (Category.PANTRY, "3.00"), store="e"
+        make_uow,
+        datetime(2026, 9, 30, 23, 30, tzinfo=UTC),
+        (ProductCategory.PANTRY, "3.00"),
+        store="e",
     )
-    await spent(make_uow, at(10, month=9), (Category.DAIRY, "100.00"))
+    await spent(make_uow, at(10, month=9), (ProductCategory.DAIRY, "100.00"))
 
     block = only_block(await october_spending(make_uow))
     assert (block.total, block.receipt_count) == (D("8.00"), 2)
@@ -1071,11 +1082,11 @@ async def test_spending_membership_is_the_purchase_date_in_the_time_zone(make_uo
 
 
 async def test_spending_counts_only_parsed_and_not_deleted_receipts(make_uow):
-    await spent(make_uow, at(2), (Category.DAIRY, "5.00"))
-    await spent(make_uow, at(3), (Category.DAIRY, "50.00"), deleted=True)
-    first = await spent(make_uow, at(4), (Category.DAIRY, "60.00"), store="dup")
+    await spent(make_uow, at(2), (ProductCategory.DAIRY, "5.00"))
+    await spent(make_uow, at(3), (ProductCategory.DAIRY, "50.00"), deleted=True)
+    first = await spent(make_uow, at(4), (ProductCategory.DAIRY, "60.00"), store="dup")
     assert first.id is not None
-    await spent(make_uow, at(5), (Category.DAIRY, "70.00"), duplicate_of=first.id)
+    await spent(make_uow, at(5), (ProductCategory.DAIRY, "70.00"), duplicate_of=first.id)
     await failed(make_uow, at(6))
 
     block = only_block(await october_spending(make_uow))
@@ -1084,9 +1095,9 @@ async def test_spending_counts_only_parsed_and_not_deleted_receipts(make_uow):
 
 
 async def test_spending_has_one_block_per_currency_ordered_by_code(make_uow):
-    await spent(make_uow, at(2), (Category.DAIRY, "5.00"))
-    await spent(make_uow, at(3), (Category.MEAT, "40.00"), currency="USD", store="us")
-    await spent(make_uow, at(4), (Category.DAIRY, "6.00"))
+    await spent(make_uow, at(2), (ProductCategory.DAIRY, "5.00"))
+    await spent(make_uow, at(3), (ProductCategory.MEAT, "40.00"), currency="USD", store="us")
+    await spent(make_uow, at(4), (ProductCategory.DAIRY, "6.00"))
 
     period = await october_spending(make_uow)
 
@@ -1101,8 +1112,14 @@ async def test_spending_has_one_block_per_currency_ordered_by_code(make_uow):
 async def test_spending_categories_come_from_item_lines_largest_first_and_not_itemised_is_the_rest(
     make_uow,
 ):
-    await spent(make_uow, at(2), (Category.DAIRY, "5.00"), (Category.MEAT, "12.50"))
-    await spent(make_uow, at(3), (Category.DAIRY, "4.00"), (Category.PANTRY, "0.00"), total="9.00")
+    await spent(make_uow, at(2), (ProductCategory.DAIRY, "5.00"), (ProductCategory.MEAT, "12.50"))
+    await spent(
+        make_uow,
+        at(3),
+        (ProductCategory.DAIRY, "4.00"),
+        (ProductCategory.PANTRY, "0.00"),
+        total="9.00",
+    )
 
     block = only_block(await october_spending(make_uow))
 
@@ -1116,11 +1133,11 @@ async def test_spending_categories_come_from_item_lines_largest_first_and_not_it
 
 
 async def test_spending_categories_follow_the_catalog_at_query_time(make_uow):
-    await spent(make_uow, at(2), (Category.DAIRY, "5.00"))
+    await spent(make_uow, at(2), (ProductCategory.DAIRY, "5.00"))
     async with make_uow() as uow:
         catalog = await uow.catalog.get(1)
         [key] = catalog.products
-        catalog.set_category(key, Category.PET)
+        catalog.set_category(key, ProductCategory.PET)
         await uow.catalog.save(catalog)
         await uow.commit()
 
@@ -1130,9 +1147,9 @@ async def test_spending_categories_follow_the_catalog_at_query_time(make_uow):
 
 
 async def test_spending_stores_are_summed_from_receipt_totals_largest_first(make_uow):
-    await spent(make_uow, at(2), (Category.DAIRY, "5.00"), store="consum")
-    await spent(make_uow, at(3), (Category.DAIRY, "4.00"), total="30.00", store="mercadona")
-    await spent(make_uow, at(4), (Category.DAIRY, "4.00"), store="consum")
+    await spent(make_uow, at(2), (ProductCategory.DAIRY, "5.00"), store="consum")
+    await spent(make_uow, at(3), (ProductCategory.DAIRY, "4.00"), total="30.00", store="mercadona")
+    await spent(make_uow, at(4), (ProductCategory.DAIRY, "4.00"), store="consum")
 
     block = only_block(await october_spending(make_uow))
 
@@ -1144,10 +1161,10 @@ async def test_spending_stores_are_summed_from_receipt_totals_largest_first(make
 
 
 async def test_spending_cards_are_labelled_and_a_receipt_without_a_card_is_cash(make_uow):
-    await spent(make_uow, at(2), (Category.DAIRY, "5.00"), card=("VISA", "0848"))
-    await spent(make_uow, at(3), (Category.DAIRY, "6.00"), card=("VISA", "0848"))
-    await spent(make_uow, at(4), (Category.DAIRY, "20.00"), card=(None, "1111"))
-    await spent(make_uow, at(5), (Category.DAIRY, "1.00"))
+    await spent(make_uow, at(2), (ProductCategory.DAIRY, "5.00"), card=("VISA", "0848"))
+    await spent(make_uow, at(3), (ProductCategory.DAIRY, "6.00"), card=("VISA", "0848"))
+    await spent(make_uow, at(4), (ProductCategory.DAIRY, "20.00"), card=(None, "1111"))
+    await spent(make_uow, at(5), (ProductCategory.DAIRY, "1.00"))
 
     block = only_block(await october_spending(make_uow))
 
@@ -1159,8 +1176,8 @@ async def test_spending_cards_are_labelled_and_a_receipt_without_a_card_is_cash(
 
 
 async def test_spending_ignores_another_users_receipts(make_uow):
-    await spent(make_uow, at(2), (Category.DAIRY, "5.00"))
-    await spent(make_uow, at(3), (Category.DAIRY, "99.00"), user_id=2)
+    await spent(make_uow, at(2), (ProductCategory.DAIRY, "5.00"))
+    await spent(make_uow, at(3), (ProductCategory.DAIRY, "99.00"), user_id=2)
 
     assert only_block(await october_spending(make_uow)).total == D("5.00")
     assert only_block(await october_spending(make_uow, user_id=2)).total == D("99.00")
@@ -1175,10 +1192,10 @@ async def test_an_empty_period_has_no_blocks(make_uow):
 
 
 async def test_a_week_period_uses_the_same_bounds_rule(make_uow):
-    await spent(make_uow, at(12, 7), (Category.DAIRY, "5.00"))  # Monday 09:00 Madrid
-    await spent(make_uow, at(18, 21), (Category.DAIRY, "6.00"))  # Sunday 23:00 Madrid
-    await spent(make_uow, at(18, 22), (Category.DAIRY, "7.00"))  # Monday 00:00 Madrid
-    await spent(make_uow, at(11, 21), (Category.DAIRY, "8.00"))  # Saturday 23:00 Madrid
+    await spent(make_uow, at(12, 7), (ProductCategory.DAIRY, "5.00"))  # Monday 09:00 Madrid
+    await spent(make_uow, at(18, 21), (ProductCategory.DAIRY, "6.00"))  # Sunday 23:00 Madrid
+    await spent(make_uow, at(18, 22), (ProductCategory.DAIRY, "7.00"))  # Monday 00:00 Madrid
+    await spent(make_uow, at(11, 21), (ProductCategory.DAIRY, "8.00"))  # Saturday 23:00 Madrid
 
     async with make_uow() as uow:
         week = await uow.receipts.spending(1, date(2026, 10, 12), date(2026, 10, 19), MADRID)
@@ -1192,8 +1209,8 @@ async def test_spending_runs_the_same_statements_whatever_the_size(make_uow, sta
         await spent(
             make_uow,
             at(1 + n % 28),
-            (Category.DAIRY, "2.00"),
-            (Category.MEAT, "3.00"),
+            (ProductCategory.DAIRY, "2.00"),
+            (ProductCategory.MEAT, "3.00"),
             store=f"shop{n % 4}",
             card=("VISA", f"000{n % 3}") if n % 2 else None,
             currency="EUR" if n % 5 else "USD",
@@ -1209,11 +1226,13 @@ async def test_the_earliest_purchase_is_a_local_date_of_a_parsed_not_deleted_rec
     await add_user(make_uow)
     async with make_uow() as uow:
         assert await uow.receipts.earliest_purchase(1, MADRID) is None
-    await spent(make_uow, at(10, month=3), (Category.DAIRY, "5.00"), deleted=True)
+    await spent(make_uow, at(10, month=3), (ProductCategory.DAIRY, "5.00"), deleted=True)
     await failed(make_uow, at(1, month=1))
-    await spent(make_uow, datetime(2026, 5, 31, 23, 30, tzinfo=UTC), (Category.DAIRY, "5.00"))
-    await spent(make_uow, at(9), (Category.DAIRY, "5.00"))
-    await spent(make_uow, at(1, month=1), (Category.DAIRY, "5.00"), user_id=2)
+    await spent(
+        make_uow, datetime(2026, 5, 31, 23, 30, tzinfo=UTC), (ProductCategory.DAIRY, "5.00")
+    )
+    await spent(make_uow, at(9), (ProductCategory.DAIRY, "5.00"))
+    await spent(make_uow, at(1, month=1), (ProductCategory.DAIRY, "5.00"), user_id=2)
 
     async with make_uow() as uow:
         assert await uow.receipts.earliest_purchase(1, MADRID) == date(2026, 6, 1)

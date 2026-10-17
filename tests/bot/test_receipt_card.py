@@ -7,7 +7,7 @@ from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy import text
 
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.integration.llm import LLMError
 from tests.stubs import fixture, output_of
 
@@ -438,6 +438,6 @@ async def test_opening_the_items_costs_the_same_for_5_and_40_items(harness, stat
 
 
 def test_every_category_has_a_name():
-    for category in Category:
+    for category in ProductCategory:
         key = f"category-{category.replace('_', '-')}"
         assert i18n.get(key) != key, key

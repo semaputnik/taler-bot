@@ -3,7 +3,7 @@
 import pytest
 
 from src.domain.catalog import Catalog
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.domain.receipt import Receipt
 from src.exception import CheckViolationError, ForeignKeyViolationError
 from tests.domain.builders import parse, photo, product
@@ -15,9 +15,9 @@ def stocked_catalog() -> Catalog:
     catalog.ensure_store("mercadona", "Mercadona", legal_name="Mercadona, S.A.", tax_id="A-1")
     catalog.ensure_store("lidl", "Lidl")
     catalog.ensure_product(
-        "mercadona", "mercadona::leche", "LECHE ENTERA", "Whole milk", Category.DAIRY, "l"
+        "mercadona", "mercadona::leche", "LECHE ENTERA", "Whole milk", ProductCategory.DAIRY, "l"
     )
-    catalog.ensure_product("lidl", "lidl::pan", "PAN", "Bread", Category.BAKERY, "pcs")
+    catalog.ensure_product("lidl", "lidl::pan", "PAN", "Bread", ProductCategory.BAKERY, "pcs")
     return catalog
 
 
@@ -49,7 +49,7 @@ async def test_save_inserts_only_what_is_new_and_leaves_the_rest_alone(make_uow:
 
     async with make_uow() as uow:
         catalog = await uow.catalog.get(1)
-        catalog.ensure_product("lidl", "lidl::agua", "AGUA", "Water", Category.DRINKS, "l")
+        catalog.ensure_product("lidl", "lidl::agua", "AGUA", "Water", ProductCategory.DRINKS, "l")
         catalog.products["lidl::pan"].name = "edited in memory only"
         await uow.catalog.save(catalog)
         await uow.commit()
@@ -71,7 +71,7 @@ async def test_save_persists_a_renamed_and_a_recategorized_product_and_nothing_e
     async with make_uow() as uow:
         catalog = await uow.catalog.get(1)
         catalog.rename_product("mercadona::leche", "Oat milk")
-        catalog.set_category("mercadona::leche", Category.DRINKS)
+        catalog.set_category("mercadona::leche", ProductCategory.DRINKS)
         await uow.catalog.save(catalog)
         assert catalog.changed_products == ()
         await uow.commit()
@@ -79,10 +79,10 @@ async def test_save_persists_a_renamed_and_a_recategorized_product_and_nothing_e
     async with make_uow() as uow:
         loaded = await uow.catalog.get(1)
     milk = loaded.products["mercadona::leche"]
-    assert (milk.name, milk.category) == ("Oat milk", Category.DRINKS)
+    assert (milk.name, milk.category) == ("Oat milk", ProductCategory.DRINKS)
     assert (milk.name_raw, milk.unit, milk.store_key) == ("LECHE ENTERA", "l", "mercadona")
     bread = loaded.products["lidl::pan"]
-    assert (bread.name, bread.category) == ("Bread", Category.BAKERY)
+    assert (bread.name, bread.category) == ("Bread", ProductCategory.BAKERY)
 
 
 async def test_a_reloaded_receipt_shows_the_new_name_and_category_on_its_items(
@@ -97,7 +97,7 @@ async def test_a_reloaded_receipt_shows_the_new_name_and_category_on_its_items(
     async with make_uow() as uow:
         catalog = await uow.catalog.get(1)
         catalog.rename_product("lidl::pan", "Sourdough")
-        catalog.set_category("lidl::pan", Category.BAKERY)
+        catalog.set_category("lidl::pan", ProductCategory.BAKERY)
         await uow.catalog.save(catalog)
         await uow.commit()
 
@@ -105,7 +105,7 @@ async def test_a_reloaded_receipt_shows_the_new_name_and_category_on_its_items(
         loaded = await uow.receipts.get(receipt.id)
     assert loaded is not None
     [item] = loaded.items
-    assert (item.readable_name, item.category) == ("Sourdough", Category.BAKERY)
+    assert (item.readable_name, item.category) == ("Sourdough", ProductCategory.BAKERY)
     assert item.printed_name == "PAN"
 
 

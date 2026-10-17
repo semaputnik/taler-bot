@@ -11,7 +11,7 @@ from aiogram.methods import EditMessageText
 
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
 from src.bot.keyboards.stats import StatsAction, StatsCallback, StatsKind
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.domain.receipt import Receipt
 from tests.domain.builders import parse, photo, product
 from tests.helpers import MakeUow, add_receipt, seed_catalog
@@ -72,7 +72,7 @@ async def _allowed(allow_user):
 async def bought(
     make_uow: MakeUow,
     when: date,
-    *lines: tuple[Category, str],
+    *lines: tuple[ProductCategory, str],
     store: str | None = "Mercadona",
     total: str | None = None,
     currency: str = "EUR",
@@ -114,10 +114,16 @@ def in_month(months: int, day: int = 15) -> date:
 async def seed_two_months(make_uow: MakeUow) -> None:
     visa = ("VISA", "0848")
     await bought(
-        make_uow, in_month(0), (Category.PRODUCE, "30.00"), (Category.DAIRY, "10.00"), card=visa
+        make_uow,
+        in_month(0),
+        (ProductCategory.PRODUCE, "30.00"),
+        (ProductCategory.DAIRY, "10.00"),
+        card=visa,
     )
-    await bought(make_uow, in_month(0), (Category.PRODUCE, "5.00"), store="Lidl", total="8.00")
-    await bought(make_uow, in_month(-1), (Category.PRODUCE, "20.00"), card=visa)
+    await bought(
+        make_uow, in_month(0), (ProductCategory.PRODUCE, "5.00"), store="Lidl", total="8.00"
+    )
+    await bought(make_uow, in_month(-1), (ProductCategory.PRODUCE, "20.00"), card=visa)
 
 
 async def test_stats_renders_the_month_with_the_comparison(harness, make_uow):
@@ -145,7 +151,7 @@ async def test_stats_renders_the_month_with_the_comparison(harness, make_uow):
 
 
 async def test_a_period_without_a_previous_one_shows_no_comparison(harness, make_uow):
-    await bought(make_uow, in_month(0), (Category.MEAT, "10.00"))
+    await bought(make_uow, in_month(0), (ProductCategory.MEAT, "10.00"))
 
     await harness.send_text("/stats", user_id=USER)
 
@@ -156,7 +162,9 @@ async def test_a_period_without_a_previous_one_shows_no_comparison(harness, make
 
 
 async def test_a_tiny_share_is_listed_with_its_percent(harness, make_uow):
-    await bought(make_uow, in_month(0), (Category.MEAT, "99.00"), (Category.FISH, "0.50"))
+    await bought(
+        make_uow, in_month(0), (ProductCategory.MEAT, "99.00"), (ProductCategory.FISH, "0.50")
+    )
 
     await harness.send_text("/stats", user_id=USER)
 
@@ -184,9 +192,9 @@ async def test_prev_edits_to_the_previous_month_and_next_is_only_in_a_past_one(h
 
 async def test_week_switches_to_the_week_of_the_first_and_prev_moves_one_week(harness, make_uow):
     first = in_month(0, 1)
-    await bought(make_uow, first, (Category.PRODUCE, "10.00"))
-    await bought(make_uow, first - timedelta(days=7), (Category.DAIRY, "4.00"))
-    await bought(make_uow, first - timedelta(days=30), (Category.MEAT, "1.00"))
+    await bought(make_uow, first, (ProductCategory.PRODUCE, "10.00"))
+    await bought(make_uow, first - timedelta(days=7), (ProductCategory.DAIRY, "4.00"))
+    await bought(make_uow, first - timedelta(days=30), (ProductCategory.MEAT, "1.00"))
     await harness.send_text("/stats", user_id=USER)
 
     await harness.tap(USER, WEEK)
@@ -208,7 +216,7 @@ async def test_week_switches_to_the_week_of_the_first_and_prev_moves_one_week(ha
 
 
 async def test_the_week_header_uses_iso_week_numbers_across_a_year_boundary(harness, make_uow):
-    await bought(make_uow, date(2025, 12, 31), (Category.PRODUCE, "10.00"))
+    await bought(make_uow, date(2025, 12, 31), (ProductCategory.PRODUCE, "10.00"))
     await harness.send_text("/stats", user_id=USER)
     # Walk back to the old week: the arrows carry the anchor, so press a hand-made callback.
     message_id = harness.last_keyboard()[0]
@@ -221,7 +229,7 @@ async def test_the_week_header_uses_iso_week_numbers_across_a_year_boundary(harn
 
 
 async def test_an_empty_period_says_so_and_still_offers_the_arrow(harness, make_uow):
-    await bought(make_uow, in_month(-2), (Category.PRODUCE, "10.00"))
+    await bought(make_uow, in_month(-2), (ProductCategory.PRODUCE, "10.00"))
 
     await harness.send_text("/stats", user_id=USER)
 
@@ -232,8 +240,10 @@ async def test_an_empty_period_says_so_and_still_offers_the_arrow(harness, make_
 
 
 async def test_two_currencies_give_two_headed_blocks(harness, make_uow):
-    await bought(make_uow, in_month(0), (Category.PRODUCE, "10.00"))
-    await bought(make_uow, in_month(0), (Category.PRODUCE, "5.00"), currency="USD", store="Shop")
+    await bought(make_uow, in_month(0), (ProductCategory.PRODUCE, "10.00"))
+    await bought(
+        make_uow, in_month(0), (ProductCategory.PRODUCE, "5.00"), currency="USD", store="Shop"
+    )
 
     await harness.send_text("/stats", user_id=USER)
 
@@ -275,7 +285,11 @@ async def test_start_carries_the_spending_button_and_it_sends_the_stats_as_a_new
 
 async def test_store_and_card_names_are_escaped(harness, make_uow):
     await bought(
-        make_uow, in_month(0), (Category.PRODUCE, "10.00"), store="<b>Shop", card=("<i>X", "1234")
+        make_uow,
+        in_month(0),
+        (ProductCategory.PRODUCE, "10.00"),
+        store="<b>Shop",
+        card=("<i>X", "1234"),
     )
 
     await harness.send_text("/stats", user_id=USER)

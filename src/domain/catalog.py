@@ -13,7 +13,7 @@ updates the changed products on `save`. The repository calls `mark_saved()` afte
 
 from dataclasses import dataclass, field
 
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.exception import InvalidEdit, UnknownProduct, UnknownStore
 
 
@@ -33,7 +33,7 @@ class Product:
     product_key: str
     name_raw: str
     name: str
-    category: Category = Category.OTHER
+    category: ProductCategory = ProductCategory.OTHER
     unit: str = "pcs"
     # Lets a re-parse remove products that only a misread of this receipt created.
     created_by_receipt_id: int | None = None
@@ -74,7 +74,7 @@ class Catalog:
         product_key: str,
         name_raw: str,
         name: str,
-        category: Category,
+        category: ProductCategory,
         unit: str,
         created_by_receipt_id: int | None = None,
     ) -> Product:
@@ -116,7 +116,7 @@ class Catalog:
         self._changed[product_key] = product
         return product
 
-    def set_category(self, product_key: str, category: Category) -> Product:
+    def set_category(self, product_key: str, category: ProductCategory) -> Product:
         product = self._product(product_key)
         product.category = category
         self._changed[product_key] = product

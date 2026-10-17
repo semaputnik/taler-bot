@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from src.domain.enums import Category, IssueSeverity, IssueSource
+from src.domain.enums import IssueSeverity, IssueSource, ProductCategory
 from src.exception import InvalidReceiptData
 
 
@@ -20,7 +20,7 @@ class ParsedItem:
     product_key: str
     printed_name: str
     readable_name: str
-    category: Category = Category.OTHER
+    category: ProductCategory = ProductCategory.OTHER
     quantity: Decimal = Decimal(1)
     unit: str = "pcs"
     unit_price: Decimal | None = None

@@ -8,7 +8,7 @@ from sqlalchemy import text
 
 from src.bot.handlers.dialog.receipt_card.common import CATEGORIES
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.services.container import Services
 from tests.stubs import fixture, output_of
 
@@ -282,5 +282,5 @@ async def test_a_stranger_cannot_edit(harness, session_factory):
 
 
 def test_the_bots_category_list_is_the_domains():
-    assert set(CATEGORIES) == {str(c) for c in Category}
+    assert set(CATEGORIES) == {str(c) for c in ProductCategory}
     assert len(CATEGORIES) == len(set(CATEGORIES))

@@ -3,7 +3,7 @@
 import pytest
 
 from src.domain.catalog import Catalog, Product
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 from src.exception import InvalidEdit, UnknownProduct, UnknownStore
 
 
@@ -13,7 +13,7 @@ def ensure_milk(catalog: Catalog, **fields) -> Product:
         "product_key": "mercadona::leche",
         "name_raw": "LECHE ENTERA",
         "name": "Whole milk",
-        "category": Category.DAIRY,
+        "category": ProductCategory.DAIRY,
         "unit": "l",
     } | fields
     return catalog.ensure_product(**args)
@@ -48,7 +48,7 @@ def test_ensure_product_creates_it_on_first_sight():
     assert (product.store_key, product.name, product.category, product.unit) == (
         "mercadona",
         "Whole milk",
-        Category.DAIRY,
+        ProductCategory.DAIRY,
         "l",
     )
     assert product.created_by_receipt_id == 7
@@ -57,12 +57,16 @@ def test_ensure_product_creates_it_on_first_sight():
 def test_second_ensure_product_with_a_different_name_does_not_overwrite():
     catalog = Catalog(user_id=1)
     catalog.ensure_store("mercadona", "Mercadona")
-    first = ensure_milk(catalog, name="Milk (my name)", category=Category.DRINKS)
+    first = ensure_milk(catalog, name="Milk (my name)", category=ProductCategory.DRINKS)
 
-    again = ensure_milk(catalog, name="Whole milk", category=Category.DAIRY, unit="pcs")
+    again = ensure_milk(catalog, name="Whole milk", category=ProductCategory.DAIRY, unit="pcs")
 
     assert again is first
-    assert (again.name, again.category, again.unit) == ("Milk (my name)", Category.DRINKS, "l")
+    assert (again.name, again.category, again.unit) == (
+        "Milk (my name)",
+        ProductCategory.DRINKS,
+        "l",
+    )
     assert len(catalog.products) == 1
 
 
@@ -118,9 +122,9 @@ def test_rename_product_strips_the_name_and_marks_it_changed():
 def test_set_category_changes_it_and_marks_it_changed():
     catalog = stocked()
 
-    catalog.set_category("mercadona::pan", Category.BAKERY)
+    catalog.set_category("mercadona::pan", ProductCategory.BAKERY)
 
-    assert catalog.products["mercadona::pan"].category is Category.BAKERY
+    assert catalog.products["mercadona::pan"].category is ProductCategory.BAKERY
     assert [p.product_key for p in catalog.changed_products] == ["mercadona::pan"]
 
 
@@ -141,7 +145,7 @@ def test_changing_an_unknown_product_raises():
     with pytest.raises(UnknownProduct):
         catalog.rename_product("mercadona::nope", "x")
     with pytest.raises(UnknownProduct):
-        catalog.set_category("mercadona::nope", Category.OTHER)
+        catalog.set_category("mercadona::nope", ProductCategory.OTHER)
 
 
 def test_mark_saved_clears_the_changed_products():

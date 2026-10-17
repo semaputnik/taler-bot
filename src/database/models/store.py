@@ -2,7 +2,7 @@ from sqlalchemy import ForeignKey, Identity, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.models.base import Base, Timestamps, enum_check
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 
 
 class Store(Timestamps, Base):
@@ -31,7 +31,7 @@ class StoreProduct(Timestamps, Base):
     __table_args__ = (
         UniqueConstraint("user_id", "product_key"),
         UniqueConstraint("source_ref"),
-        enum_check("category", Category),
+        enum_check("category", ProductCategory),
     )
 
     id: Mapped[int] = mapped_column(Identity(), primary_key=True)
@@ -40,7 +40,7 @@ class StoreProduct(Timestamps, Base):
     product_key: Mapped[str]
     name: Mapped[str]
     name_raw: Mapped[str]
-    category: Mapped[str] = mapped_column(server_default=Category.OTHER.value)
+    category: Mapped[str] = mapped_column(server_default=ProductCategory.OTHER.value)
     unit: Mapped[str] = mapped_column(server_default="pcs")
     # Lets a re-parse delete products that only a misread of this receipt created.
     created_by_receipt_id: Mapped[int | None] = mapped_column(

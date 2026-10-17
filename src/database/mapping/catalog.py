@@ -5,7 +5,7 @@ from collections.abc import Iterable
 from src.database.models import Store as StoreRow
 from src.database.models import StoreProduct as ProductRow
 from src.domain.catalog import Catalog, Product, Store
-from src.domain.enums import Category
+from src.domain.enums import ProductCategory
 
 
 def to_catalog(
@@ -30,7 +30,7 @@ def to_catalog(
             product_key=row.product_key,
             name_raw=row.name_raw,
             name=row.name,
-            category=Category(row.category),
+            category=ProductCategory(row.category),
             unit=row.unit,
             created_by_receipt_id=row.created_by_receipt_id,
         )
