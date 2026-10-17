@@ -295,7 +295,7 @@ aggregate (ADR-0001): `uow.receipts` (receipt + photo, parse, items, issues, edi
 have only the methods the code and tests need today; add more when a service needs them.
 Tests never import ORM models.
 
-Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-0001
+Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-0003 (the expense is the root, the receipt is attached), ADR-0001
 (aggregates), ADR-0002 (one photo and one parse per receipt).
 
 - A `receipts` row is one receipt with one photo (`receipt_photos`, 1:1) and at most one
@@ -496,4 +496,4 @@ Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `
 
 ### Domain docs
 
-Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root (ADR-0001: Receipt aggregate, services; ADR-0002: one photo per receipt). See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root (ADR-0001: Receipt aggregate, services; ADR-0002: one photo per receipt; ADR-0003: the expense is the root). See `docs/agents/domain.md`.

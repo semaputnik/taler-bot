@@ -74,13 +74,43 @@ failures, the same photo sent twice and the same receipt photographed twice.
      other kind, anchored on this period's start), and `[🧾 Receipts]` on the month screen,
      which sends that month's history as a new message. Taps edit the message in place.
 
-**Stage 3: later**
+**Stage 3: the bot becomes an expense manager** (agreed on 2026-10-17, ADR-0003)
 
-7. Manual receipt entry without a photo.
-8. Monthly budgets per category, with a notice when a budget is exceeded.
-9. CSV / XLSX export.
-10. Shopping list from purchase frequency.
-11. Whitelist management from the bot, for the admin only.
+Receipts are no longer entered by hand; instead every outflow of money is an **expense**, and
+a receipt is one way of entering an expense with full detail. An expense has an amount (the
+default currency for now), a date, a payee, a payment source (a card or cash), an expense
+category, tags, and optionally the receipt it came from.
+
+7. **Expense model and migration.** `Expense`, `Payee` (generalises `Store`), `PaymentSource`
+   (cards from receipts and by hand, plus cash), `ExpenseCategory` (groceries, restaurants,
+   transport, rent, utilities, health, entertainment, subscriptions, clothing, travel, gifts,
+   other) and tags. Every existing receipt becomes an expense (`groceries`, payee = its store,
+   source by its card ending or cash, date = purchase date; a deleted receipt gives a deleted
+   expense). `/stats` reports by expense category first, then "Groceries by product", payees and
+   payment sources.
+8. **Manual entry.** A message that is only a number (`12.50`, `12,50`, `7`) starts the entry
+   with that amount: payee (the five most recent as buttons, or typed; a typed name matching an
+   existing payee reuses it) → payment source (cards, `Cash`, `➕ New card`) → category → date
+   (`Today`, `Yesterday`, `dd.mm`) → tags (comma-separated or `Skip`) → the expense card. Every
+   step has `◀ Back`. Only expenses: amounts are positive.
+9. **Expense card.** One card for every expense. With a receipt it is the receipt card plus
+   `Category` and `Tags`. Without one: amount, payee, source, category, date, tags; buttons
+   `✏️ Amount` `🏪 Payee` / `💳 Source` `🏷 Category` / `📅 Date` `#️⃣ Tags` / `🗑 Delete` /
+   `✖ Close`; no items, photo, review or re-parse. `💳 Source` offers `✏️ Rename` for a card.
+10. **History `/expenses`** replaces `/receipts`: every expense of the month, a receipt icon on
+    those read from a photo; filter by payee.
+11. **Expiring screens.** Screens opened by a command or a menu button (`/start`, `/expenses`,
+    `/stats`, the `/reparse` summary, an unfinished entry) are deleted after
+    `SCREEN_TTL_MINUTES` (30) without a tap; a tap extends the time. Cards, "Saved, reading…",
+    error replies and re-parse results stay. Tracked in Redis so it survives a restart.
+
+**Later**
+
+- Menus to rename and merge payees and to rename cards (today only from an expense card).
+- Attaching a receipt photo to an existing expense; a currency per expense; one-line entry
+  (`12.50 Mercadona`); income and refunds.
+- Monthly budgets per expense category with a notice when exceeded; CSV / XLSX export;
+  shopping list from purchase frequency; whitelist management from the bot.
 
 ## Duplicate photos and receipts
 
@@ -192,4 +222,4 @@ message keeps working however old it is and however many cards were opened from 
 ### Main menu (`/start`)
 
 The greeting carries `[🧾 Receipts]` and `[📊 Spending]`, which send the current month's history
-and stats as new messages.
+and stats as new messages. Stage 3 renames the first to `[💸 Expenses]`.
