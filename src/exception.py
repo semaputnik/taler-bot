@@ -54,6 +54,10 @@ class UnknownStore(DomainException):
     """The catalog has no store with this key."""
 
 
+class UnknownProduct(DomainException):
+    """The catalog has no product with this key."""
+
+
 class ReceiptNotFound(AppException):
     """No receipt with this id belongs to the user (another user's receipt counts as missing)."""
 

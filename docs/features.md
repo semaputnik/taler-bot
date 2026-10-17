@@ -29,7 +29,8 @@ failures, the same photo sent twice and the same receipt photographed twice.
    assumed value or enter the right one (date, total, card last 4, lines that don't add up).
    The walk with `Correct`, `Skip` and the tally is done; the value entry is next.
 3. **Item edit.** Name, category, quantity/price. Name and category are saved to
-   `store_products`, so future receipts pick them up.
+   `store_products`, so future receipts pick them up. Done, including `Rename` from the
+   issue review.
 4. **Receipt history** `/receipts`. Paginated, filtered by month and store; a row opens
    the card.
 5. **Reparse.** One receipt by hand, or in bulk for `failed` receipts and receipts with an
@@ -97,8 +98,11 @@ hides the card's buttons and keeps its text; the resting state of a card is `mai
 |---|---|
 | `main` | the parse reply: the summary and buttons (`Items`, `⚠️ Review (n)` when n > 0, `Photo`, `Delete`); a receipt that is not `parsed` shows the outcome text (not a receipt, failed, duplicate with the receipt it repeats, waiting, being read) and the photo's date; a deleted receipt shows "🗑 This receipt was deleted." and no buttons |
 | `items` | paginated item list (`ScrollingGroup`, 8 per page); a tap opens `item` |
-| `item` | all parsed fields, read-only; `[✏️ Name] [🏷 Category] [🔢 Qty/price]` arrive with item edit |
-| `issue` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip] [◀ Back]`; `✏️` only for an editable issue. `Correct` and `Skip` move on to the next issue |
+| `item` | all parsed fields, and the edit buttons `[✏️ Name] [🏷 Category]`, `[🔢 Quantity] [💶 Unit price]`, `[🧾 Line total]`, `[◀ Back]` |
+| `item_input` | "Enter the quantity (a number with a point, like 1.5)" with the current value, and a text input; `◀ Back` returns to `item`. Read like the review's input (`text` for the name, `number` for quantity and unit price, `money` for the line total). A wrong value (text, empty name, zero or negative quantity, negative price) keeps the window with an error line and changes nothing. The name is saved to the catalog and changes the product on every receipt of the store; the numbers are saved as edits of this receipt and survive a re-parse. A good value returns to `item` with the new value; a receipt deleted meanwhile gives the deleted alert and `main` |
+| `item_category` | the 15 categories, two per row, the current one marked `✓`, and `◀ Back` to `item`. A tap saves the category to the catalog (every receipt showing the product) and returns to `item` |
+| `issue` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip] [◀ Back]`; `✏️ Enter value` only for an editable issue, and `✏️ Rename` in its place for a name issue whose item is matched to a product (never both). `Correct` and `Skip` move on to the next issue |
+| `issue_rename` | "Enter the name (free text)" with the product's current name, and a text input; `◀ Back` returns to `issue` with the issue open. A good name renames the product in the catalog (every receipt of the store), marks the issue corrected and moves the walk on; an empty name or a non-text message keeps the window with an error line; a receipt deleted meanwhile gives the deleted alert and `main`; an issue resolved elsewhere meanwhile is skipped silently |
 | `issue_input` | "Enter the total (a number with a point, like 12.50)" and a text input; `◀ Back` returns to `issue`. The text is read by the issue's input kind (date and time `dd.mm.yyyy hh:mm` in the user's time zone, number with a point or comma, four digits, 3-letter currency, free text). A wrong value or a non-text message keeps the window with an error line and the issue open; a good one is saved as an edit, the issue is marked corrected and the walk moves on |
 | `review_done` | the tally ("3 reviewed: 1 corrected, 1 confirmed, 1 skipped") and `◀ Back` to `main` |
 | `photo` | the stored photo by Telegram file id, uploaded from disk if Telegram refuses the id |
@@ -116,7 +120,7 @@ Item: Cervesa Free Limo
 Line math is off.
 
 Current value: 4.80 €
-[✅ Correct] [✏️ Enter value]
+[✅ Correct] [✏️ Enter value]  (a name issue shows [✏️ Rename] instead)
 [⏭ Skip] [◀ Back]
 ```
 

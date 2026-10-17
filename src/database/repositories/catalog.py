@@ -1,4 +1,4 @@
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.mapping.catalog import to_catalog, to_product_row, to_store_row
@@ -22,6 +22,14 @@ class SqlAlchemyCatalogRepository:
         removed_ids = [p.id for p in catalog.removed_products if p.id is not None]
         if removed_ids:
             await self._session.execute(delete(ProductRow).where(ProductRow.id.in_(removed_ids)))
+
+        for product in catalog.changed_products:
+            if product.id is not None:
+                await self._session.execute(
+                    update(ProductRow)
+                    .where(ProductRow.id == product.id)
+                    .values(name=product.name, category=str(product.category))
+                )
 
         new_stores = {
             s.store_key: to_store_row(catalog.user_id, s)

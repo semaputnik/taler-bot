@@ -74,7 +74,7 @@ src/
       callback/            # taps on the card's plain buttons: receipt.py edits the current card in place or sends a fresh one
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, photo, delete_confirm, issue, issue_input, review_done)
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, item_input, item_category, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
     render.py              # receipt texts (currency sign, header) used by the card
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
@@ -89,8 +89,9 @@ src/
     mapping/               # ORM rows ↔ domain aggregates (the only place both are known)
     uow/                   # SqlAlchemyUnitOfWork
   services/                # application services: one class per entity, action methods
-    container.py           # Services (users, receipts): built once by App
+    container.py           # Services (users, receipts, catalog): built once by App
     user.py                # UserService.ensure, .allow
+    catalog.py             # CatalogService: rename_product, set_category (hand edits of products)
     receipt.py             # ReceiptService: save_photo, parse, edit_item, edit_header, resolve_issue, review, correct_issue, soft_delete, card, items, photo, photo_bytes
     results.py             # CurrentUser, NewPhoto, ReceiptCard, IssueCard, ParseResult: the services' own pydantic types
   integration/
@@ -101,14 +102,14 @@ src/
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
     parse.py               # Parse, ParsedItem, ParsedIssue, ParseOutcome (value objects)
     edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
-    catalog.py             # Catalog aggregate: Store, Product
+    catalog.py             # Catalog aggregate: Store, Product; rename_product, set_category
 alembic/                   # migrations (alembic.ini at the repo root)
 .env.template, .env        # settings template (committed) and local values (git-ignored)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```
 
 Not built yet (each arrives with its feature): `domain/matching.py` (a domain service) and
-the value entry of the issue review (`issue_input` is a placeholder) and the history dialog.
+the history dialog.
 
 ### Layers and dependencies
 
@@ -140,7 +141,7 @@ the value entry of the issue review (`issue_input` is a placeholder) and the his
   - Read models for lists and stats (`ReceiptListRow`, …) are separate query methods
     that return pydantic models shaped for the screen, not aggregates.
 - **services** are application services (one class per entity, action methods:
-  `ReceiptService.save_photo`, `.edit_item`, `.soft_delete`; `UserService.ensure`). Every
+  `ReceiptService.save_photo`, `.edit_item`, `.soft_delete`; `CatalogService.rename_product`; `UserService.ensure`). Every
   method takes the `user_id`, and another user's receipt counts as not found.
   - A method does: load the aggregate → call the LLM or storage outside any transaction
     → call **one** aggregate method → save → commit. It contains no receipt rules; if a
@@ -150,7 +151,7 @@ the value entry of the issue review (`issue_input` is a placeholder) and the his
   - A write that sets or replaces the parse also applies the `ParseOutcome` to the catalog
     in the same transaction: new stores and products first (the receipt's store and items
     refer to them), the receipt, then the released products this receipt created.
-  - Results are the service's own pydantic types (e.g. `CurrentUser`, `ReceiptCard`),
+  - Results are the service's own pydantic types (e.g. `CurrentUser`, `ReceiptCard`, `ProductCard`),
     so the bot never depends on `database` or `domain` internals.
 - **bot**:
   - Handlers and getters only call services and render the results through i18n. `bot`

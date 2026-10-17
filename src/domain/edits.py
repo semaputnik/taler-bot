@@ -9,6 +9,10 @@ from typing import Any
 from src.domain.enums import EditTarget
 from src.exception import InvalidEdit
 
+# Item fields that must be positive / not negative (a misread sign or a zero quantity).
+_POSITIVE_ITEM_FIELDS = frozenset({"quantity"})
+_NON_NEGATIVE_ITEM_FIELDS = frozenset({"unit_price", "reference_price", "line_total", "discount"})
+
 # field -> (kind, nullable). "money" fields are compared with the 0.02 tolerance, "number"
 # fields exactly.
 #  Product names and categories are edited on the Catalog, not here.
@@ -103,6 +107,11 @@ class Edit:
                 number = Decimal(str(self.value))
                 if not number.is_finite():
                     raise InvalidEdit(f"{self.value!r} is not a valid {self.field}")
+                if self.target is EditTarget.ITEM:
+                    if self.field in _POSITIVE_ITEM_FIELDS and number <= 0:
+                        raise InvalidEdit(f"{self.field} must be greater than 0")
+                    if self.field in _NON_NEGATIVE_ITEM_FIELDS and number < 0:
+                        raise InvalidEdit(f"{self.field} cannot be negative")
                 return number
             if kind == "datetime":
                 value = (

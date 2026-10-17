@@ -8,6 +8,8 @@ class DialogDataKeys:
     CONFIRMED = "confirmed"
     CORRECTED = "corrected"
     SKIPPED = "skipped"
+    EDIT_FIELD = "edit_field"  # the item field being edited: name, quantity, unit_price, line_total
+    PRODUCT_KEY = "product_key"  # the catalog product behind the selected item
     INPUT_ERROR = "input_error"  # the last typed value was refused; cleared on entry and on Back
 
 
@@ -20,4 +22,28 @@ class PreviewDataKeys:
     REVIEW_COUNT = "review_count"
     HAS_ISSUE = "has_issue"
     CAN_ENTER_VALUE = "can_enter_value"
+    CAN_RENAME = "can_rename"
     REVIEWED = "reviewed"
+    HAS_ITEM = "has_item"
+    CATEGORIES = "categories"
+
+
+# The categories offered for a product, in the order of the list. The service refuses any
+# other string; `tests/bot/test_item_edit.py` keeps this list equal to the domain's.
+CATEGORIES = (
+    "produce",
+    "meat",
+    "fish",
+    "dairy",
+    "bakery",
+    "drinks",
+    "alcohol",
+    "snacks",
+    "frozen",
+    "pantry",
+    "household",
+    "personal_care",
+    "baby",
+    "pet",
+    "other",
+)

@@ -604,3 +604,52 @@ async def test_review_and_correct_issue_of_another_users_receipt_are_not_found(s
         await service.review(2, receipt.id)
     with pytest.raises(ReceiptNotFound):
         await service.correct_issue(2, receipt.id, total.issue_id, "1")
+
+
+async def test_item_rows_carry_the_product_key(service, make_uow):
+    receipt = await parsed_receipt(make_uow, parse(MILK, BREAD))
+
+    rows = await service.items(1, receipt.id)
+
+    assert [r.product_key for r in rows] == ["mercadona::leche", "mercadona::pan"]
+
+
+async def test_review_cards_carry_the_product_key_and_whether_the_name_can_be_renamed(
+    service, make_uow
+):
+    receipt = await mixed_receipt(make_uow)
+
+    total, name, line, address = await service.review(1, receipt.id)
+
+    assert (name.product_key, name.renamable) == ("mercadona::leche", True)
+    assert (line.product_key, line.renamable) == ("mercadona::pan", False)
+    assert (total.product_key, total.renamable) == (None, False)
+    assert (address.product_key, address.renamable) == (None, False)
+
+
+async def test_a_name_issue_without_a_matched_item_is_not_renamable(service, make_uow):
+    ghost = ParsedIssue(
+        severity=IssueSeverity.MEDIUM,
+        field="items.name_normalized",
+        item_name="NOT ON THE RECEIPT",
+        message="ambiguous",
+    )
+    receipt = await parsed_receipt(make_uow, parse(MILK, issues=(ghost,)))
+
+    [card] = await service.review(1, receipt.id)
+
+    assert (card.product_key, card.renamable) == (None, False)
+
+
+async def test_a_normalized_name_issue_with_a_matched_item_is_renamable(service, make_uow):
+    issue = ParsedIssue(
+        severity=IssueSeverity.MEDIUM,
+        field="items.name_normalized",
+        item_name="LECHE",
+        message="ambiguous",
+    )
+    receipt = await parsed_receipt(make_uow, parse(MILK, issues=(issue,)))
+
+    [card] = await service.review(1, receipt.id)
+
+    assert (card.product_key, card.renamable) == ("mercadona::leche", True)

@@ -63,6 +63,7 @@ class ItemRow(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     ref: str
+    product_key: str  # the catalog product behind the item: rename and category act on it
     currency: str | None  # the receipt's; items carry no currency of their own
     printed_name: str
     readable_name: str
@@ -75,6 +76,18 @@ class ItemRow(BaseModel):
     discount: Decimal
     line_total: Decimal | None
     vat_rate: Decimal | None
+
+
+class ProductCard(BaseModel):
+    """A catalog product as the user sees it: the printed text, the name and the category."""
+
+    model_config = ConfigDict(frozen=True)
+
+    product_key: str
+    store_key: str
+    printed_name: str
+    name: str
+    category: str
 
 
 class PhotoRef(BaseModel):
@@ -102,6 +115,8 @@ class IssueCard(BaseModel):
     (`datetime`, `text`, `currency`, `money`, `number` or `last4`) and `current_value` is what
     the receipt holds now (a `Decimal`, an aware `datetime` or a `str`; None when empty).
     `item_name` is the readable name of the item the issue is about, else the issue's own text.
+    `product_key` is that item's product for an `items.*` issue with a matched item, else None;
+    `renamable` is true for a name issue (`items.name_raw`, `items.name_normalized`) with one.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -112,6 +127,8 @@ class IssueCard(BaseModel):
     issue_type: str
     field: str | None
     item_name: str | None
+    product_key: str | None
+    renamable: bool
     message: str
     editable: bool
     input_kind: str | None

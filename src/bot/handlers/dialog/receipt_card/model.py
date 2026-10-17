@@ -39,12 +39,31 @@ class ItemsPreview(BaseModel):
 
 
 class ItemPreview(BaseModel):
-    """What the `item` window shows: the rendered details."""
+    """What the `item` window shows: the rendered details. `has_item` is false when the item
+    vanished (a re-parse), and then the edit buttons are hidden."""
 
     text: str
+    has_item: bool
 
     def to_data(self) -> dict:
-        return {PreviewDataKeys.TEXT: self.text}
+        return {PreviewDataKeys.TEXT: self.text, PreviewDataKeys.HAS_ITEM: self.has_item}
+
+
+class CategoryChoice(BaseModel):
+    """One button of the category list: `id` is the category's name, `text` the label."""
+
+    id: str
+    text: str
+
+
+class CategoriesPreview(BaseModel):
+    """What the `item_category` window shows: the prompt and the 15 categories."""
+
+    text: str
+    categories: list[CategoryChoice]
+
+    def to_data(self) -> dict:
+        return {PreviewDataKeys.TEXT: self.text, PreviewDataKeys.CATEGORIES: self.categories}
 
 
 class IssuePreview(BaseModel):
@@ -54,12 +73,14 @@ class IssuePreview(BaseModel):
     text: str
     has_issue: bool
     can_enter_value: bool
+    can_rename: bool
 
     def to_data(self) -> dict:
         return {
             PreviewDataKeys.TEXT: self.text,
             PreviewDataKeys.HAS_ISSUE: self.has_issue,
             PreviewDataKeys.CAN_ENTER_VALUE: self.can_enter_value,
+            PreviewDataKeys.CAN_RENAME: self.can_rename,
         }
 
 

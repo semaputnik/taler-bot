@@ -45,6 +45,7 @@ from src.services.results import (
 
 logger = logging.getLogger(__name__)
 
+_NAME_FIELDS = frozenset({"items.name_raw", "items.name_normalized"})
 _EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
 
 
@@ -262,6 +263,7 @@ class ReceiptService:
         return [
             ItemRow(
                 ref=i.ref,
+                product_key=i.product_key,
                 currency=receipt.header.currency,
                 printed_name=i.printed_name,
                 readable_name=i.readable_name,
@@ -295,6 +297,8 @@ class ReceiptService:
                     issue_type=issue.issue_type,
                     field=issue.field,
                     item_name=item.readable_name if item is not None else issue.item_name,
+                    product_key=item.product_key if item is not None else None,
+                    renamable=item is not None and issue.field in _NAME_FIELDS,
                     message=issue.message,
                     editable=correction is not None,
                     input_kind=correction.input_kind if correction is not None else None,

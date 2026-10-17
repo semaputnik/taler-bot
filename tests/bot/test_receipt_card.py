@@ -349,7 +349,7 @@ async def test_a_row_tap_shows_the_item_details(harness):
     assert body.startswith("<b>Cervesa Free Limo</b>\n\n")
     assert "21%" in body
     assert "Discount" not in body  # zero discount is hidden
-    assert harness.button_texts() == ["◀ Back"]
+    assert harness.button_texts()[-1] == "◀ Back"
 
 
 async def test_back_goes_from_the_item_to_the_list_and_then_to_the_card(harness):

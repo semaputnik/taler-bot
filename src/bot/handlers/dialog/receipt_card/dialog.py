@@ -1,7 +1,7 @@
 from aiogram.enums import ContentType, ParseMode
 from aiogram_dialog import Dialog, DialogManager, Window
 from aiogram_dialog.widgets.input import MessageInput
-from aiogram_dialog.widgets.kbd import Button, Row, ScrollingGroup, Select
+from aiogram_dialog.widgets.kbd import Button, Group, Row, ScrollingGroup, Select
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Const, Format
 
@@ -11,7 +11,10 @@ from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewD
 from src.bot.handlers.dialog.receipt_card.getters import (
     issue_getter,
     issue_input_getter,
+    issue_rename_getter,
+    item_categories_getter,
     item_getter,
+    item_input_getter,
     items_getter,
     main_getter,
     photo_getter,
@@ -28,6 +31,16 @@ async def on_start(start_data: dict, manager: DialogManager) -> None:
     manager.dialog_data[DialogDataKeys.RECEIPT_ID] = start_data[TransferKeys.RECEIPT_ID]
     if manager.current_context().state == ReceiptCardSG.issue:
         await click_event.start_review(manager)  # the summary's Review button
+
+
+def _edit_button(text_key: str, field: str, on_click=None) -> Button:
+    """An edit button of the `item` window; hidden when the item is gone."""
+    return Button(
+        I18nText(text_key),
+        id=f"edit_{field}",
+        on_click=on_click or click_event.start_item_edit(field),
+        when=PreviewDataKeys.HAS_ITEM,
+    )
 
 
 def create_receipt_card_dialog() -> Dialog:
@@ -63,9 +76,43 @@ def create_receipt_card_dialog() -> Dialog:
         ),
         Window(
             Format(f"{{{PreviewDataKeys.TEXT}}}"),
+            Row(
+                _edit_button("button-name", "name"),
+                _edit_button("button-category", "category", click_event.choose_category),
+            ),
+            Row(
+                _edit_button("button-quantity", "quantity"),
+                _edit_button("button-unit-price", "unit_price"),
+            ),
+            _edit_button("button-line-total", "line_total"),
             Button(I18nText("button-back"), id="back", on_click=click_event.back_to_items),
             getter=item_getter,
             state=ReceiptCardSG.item,
+            parse_mode=ParseMode.HTML,
+        ),
+        Window(
+            Format(f"{{{PreviewDataKeys.TEXT}}}"),
+            MessageInput(click_event.on_item_value, content_types=ContentType.ANY),
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_item),
+            getter=item_input_getter,
+            state=ReceiptCardSG.item_input,
+            parse_mode=ParseMode.HTML,
+        ),
+        Window(
+            Format(f"{{{PreviewDataKeys.TEXT}}}"),
+            Group(
+                Select(
+                    Format("{item.text}"),
+                    id="category",
+                    item_id_getter=lambda choice: choice.id,
+                    items=PreviewDataKeys.CATEGORIES,
+                    on_click=click_event.pick_category,
+                ),
+                width=2,
+            ),
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_item),
+            getter=item_categories_getter,
+            state=ReceiptCardSG.item_category,
             parse_mode=ParseMode.HTML,
         ),
         Window(
@@ -81,6 +128,12 @@ def create_receipt_card_dialog() -> Dialog:
                 id="enter_value",
                 on_click=click_event.enter_value,
                 when=PreviewDataKeys.CAN_ENTER_VALUE,
+            ),
+            Button(
+                I18nText("button-rename"),
+                id="rename",
+                on_click=click_event.start_rename,
+                when=PreviewDataKeys.CAN_RENAME,
             ),
             Button(
                 I18nText("button-skip"),
@@ -99,6 +152,14 @@ def create_receipt_card_dialog() -> Dialog:
             Button(I18nText("button-back"), id="back", on_click=click_event.back_to_issue),
             getter=issue_input_getter,
             state=ReceiptCardSG.issue_input,
+            parse_mode=ParseMode.HTML,
+        ),
+        Window(
+            Format(f"{{{PreviewDataKeys.TEXT}}}"),
+            MessageInput(click_event.on_rename, content_types=ContentType.ANY),
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_issue),
+            getter=issue_rename_getter,
+            state=ReceiptCardSG.issue_rename,
             parse_mode=ParseMode.HTML,
         ),
         Window(
