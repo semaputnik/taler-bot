@@ -71,12 +71,12 @@ src/
     middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (only /start so far), each exposes register_xxx(dp)
-      callback/            # taps on the summary keyboard: receipt.py opens the ReceiptCard dialog
-      message/photo.py     # photo intake: save, reply with the keyboard, parse in the background; catch-all "send me a photo"
+      callback/            # taps on the card's plain buttons: receipt.py edits the current card in place or sends a fresh one
+      message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
-        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value) (main, items, item, photo, delete_confirm, issue, issue_input, review_done)
-    keyboards/receipt.py   # inline keyboard under the parse reply, ReceiptCallback (prefix "receipt")
-    render.py              # receipt texts shared by the parse reply and the dialog
+        receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, photo, delete_confirm, issue, issue_input, review_done)
+    keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")
+    render.py              # receipt texts (currency sign, header) used by the card
     states/                # StatesGroup classes (receipt_card.py: ReceiptCardSG)
     locales/en/LC_MESSAGES/  # button.ftl, view.ftl, error.ftl
   database/
@@ -206,6 +206,17 @@ As in paper-work-bot, each dialog is a folder in `bot/handlers/dialog/<name>/`:
 Keys passed between dialogs through `start_data` live in one shared `TransferKeys`
 class. State groups live in `bot/states/`. Every text comes from `.ftl`, and there are
 no string literals in windows.
+
+The parse reply is the card: `_parse_and_reply` (photo handler) starts `ReceiptCardSG.main` with
+`dialog_manager.bg()` and `StartMode.RESET_STACK, ShowMode.SEND` after the parse (or its failure),
+and the `main` window's text covers every outcome. Its buttons are `CardKeyboard`, a custom
+`Keyboard` widget that renders plain `ReceiptCallback` buttons (no intent id, via
+`PlainKeyboardFactory`). `callback/receipt.py` handles them before the dialogs, so they work on any
+card, however old: a tap on the dialog's last message restarts the dialog with `ShowMode.EDIT`
+(in place), a tap on an older card with `ShowMode.SEND` and leaves that card's keyboard alone
+(`StoredPhotoMessageManager` skips aiogram-dialog's keyboard removal for those sends). **The card
+never calls `done()`**: it would strip the buttons. Every exit goes `switch_to(ReceiptCardSG.main)`,
+which is also where a deleted receipt ends. There is no Close button.
 
 The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
 `position`, `current_issue_id` and the counters, loaded once by `click_event.start_review`.

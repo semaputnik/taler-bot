@@ -23,7 +23,7 @@ and dependencies, not commitments.
 failures, the same photo sent twice and the same receipt photographed twice.
 
 **Stage 1: working with a receipt after parsing**
-1. **Receipt card.** Inline buttons under the summary: `Items`, `Photo`, `Delete`
+1. **Receipt card.** The parse reply is the card, with inline buttons: `Items`, `Photo`, `Delete`
    `Review (n)` appears when issues wait. Done (items are read-only until the item-edit spec).
 2. **Issue review.** Walk through high/medium issues one at a time. For each, confirm the
    assumed value or enter the right one (date, total, card last 4, lines that don't add up).
@@ -68,7 +68,9 @@ rows that only this receipt created and nothing else references are deleted.
 
 ### Photo intake
 
-A plain handler, not a dialog, so that a photo is accepted in any state.
+A plain handler, not a dialog, so that a photo is accepted in any state. The
+"✅ Saved, reading…" reply is a plain message (a reply to the photo); the parse result is the
+`ReceiptCard` dialog's `main` window, started by the background task as a new message.
 
 ```
 [photo] → ✅ Saved, reading…
@@ -80,26 +82,29 @@ A plain handler, not a dialog, so that a photo is accepted in any state.
 
 A bad reading: the user taps `🗑 Delete` and sends a better photo.
 
-The buttons are a plain inline keyboard under every parse reply (parsed, not a receipt,
-duplicate, failed). A tap starts the `ReceiptCard` dialog with `receipt_id` in
-`start_data`, as a new message; the summary is never edited and keeps its buttons. A tap on
-a deleted receipt answers with an alert and removes the keyboard. A photo sent while a card
-is open is still accepted.
+The parse reply is the card for every outcome (parsed, not a receipt, duplicate, failed):
+the `main` window shows the matching text and its buttons. It is not a reply to the photo
+(a dialog message has no reply parameters). The buttons are plain callback buttons rendered
+inside the dialog, so they work on a card however old. A tap on the current card (the
+dialog's last message) edits it in place. A tap on an older card sends a fresh card message
+and leaves the old card with its buttons. A tap on a deleted receipt answers with an alert
+and removes the keyboard. A photo sent while a card is open is still accepted. There is no
+`Close` button: the resting state of a card is `main` with its buttons.
 
 ### ReceiptCard
 
 | window | content |
 |---|---|
-| `main` | summary and buttons (`Items`, `⚠️ Review (n)` when n > 0, `Photo`, `Delete`, `Close`); a receipt that is not `parsed` shows its status, the photo's date and, for a duplicate, the receipt it repeats |
+| `main` | the parse reply: the summary and buttons (`Items`, `⚠️ Review (n)` when n > 0, `Photo`, `Delete`); a receipt that is not `parsed` shows the outcome text (not a receipt, failed, duplicate with the receipt it repeats, waiting, being read) and the photo's date; a deleted receipt shows "🗑 This receipt was deleted." and no buttons |
 | `items` | paginated item list (`ScrollingGroup`, 8 per page); a tap opens `item` |
 | `item` | all parsed fields, read-only; `[✏️ Name] [🏷 Category] [🔢 Qty/price]` arrive with item edit |
-| `issue` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip] [✖ Close]`; `✏️` only for an editable issue. `Correct` and `Skip` move on to the next issue |
+| `issue` | one issue per screen: `[✅ Correct] [✏️ Enter value] [⏭ Skip] [◀ Back]`; `✏️` only for an editable issue. `Correct` and `Skip` move on to the next issue |
 | `issue_input` | "Enter the total (a number with a point, like 12.50)" and a text input; `◀ Back` returns to `issue`. The text is read by the issue's input kind (date and time `dd.mm.yyyy hh:mm` in the user's time zone, number with a point or comma, four digits, 3-letter currency, free text). A wrong value or a non-text message keeps the window with an error line and the issue open; a good one is saved as an edit, the issue is marked corrected and the walk moves on |
 | `review_done` | the tally ("3 reviewed: 1 corrected, 1 confirmed, 1 skipped") and `◀ Back` to `main` |
 | `photo` | the stored photo by Telegram file id, uploaded from disk if Telegram refuses the id |
-| `delete_confirm` | confirms the delete (soft delete; the photo moves to the trash). Refused while the receipt is being read |
+| `delete_confirm` | confirms the delete (soft delete; the photo moves to the trash). Refused while the receipt is being read. After a delete the card shows `main` in its deleted form |
 
-The `⚠️ Review (n)` button sits under the summary (between Items and Photo) and in `main`,
+The `⚠️ Review (n)` button sits in `main` (between Items and Photo),
 only when `n` high or medium issues wait. The walk is loaded once on entry, high first, then
 parse order; an issue resolved elsewhere is skipped silently. A skipped issue stays counted
 on the button and comes back in the next walk. An issue screen looks like this:
@@ -112,7 +117,7 @@ Line math is off.
 
 Current value: 4.80 €
 [✅ Correct] [✏️ Enter value]
-[⏭ Skip] [✖ Close]
+[⏭ Skip] [◀ Back]
 ```
 
 ### History (`/receipts`)
