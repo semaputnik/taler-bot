@@ -111,6 +111,7 @@ src/
     edits.py               # Edit, the editable fields, ISSUE_FIELDS (issue field -> editable field)
     catalog.py             # Catalog aggregate: Store, Product; rename_product, set_category
 alembic/                   # migrations (alembic.ini at the repo root)
+.github/workflows/ci.yml   # CI: `test` (ruff, pytest on postgres:18, alembic check) and `publish` (image to GHCR on a green main)
 .env.template, .env        # settings template (committed) and local values (git-ignored)
 tests/                     # domain/ database/ services/ bot/ + root conftest.py, helpers.py
 ```
