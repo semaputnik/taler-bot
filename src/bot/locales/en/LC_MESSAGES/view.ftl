@@ -126,6 +126,7 @@ expense-category-gifts = Gifts
 expense-category-other = Other
 expense-category-prompt = Pick the category of this expense
 category-not-possible = This receipt has no expense to categorise.
+tags-not-possible = This receipt has no expense to tag.
 item-category-prompt = Pick the category for { $name }
 item-input-prompt =
     Enter the { $field } ({ $hint })

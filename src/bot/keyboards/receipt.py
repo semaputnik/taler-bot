@@ -14,6 +14,7 @@ class CardWindow(StrEnum):
     ITEMS = "items"
     REVIEW = "review"
     CATEGORY = "category"
+    TAGS = "tags"
     PHOTO = "photo"
     DELETE_CONFIRM = "delete_confirm"
     REPARSE = "reparse"  # not a window: reads the receipt again, then sends a fresh card
@@ -35,14 +36,14 @@ def receipt_keyboard(
     can_categorise: bool = False,
 ) -> InlineKeyboardMarkup:
     """Buttons under the parse reply: Items (only when the receipt has items), Review (only when
-    issues wait for the user), Category (only when the receipt has an expense), Photo, Delete;
+    issues wait for the user), Category and Tags (only when the receipt has an expense), Photo,
+    Delete;
     Re-parse on its own row (only when the receipt can be read again), then Close."""
-    windows = [CardWindow.ITEMS] if item_count > 0 else []
+    reading = [CardWindow.ITEMS] if item_count > 0 else []
     if review_count > 0:
-        windows.append(CardWindow.REVIEW)
-    if can_categorise:
-        windows.append(CardWindow.CATEGORY)
-    windows += [CardWindow.PHOTO, CardWindow.DELETE_CONFIRM]
+        reading.append(CardWindow.REVIEW)
+    expense = [CardWindow.CATEGORY, CardWindow.TAGS] if can_categorise else []
+    rest = [CardWindow.PHOTO, CardWindow.DELETE_CONFIRM]
 
     def button(window: CardWindow) -> InlineKeyboardButton:
         return InlineKeyboardButton(
@@ -50,10 +51,10 @@ def receipt_keyboard(
             callback_data=ReceiptCallback(receipt_id=receipt_id, window=window).pack(),
         )
 
-    # Two buttons per row (four in one row are unreadable on a phone); Re-parse and Close each
-    # on their own row.
-    buttons = [button(window) for window in windows]
-    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    # Two buttons per row (four in one row are unreadable on a phone). Items and Review share
+    # a row, Category and Tags always share one, Photo and Delete share one; Re-parse and Close
+    # each have their own row.
+    rows = [[button(window) for window in group] for group in (reading, expense, rest) if group]
     if can_reparse:
         rows.append([button(CardWindow.REPARSE)])
     rows.append([button(CardWindow.CLOSE)])
@@ -66,6 +67,7 @@ _BUTTON_KEYS = {
     CardWindow.DELETE_CONFIRM: "button-delete",
     CardWindow.REVIEW: "button-review",
     CardWindow.CATEGORY: "button-category",
+    CardWindow.TAGS: "button-tags",
     CardWindow.REPARSE: "button-reparse",
     CardWindow.CLOSE: "button-close",
 }

@@ -418,3 +418,25 @@ async def test_a_seeded_receipt_syncs_on_edit_like_a_parsed_one(service, make_uo
     await service.edit_header(1, receipt.id, "total", "2.50")
 
     assert (await expense_of(make_uow, receipt.id)).amount == D("2.50")
+
+
+async def test_the_card_carries_the_expenses_tags(service, parser, make_uow, expenses):
+    receipt_id = await intake(service, parser, PAID_WITH_CARD, unique="t1")
+    await service.parse(1, receipt_id)
+    assert (await service.card(1, receipt_id)).tags == []
+    expense = await expense_of(make_uow, receipt_id)
+
+    await expenses.set_tags(1, expense.id, ["Kids", "holiday"])
+
+    assert (await service.card(1, receipt_id)).tags == ["holiday", "kids"]
+
+
+async def test_a_reparse_keeps_the_tags(service, parser, make_uow, expenses):
+    receipt_id = await intake(service, parser, PAID_WITH_CARD, unique="t2")
+    await service.parse(1, receipt_id)
+    expense = await expense_of(make_uow, receipt_id)
+    await expenses.set_tags(1, expense.id, ["pharmacy"])
+
+    await service.parse(1, receipt_id)
+
+    assert (await service.card(1, receipt_id)).tags == ["pharmacy"]

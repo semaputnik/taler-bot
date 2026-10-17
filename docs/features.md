@@ -99,6 +99,27 @@ category, tags, and optionally the receipt it came from.
    payment sources. **Done.** The receipt card shows `Category: Groceries` after the payment
    line and a `🏷 Category` button (the twelve categories, two per row, `✓` on the current one)
    when the receipt has an expense; a failed, duplicate or not-a-receipt card shows neither.
+   The card also shows `Tags: #kids #holiday` under the category when the expense has tags, and
+   a `#️⃣ Tags` button beside `🏷 Category` (same condition). **Done.** The `ReceiptCardSG.tags`
+   window works like the expense card's: the current tags, a comma-separated line replaces them
+   (more than 10 tags or a tag over 32 characters is refused), `🧹 Clear`, `◀ Back`; a typed
+   line edits the card in place, and a re-parse keeps the tags. The final card:
+
+   ```
+   🧾 <b>Mercadona</b>
+
+   17.10.2026 18:32
+   Total: <b>12.50 €</b>
+   Payment: card VISA •1234
+   Category: Groceries
+   Tags: #holiday #kids
+   Items: 5
+
+   #mercadona
+   ```
+
+   Buttons: `📋 Items` `⚠️ Review (n)` / `🏷 Category` `#️⃣ Tags` / `🖼 Photo` `🗑 Delete` /
+   `🔄 Re-parse` / `✖ Close`.
    `/receipts` lists the expenses of the month plus the receipts that have no expense (with
    their status icon), so a failed or duplicate receipt stays reachable for deleting.
 8. **Manual entry.** A message that is only a number (`12.50`, `12,50`, `7`; up to 8 digits and
@@ -141,7 +162,7 @@ category, tags, and optionally the receipt it came from.
    ```
 9. **Expense card.** **Done** for an expense without a receipt (the entry ends on it; a
    history row of a manual expense opens it). With a receipt the card is the receipt card plus
-   `Category` and (later) `Tags`. The `ExpenseCard` dialog: the `main` text above, plain card
+   `Category` and `Tags` (**done**, below). The `ExpenseCard` dialog: the `main` text above, plain card
    buttons (`ExpenseCallback`, prefix `expense`) `✏️ Amount` `🏪 Payee` / `💳 Source`
    `🏷 Category` / `📅 Date` `#️⃣ Tags` / `🗑 Delete` / `✖ Close`; no items, photo, review or
    re-parse. The card behaves like the receipt card: a tap on the current card edits it in

@@ -9,6 +9,7 @@ from fluentogram import TranslatorRunner
 
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys
 from src.bot.handlers.dialog.receipt_card.values import ITEM_FIELD_KINDS, InvalidValue, parse_value
+from src.bot.handlers.dialog.tags import tags_of
 from src.bot.handlers.parse_task import read_and_show_card, send_reply
 from src.bot.states.receipt_card import ReceiptCardSG
 from src.bot.tasks import TaskRegistry
@@ -119,6 +120,44 @@ async def pick_expense_category(
     except ReceiptNotFound, ExpenseNotFound, InvalidExpense:
         await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
     await manager.switch_to(ReceiptCardSG.main)
+
+
+async def _set_tags(manager: DialogManager, query: CallbackQuery | None, tags: list[str]) -> None:
+    """Replace the receipt's expense tags and show the card, edited in place. A receipt deleted
+    meanwhile, or one that lost its expense, alerts and shows the deleted text; a line the
+    domain refuses keeps the window with its error line."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    receipt_id = manager.dialog_data[DialogDataKeys.RECEIPT_ID]
+    try:
+        card = await services.receipts.card(user.id, receipt_id)
+        if card.deleted or card.expense_id is None:
+            raise ExpenseNotFound(receipt_id)
+        await services.expenses.set_tags(user.id, card.expense_id, tags)
+    except InvalidExpense:
+        manager.dialog_data[DialogDataKeys.INPUT_ERROR] = True
+        manager.show_mode = ShowMode.EDIT
+        return
+    except ReceiptNotFound, ExpenseNotFound:
+        if query is not None:
+            await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
+    manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
+    await manager.switch_to(ReceiptCardSG.main, show_mode=ShowMode.EDIT)
+
+
+async def on_tags(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    try:
+        tags = tags_of(message)
+    except InvalidValue:
+        manager.dialog_data[DialogDataKeys.INPUT_ERROR] = True
+        manager.show_mode = ShowMode.EDIT
+        return
+    await _set_tags(manager, None, tags)
+
+
+async def clear_tags(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await _set_tags(manager, query, [])
 
 
 async def on_item_value(message: Message, widget: MessageInput, manager: DialogManager) -> None:
@@ -334,6 +373,7 @@ async def show_photo(query: CallbackQuery, button: Button, manager: DialogManage
 
 
 async def back_to_main(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
     await manager.switch_to(ReceiptCardSG.main)
 
 

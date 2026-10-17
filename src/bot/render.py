@@ -79,6 +79,9 @@ def header(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
             "receipt-category",
             category=i18n.get(f"expense-category-{card.expense_category.replace('_', '-')}"),
         )
+    hashtags = " ".join(tag for tag in map(hashtag, card.tags) if tag)
+    if hashtags:
+        text += "\n" + i18n.get("expense-tags", tags=hashtags)
     text += "\n" + i18n.get("receipt-items", items=str(card.item_count))
     if card.store_key:
         text += "\n\n" + i18n.get("receipt-store-tag", tag=store_tag(card.store_key))
