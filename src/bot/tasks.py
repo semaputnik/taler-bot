@@ -20,6 +20,10 @@ class TaskRegistry:
         task.add_done_callback(self._done)
         return task
 
+    def is_running(self, name: str) -> bool:
+        """True while a task spawned under `name` has not finished."""
+        return any(task.get_name() == name and not task.done() for task in self._tasks)
+
     def _done(self, task: asyncio.Task[Any]) -> None:
         self._tasks.discard(task)
         if task.cancelled():
