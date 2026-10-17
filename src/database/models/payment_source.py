@@ -6,16 +6,20 @@ from src.domain.enums import PaymentSourceKind
 
 
 class PaymentSource(Timestamps, Base):
-    """What a user's money leaves from: a card (brand and last four digits) or their one cash
-    source (ADR-0003). `name` may be changed by hand; the last four digits identify a card."""
+    """What a user's money leaves from: a card (brand and last four digits, or only a name when
+    added by hand) or their one cash source (ADR-0003). `name` may be changed by hand; the last
+    four digits identify a card read from a receipt."""
 
     __tablename__ = "payment_sources"
     __table_args__ = (
         enum_check("kind", PaymentSourceKind),
         CheckConstraint("last4 ~ '^[0-9]{4}$'", name="last4"),
-        CheckConstraint("(kind = 'card') = (last4 IS NOT NULL)", name="card_has_last4"),
-        # NULL last4 (cash) never collides, so this is "one card per ending".
+        # Cash has no digits; a card added by hand has none either. The name is historical.
+        CheckConstraint("NOT (kind = 'cash' AND last4 IS NOT NULL)", name="card_has_last4"),
+        # NULL last4 (cash, hand-added cards) never collides: "one card per ending".
         UniqueConstraint("user_id", "last4"),
+        # A user's source names differ ignoring case.
+        Index("uq_payment_sources_user_id_lower_name", "user_id", text("lower(name)"), unique=True),
         # Exactly one cash source per user.
         Index(
             "uq_payment_sources_user_id_cash",
