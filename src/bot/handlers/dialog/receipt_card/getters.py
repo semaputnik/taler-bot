@@ -25,9 +25,6 @@ from src.services.results import CurrentUser, IssueCard, ItemRow, ReceiptCard
 _STATUS_KEYS = {
     "pending": "card-status-pending",
     "parsing": "card-status-parsing",
-    "failed": "card-status-failed",
-    "not_receipt": "card-status-not-receipt",
-    "duplicate": "card-status-duplicate",
 }
 
 
@@ -255,22 +252,25 @@ async def photo_getter(
 
 
 def _text(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
+    """The `main` window's text for every outcome: the card is the parse reply."""
     if card.deleted:
         return i18n.get("card-deleted")
-    if card.status == "parsed":
-        return render.header(card, i18n, tz)
-    lines = [i18n.get(_STATUS_KEYS[card.status])]
-    lines.append(
-        i18n.get("card-received", date=card.received_at.astimezone(tz).strftime(render.DATE_FORMAT))
-    )
-    if card.duplicate_of is not None:
-        original = card.duplicate_of
-        lines.append(
-            i18n.get(
-                "card-repeats",
+    match card.status:
+        case "parsed":
+            return render.header(card, i18n, tz)
+        case "not_receipt":
+            status = i18n.get("receipt-not-a-receipt")
+        case "failed":
+            status = i18n.get("receipt-failed")
+        case "duplicate":
+            original = card.duplicate_of or card
+            status = i18n.get(
+                "receipt-duplicate",
                 store=render.store(original, i18n),
                 date=render.date(original, tz),
                 amount=render.amount(original, i18n),
             )
-        )
-    return "\n".join(lines)
+        case _:
+            status = i18n.get(_STATUS_KEYS[card.status])
+    received = card.received_at.astimezone(tz).strftime(render.DATE_FORMAT)
+    return "\n".join([status, i18n.get("card-received", date=received)])

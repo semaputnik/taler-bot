@@ -53,3 +53,16 @@ _BUTTON_KEYS = {
 
 def _button_args(window: CardWindow, review_count: int) -> dict[str, str]:
     return {"count": str(review_count)} if window is CardWindow.REVIEW else {}
+
+
+def is_card_markup(markup: object) -> bool:
+    """True for the card's resting keyboard: plain `ReceiptCallback` buttons, which are not
+    tied to a dialog context (see `PlainKeyboardFactory`)."""
+    if not isinstance(markup, InlineKeyboardMarkup):
+        return False
+    prefix = f"{ReceiptCallback.__prefix__}{ReceiptCallback.__separator__}"
+    return any(
+        (button.callback_data or "").startswith(prefix)
+        for row in markup.inline_keyboard
+        for button in row
+    )

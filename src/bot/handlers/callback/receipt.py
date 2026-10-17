@@ -1,6 +1,7 @@
-"""Taps on the buttons under a receipt's summary: open the `ReceiptCard` dialog."""
+"""Taps on the plain buttons of a receipt card: show the `ReceiptCard` dialog window."""
 
 import logging
+from contextlib import ExitStack
 
 from aiogram import Bot, Dispatcher
 from aiogram.exceptions import TelegramBadRequest
@@ -9,6 +10,7 @@ from aiogram_dialog import DialogManager, ShowMode, StartMode
 from fluentogram import TranslatorRunner
 
 from src.bot.handlers.dialog.common import TransferKeys
+from src.bot.handlers.dialog.media import keeping_previous_keyboard
 from src.bot.keyboards.receipt import CardWindow, ReceiptCallback
 from src.bot.states.receipt_card import ReceiptCardSG
 from src.exception import ReceiptNotFound
@@ -45,12 +47,21 @@ async def open_card(
         await _remove_keyboard(bot, query)
         return
     await query.answer()
-    await dialog_manager.start(
-        _WINDOWS[callback_data.window],
-        data={TransferKeys.RECEIPT_ID: callback_data.receipt_id},
-        mode=StartMode.RESET_STACK,
-        show_mode=ShowMode.SEND,  # a new message: the summary is never edited
+    # The current card is edited in place; a tap on an older one sends a fresh card, so the
+    # old message keeps its buttons.
+    in_place = (
+        query.message is not None
+        and dialog_manager.current_stack().last_message_id == query.message.message_id
     )
+    with ExitStack() as stack:
+        if not in_place:
+            stack.enter_context(keeping_previous_keyboard())  # the older card keeps its buttons
+        await dialog_manager.start(
+            _WINDOWS[callback_data.window],
+            data={TransferKeys.RECEIPT_ID: callback_data.receipt_id},
+            mode=StartMode.RESET_STACK,
+            show_mode=ShowMode.EDIT if in_place else ShowMode.SEND,
+        )
 
 
 async def _remove_keyboard(bot: Bot, query: CallbackQuery) -> None:

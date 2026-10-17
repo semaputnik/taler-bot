@@ -30,15 +30,15 @@ async def statuses(session_factory) -> list[str]:
         return [row[0] for row in rows]
 
 
-async def test_a_photo_is_saved_then_summarised_as_replies_to_it(harness):
+async def test_a_photo_is_saved_with_a_reply_then_the_card_is_sent(harness):
     message_id = await harness.send_photo(user_id=USER)
     await harness.tasks.drain()
 
     saved, summary = harness.sent_messages
     assert saved.text == i18n.get("receipt-saved")
-    assert replied_to(saved) == replied_to(summary) == message_id
+    assert replied_to(saved) == message_id  # the card is a dialog message: no reply-to
     assert "Consum" in summary.text
-    assert "Total: <b>7.58 EUR</b>" in summary.text
+    assert "Total: <b>7.58 €</b>" in summary.text
     assert "card VISA •0848" in summary.text
     assert "Items: 2" in summary.text
     assert "⚠️" not in summary.text  # issues are reviewed from the button, not listed
@@ -53,13 +53,12 @@ async def test_the_largest_photo_size_is_downloaded(harness):
 
 
 async def test_an_image_document_is_handled_like_a_photo(harness):
-    message_id = await harness.send_document(user_id=USER, mime_type="image/png")
+    await harness.send_document(user_id=USER, mime_type="image/png")
     await harness.tasks.drain()
 
     saved, summary = harness.sent_messages
     assert saved.text == i18n.get("receipt-saved")
     assert "Consum" in summary.text
-    assert replied_to(summary) == message_id
 
 
 @pytest.mark.parametrize("mime_type", ["application/pdf", None])
@@ -111,7 +110,7 @@ async def test_not_a_receipt_is_reported(harness, session_factory):
     await harness.send_photo(user_id=USER)
     await harness.tasks.drain()
 
-    assert harness.sent_messages[-1].text == i18n.get("receipt-not-a-receipt")
+    assert harness.sent_messages[-1].text.startswith(i18n.get("receipt-not-a-receipt"))
     assert await statuses(session_factory) == ["not_receipt"]
 
 
@@ -122,8 +121,9 @@ async def test_a_model_failure_is_reported_and_the_receipt_is_failed(harness, se
     await harness.tasks.drain()
 
     saved, failed = harness.sent_messages
-    assert failed.text == i18n.get("receipt-failed")
-    assert replied_to(failed) == message_id
+    assert failed.text.startswith(i18n.get("receipt-failed"))
+    assert failed.reply_markup is not None
+    assert replied_to(saved) == message_id
     assert await statuses(session_factory) == ["failed"]
 
 
@@ -133,10 +133,9 @@ async def test_an_unexpected_error_still_tells_the_user_once(harness, session_fa
     await harness.send_photo(user_id=USER)
     await harness.tasks.drain()
 
-    assert [m.text for m in harness.sent_messages] == [
-        i18n.get("receipt-saved"),
-        i18n.get("receipt-failed"),
-    ]
+    saved, failed = harness.sent_messages
+    assert saved.text == i18n.get("receipt-saved")
+    assert failed.text.startswith(i18n.get("receipt-failed"))
     assert await statuses(session_factory) == ["failed"]
 
 
@@ -149,7 +148,7 @@ async def test_the_same_receipt_photographed_twice_names_the_original(harness, s
     duplicate = harness.sent_messages[-1]
     assert duplicate.text.startswith("♻️")
     assert "Consum" in duplicate.text
-    assert "7.58 EUR" in duplicate.text
+    assert "7.58 €" in duplicate.text
     assert await statuses(session_factory) == ["parsed", "duplicate"]
 
 
@@ -221,9 +220,8 @@ async def test_typing_is_shown_while_the_photo_is_read_and_ends_before_the_summa
 async def test_a_failing_chat_action_does_not_affect_the_summary(harness):
     harness.session.chat_action_fails = True
 
-    message_id = await harness.send_photo(user_id=USER)
+    await harness.send_photo(user_id=USER)
     await harness.tasks.drain()
 
     saved, summary = harness.sent_messages
     assert "Consum" in summary.text
-    assert replied_to(summary) == message_id

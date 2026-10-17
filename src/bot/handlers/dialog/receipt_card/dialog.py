@@ -4,7 +4,6 @@ from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import Button, Row, ScrollingGroup, Select
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Const, Format
-from magic_filter import F
 
 from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.handlers.dialog.receipt_card import click_event
@@ -18,6 +17,7 @@ from src.bot.handlers.dialog.receipt_card.getters import (
     photo_getter,
     review_done_getter,
 )
+from src.bot.handlers.dialog.receipt_card.keyboard import CardKeyboard, PlainKeyboardFactory
 from src.bot.handlers.dialog.widgets import I18nText
 from src.bot.states.receipt_card import ReceiptCardSG
 
@@ -35,29 +35,9 @@ def create_receipt_card_dialog() -> Dialog:
     return Dialog(
         Window(
             Format(f"{{{PreviewDataKeys.TEXT}}}"),
-            Button(
-                I18nText("button-items"),
-                id="items",
-                on_click=click_event.show_items,
-                when=PreviewDataKeys.HAS_ITEMS,
-            ),
-            Button(
-                I18nText("button-review", count=PreviewDataKeys.REVIEW_COUNT),
-                id="review",
-                on_click=click_event.show_review,
-                when=PreviewDataKeys.REVIEW_COUNT,
-            ),
-            Row(
-                Button(I18nText("button-photo"), id="photo", on_click=click_event.show_photo),
-                Button(
-                    I18nText("button-delete"),
-                    id="delete",
-                    on_click=click_event.ask_delete,
-                    when=PreviewDataKeys.CAN_DELETE,
-                ),
-            ),
-            Button(I18nText("button-close"), id="close", on_click=click_event.close),
+            CardKeyboard(),
             getter=main_getter,
+            markup_factory=PlainKeyboardFactory(),
             state=ReceiptCardSG.main,
             parse_mode=ParseMode.HTML,
         ),
@@ -108,13 +88,7 @@ def create_receipt_card_dialog() -> Dialog:
                 on_click=click_event.skip_issue,
                 when=PreviewDataKeys.HAS_ISSUE,
             ),
-            Button(I18nText("button-close"), id="close", on_click=click_event.close),
-            Button(
-                I18nText("button-back"),
-                id="back",
-                on_click=click_event.back_to_main,
-                when=~F[PreviewDataKeys.HAS_ISSUE],
-            ),
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_main),
             getter=issue_getter,
             state=ReceiptCardSG.issue,
             parse_mode=ParseMode.HTML,

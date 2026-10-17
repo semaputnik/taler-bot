@@ -18,7 +18,6 @@ DELETE = "🗑 Delete"
 CORRECT = "✅ Correct"
 ENTER = "✏️ Enter value"
 SKIP = "⏭ Skip"
-CLOSE = "✖ Close"
 BACK = "◀ Back"
 
 i18n = create_translator_hub().get_translator_by_locale(DEFAULT_LOCALE)
@@ -56,17 +55,6 @@ async def parsed(harness, *issues: dict) -> int:
     return harness.last_keyboard()[0]
 
 
-def last_text(harness) -> str:
-    from aiogram.methods import EditMessageText
-
-    for call in reversed(harness.session.calls):
-        if isinstance(call, EditMessageText):
-            return call.text
-        if call in harness.sent_messages:
-            return call.text
-    raise AssertionError("nothing sent")
-
-
 async def resolutions(session_factory) -> dict[str, str]:
     async with session_factory() as session:
         rows = await session.execute(text("select message, resolution from receipt_issues"))
@@ -90,32 +78,33 @@ async def test_the_walk_opens_on_the_first_high_issue(harness):
 
     await harness.tap(USER, "⚠️ Review (2)")
 
-    body = last_text(harness)
+    body = harness.last_text()
     assert "Issue 1 of 2" in body
     assert "🔴" in body
     assert "The total looks too high." in body
     assert "Current value:</b> 7.58 €" in body
-    assert harness.button_texts() == [CORRECT, ENTER, SKIP, CLOSE]
-    assert harness.last_keyboard()[0] != summary_id
+    assert harness.button_texts() == [CORRECT, ENTER, SKIP, BACK]
+    assert harness.last_keyboard()[0] == summary_id  # the card is edited in place
+    assert len(harness.sent_messages) == 2  # "Saved" and the card
 
 
 async def test_an_item_issue_names_the_item_and_a_non_editable_one_offers_no_entry(harness):
     await parsed(harness, LINE, STORE)
 
     await harness.tap(USER, "⚠️ Review (2)")
-    body = last_text(harness)
+    body = harness.last_text()
     assert "🟡" in body
     assert "Cervesa Free Limo" in body
     assert "Current value:</b> 4.80 €" in body
-    assert harness.button_texts() == [CORRECT, ENTER, SKIP, CLOSE]
+    assert harness.button_texts() == [CORRECT, ENTER, SKIP, BACK]
 
     await harness.tap(USER, SKIP)
-    body = last_text(harness)
+    body = harness.last_text()
     assert "Issue 2 of 2" in body
     assert "No address printed." in body
     assert "Current value" not in body
     assert "Item:" not in body
-    assert harness.button_texts() == [CORRECT, SKIP, CLOSE]
+    assert harness.button_texts() == [CORRECT, SKIP, BACK]
 
 
 async def test_correct_confirms_and_shows_the_next_issue(harness, session_factory):
@@ -124,7 +113,7 @@ async def test_correct_confirms_and_shows_the_next_issue(harness, session_factor
 
     await harness.tap(USER, CORRECT)
 
-    assert "Issue 2 of 2" in last_text(harness)
+    assert "Issue 2 of 2" in harness.last_text()
     assert await resolutions(session_factory) == {
         "The total looks too high.": "confirmed",
         "No address printed.": "open",
@@ -141,12 +130,12 @@ async def test_skip_marks_skipped_and_the_count_on_the_card_stays(harness, sessi
         "The total looks too high.": "skipped",
         "No address printed.": "confirmed",
     }
-    assert "2 reviewed: 0 corrected, 1 confirmed, 1 skipped" == last_text(harness)
+    assert "2 reviewed: 0 corrected, 1 confirmed, 1 skipped" == harness.last_text()
 
     await harness.tap(USER, BACK)
 
-    assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [ITEMS, "⚠️ Review (1)", PHOTO, DELETE, CLOSE]
+    assert "Consum" in harness.last_text()
+    assert harness.button_texts() == [ITEMS, "⚠️ Review (1)", PHOTO, DELETE]
 
 
 async def test_back_after_resolving_everything_drops_the_review_button(harness):
@@ -154,43 +143,39 @@ async def test_back_after_resolving_everything_drops_the_review_button(harness):
     await harness.tap(USER, "⚠️ Review (1)")
     await harness.tap(USER, CORRECT)
 
-    assert "1 reviewed: 0 corrected, 1 confirmed, 0 skipped" == last_text(harness)
+    assert "1 reviewed: 0 corrected, 1 confirmed, 0 skipped" == harness.last_text()
     assert harness.button_texts() == [BACK]
 
     await harness.tap(USER, BACK)
 
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, CLOSE]
+    assert harness.button_texts() == [ITEMS, PHOTO, DELETE]
 
 
 async def test_the_card_offers_the_review_and_starts_the_same_walk(harness):
     await parsed(harness, TOTAL, STORE)
-    await harness.tap(USER, DELETE)
-    await harness.tap(USER, BACK)
-    assert harness.button_texts() == [ITEMS, "⚠️ Review (2)", PHOTO, DELETE, CLOSE]
+    assert harness.button_texts() == [ITEMS, "⚠️ Review (2)", PHOTO, DELETE]
 
     await harness.tap(USER, "⚠️ Review (2)")
 
-    assert "Issue 1 of 2" in last_text(harness)
-    assert "The total looks too high." in last_text(harness)
+    assert "Issue 1 of 2" in harness.last_text()
+    assert "The total looks too high." in harness.last_text()
 
 
 async def test_a_card_without_reviewable_issues_has_no_review_button(harness):
     await parsed(harness, LOW)
-    await harness.tap(USER, DELETE)
 
-    await harness.tap(USER, BACK)
-
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, CLOSE]
+    assert harness.button_texts() == [ITEMS, PHOTO, DELETE]
 
 
-async def test_close_mid_walk_ends_the_dialog_and_keeps_the_issues_open(harness, session_factory):
+async def test_back_mid_walk_lands_on_the_card_and_keeps_the_issues_open(harness, session_factory):
     await parsed(harness, TOTAL, STORE)
     await harness.tap(USER, "⚠️ Review (2)")
     await harness.tap(USER, CORRECT)
 
-    await harness.tap(USER, CLOSE)
+    await harness.tap(USER, BACK)
 
-    assert harness.last_keyboard()[1].inline_keyboard == []
+    assert "Consum" in harness.last_text()
+    assert harness.button_texts() == [ITEMS, "⚠️ Review (1)", PHOTO, DELETE]
     assert (await resolutions(session_factory))["No address printed."] == "open"
 
 
@@ -199,12 +184,12 @@ async def test_enter_value_opens_the_input_window_and_back_returns_to_the_issue(
     await harness.tap(USER, "⚠️ Review (1)")
 
     await harness.tap(USER, ENTER)
-    assert "Enter the total (a number with a point, like 12.50)" in last_text(harness)
+    assert "Enter the total (a number with a point, like 12.50)" in harness.last_text()
     assert harness.button_texts() == [BACK]
 
     await harness.tap(USER, BACK)
-    assert "Issue 1 of 1" in last_text(harness)
-    assert harness.button_texts() == [CORRECT, ENTER, SKIP, CLOSE]
+    assert "Issue 1 of 1" in harness.last_text()
+    assert harness.button_texts() == [CORRECT, ENTER, SKIP, BACK]
 
 
 async def test_an_issue_resolved_elsewhere_is_skipped_silently(harness, session_factory):
@@ -221,7 +206,7 @@ async def test_an_issue_resolved_elsewhere_is_skipped_silently(harness, session_
 
     await harness.tap(USER, CORRECT)
 
-    body = last_text(harness)
+    body = harness.last_text()
     assert "Line math is off." in body
     assert "Issue 3 of 3" in body
 
@@ -238,8 +223,8 @@ async def test_a_walk_with_nothing_left_goes_straight_to_the_card(harness, sessi
 
     await harness.press(USER, data, summary_id)
 
-    assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, CLOSE]
+    assert "Consum" in harness.last_text()
+    assert harness.button_texts() == [ITEMS, PHOTO, DELETE]
 
 
 async def test_a_photo_sent_mid_walk_is_saved(harness, session_factory):
@@ -276,7 +261,7 @@ async def test_the_message_of_an_issue_is_escaped(harness):
 
     await harness.tap(USER, "⚠️ Review (1)")
 
-    assert "Read &lt;b&gt;this&lt;/b&gt; &amp; that" in last_text(harness)
+    assert "Read &lt;b&gt;this&lt;/b&gt; &amp; that" in harness.last_text()
 
 
 async def test_a_receipt_deleted_mid_walk_alerts_and_ends_the_dialog(harness, session_factory):
@@ -290,6 +275,7 @@ async def test_a_receipt_deleted_mid_walk_alerts_and_ends_the_dialog(harness, se
 
     alerts = [c for c in harness.session.calls if isinstance(c, AnswerCallbackQuery) and c.text]
     assert (alerts[-1].text, alerts[-1].show_alert) == (i18n.get("card-deleted-alert"), True)
+    assert harness.last_text() == i18n.get("card-deleted")
     assert harness.last_keyboard()[1].inline_keyboard == []
 
 
@@ -315,15 +301,15 @@ async def test_the_prompt_names_the_field_and_the_format(harness):
 
     await harness.tap(USER, "⚠️ Review (3)")
     await harness.tap(USER, ENTER)
-    assert "Enter the date and time (dd.mm.yyyy hh:mm)" in last_text(harness)
+    assert "Enter the date and time (dd.mm.yyyy hh:mm)" in harness.last_text()
     await harness.tap(USER, BACK)
     await harness.tap(USER, SKIP)
     await harness.tap(USER, ENTER)
-    assert "Enter the card ending (four digits)" in last_text(harness)
+    assert "Enter the card ending (four digits)" in harness.last_text()
     await harness.tap(USER, BACK)
     await harness.tap(USER, SKIP)
     await harness.tap(USER, ENTER)
-    assert "Enter the total (a number with a point, like 12.50)" in last_text(harness)
+    assert "Enter the total (a number with a point, like 12.50)" in harness.last_text()
 
 
 @pytest.mark.parametrize(
@@ -340,7 +326,7 @@ async def test_a_bad_value_shows_the_error_and_keeps_the_issue_open(
 
     await harness.send_text(bad, user_id=USER)
 
-    body = last_text(harness)
+    body = harness.last_text()
     assert "Enter the" in body
     assert "❌ Not accepted" in body
     assert harness.button_texts() == [BACK]
@@ -355,7 +341,7 @@ async def test_a_non_text_message_gets_the_hint(harness):
 
     await harness._feed(USER, voice=Voice(file_id="v", file_unique_id="v", duration=1))
 
-    assert "❌ Not accepted" in last_text(harness)
+    assert "❌ Not accepted" in harness.last_text()
     assert harness.button_texts() == [BACK]
 
 
@@ -368,7 +354,7 @@ async def test_back_from_the_entry_clears_the_error(harness):
     await harness.tap(USER, BACK)
     await harness.tap(USER, ENTER)
 
-    assert "Not accepted" not in last_text(harness)
+    assert "Not accepted" not in harness.last_text()
 
 
 async def test_a_good_total_corrects_the_receipt_and_advances(harness, session_factory):
@@ -378,7 +364,7 @@ async def test_a_good_total_corrects_the_receipt_and_advances(harness, session_f
 
     await harness.send_text("12,50", user_id=USER)
 
-    assert "Issue 2 of 2" in last_text(harness)
+    assert "Issue 2 of 2" in harness.last_text()
     assert (await header(session_factory))[0] == Decimal("12.50")
     assert (await resolutions(session_factory))["The total looks too high."] == "corrected"
     assert await edits(session_factory) == [
@@ -386,9 +372,9 @@ async def test_a_good_total_corrects_the_receipt_and_advances(harness, session_f
     ]
 
     await harness.tap(USER, SKIP)
-    assert "2 reviewed: 1 corrected, 0 confirmed, 1 skipped" == last_text(harness)
+    assert "2 reviewed: 1 corrected, 0 confirmed, 1 skipped" == harness.last_text()
     await harness.tap(USER, BACK)
-    assert "Total: <b>12.50 EUR</b>" in last_text(harness)
+    assert "Total: <b>12.50 €</b>" in harness.last_text()
 
 
 async def test_a_good_date_is_stored_in_utc_and_shown_in_the_users_zone(harness, session_factory):
@@ -401,7 +387,7 @@ async def test_a_good_date_is_stored_in_utc_and_shown_in_the_users_zone(harness,
     stored = (await header(session_factory))[1]
     assert stored.astimezone(UTC) == datetime(2026, 7, 5, 16, 30, tzinfo=UTC)
     await harness.tap(USER, BACK)
-    assert "05.07.2026 18:30" in last_text(harness)
+    assert "05.07.2026 18:30" in harness.last_text()
 
 
 async def test_a_good_card_ending_is_stored(harness, session_factory):
@@ -413,7 +399,7 @@ async def test_a_good_card_ending_is_stored(harness, session_factory):
 
     assert (await header(session_factory))[2] == "4321"
     await harness.tap(USER, BACK)
-    assert "•4321" in last_text(harness)
+    assert "•4321" in harness.last_text()
 
 
 async def test_an_item_correction_changes_that_item(harness, session_factory):
@@ -423,12 +409,12 @@ async def test_an_item_correction_changes_that_item(harness, session_factory):
 
     await harness.send_text("5.10", user_id=USER)
 
-    assert "1 corrected" in last_text(harness)
+    assert "1 corrected" in harness.last_text()
     assert await edits(session_factory) == [("line_total", '"5.10"', True, "Line math is off.")]
     await harness.tap(USER, BACK)
     await harness.tap(USER, ITEMS)
     await harness.tap(USER, next(t for t in harness.button_texts() if "Cervesa Free Limo" in t))
-    assert "<b>Line total:</b> 5.10 €" in last_text(harness)
+    assert "<b>Line total:</b> 5.10 €" in harness.last_text()
 
 
 async def test_a_value_for_a_receipt_deleted_meanwhile_alerts_and_ends_the_dialog(
@@ -443,5 +429,6 @@ async def test_a_value_for_a_receipt_deleted_meanwhile_alerts_and_ends_the_dialo
 
     await harness.send_text("12.50", user_id=USER)
 
-    assert harness.sent_messages[-1].text == i18n.get("card-deleted-alert")
+    assert i18n.get("card-deleted-alert") in [m.text for m in harness.sent_messages]
+    assert harness.last_text() == i18n.get("card-deleted")
     assert harness.last_keyboard()[1].inline_keyboard == []

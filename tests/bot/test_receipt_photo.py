@@ -1,11 +1,12 @@
 """The ReceiptCard photo window through the real dispatcher on real Postgres."""
 
 import pytest
-from aiogram.methods import DeleteMessage, EditMessageMedia, EditMessageText
+from aiogram.methods import DeleteMessage, EditMessageMedia
 from aiogram.types import BufferedInputFile
 from sqlalchemy import text
 
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
+from tests.stubs import fixture, output_of
 
 USER = 7
 ITEMS = "📋 Items"
@@ -13,7 +14,6 @@ REVIEW = "⚠️ Review (1)"
 PHOTO = "🖼 Photo"
 DELETE = "🗑 Delete"
 BACK = "◀ Back"
-CLOSE = "✖ Close"
 BYTES = b"jpeg-bytes"
 
 i18n = create_translator_hub().get_translator_by_locale(DEFAULT_LOCALE)
@@ -43,26 +43,54 @@ async def parsed(harness) -> int:
     return harness.last_keyboard()[0]
 
 
-async def stored_file_id(session_factory) -> str:
+async def stored_file_ids(session_factory) -> list[str]:
     async with session_factory() as session:
-        row = await session.execute(text("select telegram_file_id from receipt_photos"))
-        return row.scalar_one()
+        rows = await session.execute(
+            text("select telegram_file_id from receipt_photos order by id")
+        )
+        return [row[0] for row in rows]
 
 
-def last_text(harness) -> str:
-    for call in reversed(harness.session.calls):
-        if isinstance(call, EditMessageText) or call in harness.sent_messages:
-            return call.text
-    raise AssertionError("nothing sent")
+async def older_card_photo_data(harness) -> tuple[int, str]:
+    """Two receipts; return the first card's message id and its Photo button's callback data."""
+    first_id = await parsed(harness)
+    photo_data = next(
+        b.callback_data
+        for row in harness.last_keyboard()[1].inline_keyboard
+        for b in row
+        if b.text == PHOTO
+    )
+    raw = fixture("03")["raw"]
+    harness.parser.default = output_of(raw | {"receipt": raw["receipt"] | {"number": "OTHER"}})
+    await harness.send_photo(user_id=USER, file_id="f2", data=BYTES)
+    await harness.tasks.drain()
+    return first_id, photo_data
 
 
-async def test_the_photo_button_sends_the_stored_photo_by_file_id_without_the_disk(
+async def test_the_photo_button_edits_the_card_into_the_stored_photo_by_file_id(
     harness, forbid_disk_reads
 ):
-    await parsed(harness)
+    card_id = await parsed(harness)
     forbid_disk_reads()
+    cards = len(harness.sent_messages)
 
     await harness.tap(USER, PHOTO)
+
+    (edit,) = [c for c in harness.session.calls if isinstance(c, EditMessageMedia)]
+    assert (edit.message_id, edit.media.media) == (card_id, "f1")
+    assert len(harness.sent_messages) == cards
+    assert harness.sent_photos == []
+    assert harness.button_texts() == [BACK]
+    assert harness.session.rejected_calls == []
+
+
+async def test_the_photo_of_an_older_card_is_sent_as_a_new_message_by_file_id(
+    harness, forbid_disk_reads
+):
+    first_id, photo_data = await older_card_photo_data(harness)
+    forbid_disk_reads()
+
+    await harness.press(USER, photo_data, first_id)
 
     (sent,) = harness.sent_photos
     assert sent.photo == "f1"
@@ -71,17 +99,17 @@ async def test_the_photo_button_sends_the_stored_photo_by_file_id_without_the_di
 
 
 async def test_a_refused_file_id_falls_back_to_the_stored_bytes(harness, session_factory):
-    await parsed(harness)
+    first_id, photo_data = await older_card_photo_data(harness)
     harness.session.rejected_file_ids.add("f1")
 
-    await harness.tap(USER, PHOTO)
+    await harness.press(USER, photo_data, first_id)
 
     attempt, upload = harness.sent_photos
     assert attempt.photo == "f1"
     assert isinstance(upload.photo, BufferedInputFile)
     assert upload.photo.data == BYTES
     assert harness.button_texts() == [BACK]
-    assert await stored_file_id(session_factory) == "f1"  # nothing is written back
+    assert await stored_file_ids(session_factory) == ["f1", "f2"]  # nothing is written back
 
 
 async def test_back_returns_to_the_card(harness):
@@ -90,15 +118,13 @@ async def test_back_returns_to_the_card(harness):
 
     await harness.tap(USER, BACK)
 
-    assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, CLOSE]
+    assert "Consum" in harness.last_text()
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
     assert [c for c in harness.session.calls if isinstance(c, DeleteMessage)]  # photo -> text
 
 
 async def test_the_main_window_opens_the_photo_in_place(harness):
     await parsed(harness)
-    await harness.tap(USER, DELETE)
-    await harness.tap(USER, BACK)
     cards_before = len(harness.sent_messages)
 
     await harness.tap(USER, PHOTO)
@@ -111,8 +137,6 @@ async def test_the_main_window_opens_the_photo_in_place(harness):
 
 async def test_a_refused_file_id_falls_back_when_editing_the_card_into_the_photo(harness):
     await parsed(harness)
-    await harness.tap(USER, DELETE)
-    await harness.tap(USER, BACK)
     harness.session.rejected_file_ids.add("f1")
 
     await harness.tap(USER, PHOTO)
@@ -125,12 +149,12 @@ async def test_a_refused_file_id_falls_back_when_editing_the_card_into_the_photo
 
 
 async def test_a_missing_file_shows_the_notice_instead_of_the_photo(harness, tmp_storage):
-    await parsed(harness)
+    first_id, photo_data = await older_card_photo_data(harness)
     harness.session.rejected_file_ids.add("f1")
     for path in tmp_storage._root.rglob("*.jpg"):
         path.unlink()
 
-    await harness.tap(USER, PHOTO)
+    await harness.press(USER, photo_data, first_id)
 
     assert harness.sent_messages[-1].text == i18n.get("card-photo-unavailable")
     assert [p.photo for p in harness.sent_photos] == ["f1"]  # the refused attempt only
@@ -139,8 +163,6 @@ async def test_a_missing_file_shows_the_notice_instead_of_the_photo(harness, tmp
 
 async def test_a_missing_file_shows_the_notice_when_editing_the_card(harness, tmp_storage):
     await parsed(harness)
-    await harness.tap(USER, DELETE)
-    await harness.tap(USER, BACK)
     harness.session.rejected_file_ids.add("f1")
     for path in tmp_storage._root.rglob("*.jpg"):
         path.unlink()
@@ -150,4 +172,4 @@ async def test_a_missing_file_shows_the_notice_when_editing_the_card(harness, tm
     assert harness.sent_messages[-1].text == i18n.get("card-photo-unavailable")
     assert harness.button_texts() == [BACK]
     await harness.tap(USER, BACK)
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, CLOSE]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]

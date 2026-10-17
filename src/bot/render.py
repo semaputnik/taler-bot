@@ -22,11 +22,19 @@ def date(card: ReceiptCard, tz: ZoneInfo) -> str:
 def amount(card: ReceiptCard, i18n: TranslatorRunner) -> str:
     if card.total is None:
         return i18n.get("receipt-amount-unknown")
-    currency = escape(card.currency or "")
-    return i18n.get("receipt-amount", total=format(card.total, ".2f"), currency=currency)
+    return i18n.get(
+        "receipt-amount", total=format(card.total, ".2f"), currency=_sign(card.currency)
+    )
 
 
 _CURRENCY_SIGNS = {"EUR": "€", "USD": "$", "GBP": "£", "RUB": "₽", "UAH": "₴", "CHF": "CHF"}
+
+
+def _sign(currency: str | None) -> str:
+    """The currency sign (`€`), or the escaped code when there is no sign for it."""
+    if not currency:
+        return ""
+    return _CURRENCY_SIGNS.get(currency.upper(), escape(currency))
 
 
 def money(value: Decimal | None, i18n: TranslatorRunner, currency: str | None = None) -> str:
@@ -36,8 +44,7 @@ def money(value: Decimal | None, i18n: TranslatorRunner, currency: str | None = 
     amount = format(value, ".2f")
     if not currency:
         return amount
-    sign = _CURRENCY_SIGNS.get(currency.upper(), escape(currency))
-    return i18n.get("item-amount", amount=amount, sign=sign)
+    return i18n.get("item-amount", amount=amount, sign=_sign(currency))
 
 
 def quantity(value: Decimal) -> str:

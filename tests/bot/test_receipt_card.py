@@ -3,6 +3,7 @@
 import pytest
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.methods import AnswerCallbackQuery, EditMessageReplyMarkup, EditMessageText
+from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy import text
 
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
@@ -45,16 +46,6 @@ async def parsed(harness, **kwargs) -> int:
     return harness.last_keyboard()[0]
 
 
-def last_text(harness) -> str:
-    """The text of the latest message the dialog sent or edited."""
-    for call in reversed(harness.session.calls):
-        if isinstance(call, EditMessageText):
-            return call.text
-        if call in harness.sent_messages:
-            return call.text
-    raise AssertionError("nothing sent")
-
-
 async def test_the_parse_reply_carries_photo_and_delete_buttons(harness):
     await parsed(harness)
 
@@ -65,12 +56,16 @@ async def test_the_parse_reply_carries_photo_and_delete_buttons(harness):
 async def test_every_parse_outcome_carries_the_keyboard(harness, outcome):
     if outcome == "failed":
         harness.parser.error = LLMError("timed out")
+        status = i18n.get("receipt-failed")
     else:
         raw = fixture("03")["raw"] | {"is_receipt": False, "items": [], "issues": []}
         harness.parser.default = output_of(raw)
+        status = i18n.get("receipt-not-a-receipt")
 
     await parsed(harness)
 
+    assert harness.last_text().startswith(status)
+    assert "Photo received:" in harness.last_text()
     assert harness.button_texts() == [PHOTO, DELETE]
 
 
@@ -78,22 +73,23 @@ async def test_the_duplicate_reply_carries_the_keyboard(harness):
     await parsed(harness, file_id="a")
     await parsed(harness, file_id="b")
 
-    assert harness.sent_messages[-1].text.startswith("♻️")
+    body = harness.sent_messages[-1].text
+    assert body.startswith("♻️ Already recorded: <b>Consum</b>")
+    assert "7.58 €" in body
     assert harness.button_texts() == [PHOTO, DELETE]
 
 
-async def test_delete_opens_a_confirmation_as_a_new_message(harness):
-    summary_id = await parsed(harness)
+async def test_delete_opens_a_confirmation_in_place(harness):
+    card_id = await parsed(harness)
     sent_before = len(harness.sent_messages)
 
     await harness.tap(USER, DELETE)
 
-    assert len(harness.sent_messages) == sent_before + 1
-    assert harness.sent_messages[-1].text == i18n.get("card-delete-confirm")
+    assert len(harness.sent_messages) == sent_before
+    assert harness.last_text() == i18n.get("card-delete-confirm")
+    assert [c for c in harness.session.calls if isinstance(c, EditMessageText)]
     assert harness.button_texts() == ["🗑 Yes, delete", "◀ Back"]
-    assert harness.last_keyboard()[0] != summary_id
-    # the summary itself is never edited
-    assert not [c for c in harness.session.calls if isinstance(c, EditMessageText)]
+    assert harness.last_keyboard()[0] == card_id
 
 
 async def test_back_returns_to_the_card(harness):
@@ -102,33 +98,69 @@ async def test_back_returns_to_the_card(harness):
 
     await harness.tap(USER, "◀ Back")
 
-    assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, "✖ Close"]
+    assert "Consum" in harness.last_text()
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
 
 
-async def test_confirming_deletes_the_receipt_and_trashes_the_photo(
+async def test_confirming_deletes_the_receipt_and_ends_on_the_deleted_card(
     harness, session_factory, tmp_storage
 ):
-    await parsed(harness)
+    card_id = await parsed(harness)
     (path,) = stored_files(tmp_storage)
     await harness.tap(USER, DELETE)
+    sent_before = len(harness.sent_messages)
 
     await harness.tap(USER, "🗑 Yes, delete")
 
     assert await deleted_flags(session_factory) == [True]
     assert stored_files(tmp_storage) == [f".trash/{path}"]
-    assert harness.sent_messages[-1].text == i18n.get("card-deleted-done")
+    assert len(harness.sent_messages) == sent_before  # no extra "Deleted" message
+    assert harness.last_text() == "🗑 This receipt was deleted."
+    assert harness.last_keyboard() == (card_id, InlineKeyboardMarkup(inline_keyboard=[]))
 
 
-async def test_close_ends_the_dialog_and_keeps_the_receipt(harness, session_factory):
+async def test_the_card_has_no_close_button(harness):
     await parsed(harness)
+    assert "✖ Close" not in harness.button_texts()
     await harness.tap(USER, DELETE)
     await harness.tap(USER, "◀ Back")
+    assert "✖ Close" not in harness.button_texts()
 
-    await harness.tap(USER, "✖ Close")
 
-    assert harness.last_keyboard()[1].inline_keyboard == []
-    assert await deleted_flags(session_factory) == [False]
+async def test_a_tap_on_the_current_card_edits_it_in_place(harness):
+    card_id = await parsed(harness)
+    messages = len(harness.sent_messages)
+
+    await harness.tap(USER, ITEMS)
+
+    assert len(harness.sent_messages) == messages
+    edit = next(c for c in reversed(harness.session.calls) if isinstance(c, EditMessageText))
+    assert edit.message_id == card_id
+    assert edit.text == i18n.get("card-items-title", count="2")
+    assert harness.button_texts() == [PELLEGRINO, FREE_LIMO, "◀ Back"]
+
+
+async def test_a_tap_on_an_older_card_sends_a_fresh_card_and_keeps_the_old_keyboard(harness):
+    first_id = await parsed(harness, file_id="a", unique_id="ua")
+    first_buttons = harness.last_keyboard()[1]
+    raw = fixture("03")["raw"]
+    harness.parser.default = output_of(raw | {"receipt": raw["receipt"] | {"number": "OTHER"}})
+    second_id = await parsed(harness, file_id="b", unique_id="ub")
+    assert second_id != first_id
+    sent_before = len(harness.sent_messages)
+    first_delete = next(
+        b.callback_data for row in first_buttons.inline_keyboard for b in row if b.text == DELETE
+    )
+
+    await harness.press(USER, first_delete, first_id)
+
+    assert len(harness.sent_messages) == sent_before + 1
+    assert harness.sent_messages[-1].text == i18n.get("card-delete-confirm")
+    assert harness.last_keyboard()[0] not in (first_id, second_id)
+    # nobody removed the keyboard of the first card
+    assert not [
+        m for m, markup in harness.keyboards() if m == first_id and not markup.inline_keyboard
+    ]
 
 
 async def test_an_old_button_of_a_deleted_receipt_alerts_and_loses_its_keyboard(harness):
@@ -193,12 +225,9 @@ async def test_a_photo_sent_while_the_card_is_open_is_still_saved(harness, sessi
 async def test_a_failed_receipt_card_shows_its_status(harness):
     harness.parser.error = LLMError("timed out")
     await parsed(harness)
-    await harness.tap(USER, DELETE)
 
-    await harness.tap(USER, "◀ Back")
-
-    body = last_text(harness)
-    assert i18n.get("card-status-failed") in body
+    body = harness.last_text()
+    assert body.startswith(i18n.get("receipt-failed"))
     assert "Photo received:" in body
 
 
@@ -209,10 +238,10 @@ async def test_a_duplicate_card_names_the_receipt_it_repeats(harness):
 
     await harness.tap(USER, "◀ Back")
 
-    body = last_text(harness)
-    assert i18n.get("card-status-duplicate") in body
-    assert "Repeats <b>Consum" in body
-    assert "7.58 EUR" in body
+    body = harness.last_text()
+    assert body.startswith("♻️ Already recorded: <b>Consum</b>")
+    assert "7.58 €" in body
+    assert "Photo received:" in body
 
 
 async def test_a_receipt_that_is_being_read_cannot_be_deleted(harness, session_factory):
@@ -265,18 +294,18 @@ async def test_the_card_of_a_receipt_without_items_has_no_items_button(harness):
 
     await harness.tap(USER, "◀ Back")
 
-    assert harness.button_texts() == [REVIEW_NO_ITEMS, PHOTO, DELETE, "✖ Close"]
+    assert harness.button_texts() == [REVIEW_NO_ITEMS, PHOTO, DELETE]
 
 
-async def test_items_opens_the_list_as_a_new_message(harness):
+async def test_items_opens_the_list_in_place(harness):
     summary_id = await parsed(harness)
     sent_before = len(harness.sent_messages)
 
     await harness.tap(USER, ITEMS)
 
-    assert len(harness.sent_messages) == sent_before + 1
-    assert harness.sent_messages[-1].text == i18n.get("card-items-title", count="2")
-    assert harness.last_keyboard()[0] != summary_id
+    assert len(harness.sent_messages) == sent_before
+    assert harness.last_text() == i18n.get("card-items-title", count="2")
+    assert harness.last_keyboard()[0] == summary_id
     assert harness.button_texts() == [PELLEGRINO, FREE_LIMO, "◀ Back"]
 
 
@@ -286,7 +315,7 @@ async def test_a_row_tap_shows_the_item_details(harness):
 
     await harness.tap(USER, FREE_LIMO)
 
-    body = last_text(harness)
+    body = harness.last_text()
     assert "<b>Cervesa Free Limo</b>" in body
     assert "CERV FREE LIMO." in body
     assert "Drinks" in body
@@ -308,8 +337,8 @@ async def test_back_goes_from_the_item_to_the_list_and_then_to_the_card(harness)
     assert harness.button_texts() == [PELLEGRINO, FREE_LIMO, "◀ Back"]
 
     await harness.tap(USER, "◀ Back")
-    assert "Consum" in last_text(harness)
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, "✖ Close"]
+    assert "Consum" in harness.last_text()
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
 
 
 async def test_a_long_list_is_paged_by_eight(harness):
@@ -337,7 +366,7 @@ async def test_a_tap_on_the_second_page_opens_that_item(harness):
 
     await harness.tap(USER, "Item 10 · 2 pcs · 2.78 €")
 
-    assert "<b>Item 10</b>" in last_text(harness)
+    assert "<b>Item 10</b>" in harness.last_text()
 
 
 async def test_a_discount_and_unknown_vat_render_when_present(harness):
@@ -350,7 +379,7 @@ async def test_a_discount_and_unknown_vat_render_when_present(harness):
 
     await harness.tap(USER, "Aigua amb gas Pellegrino · 2 pcs · 2.78 €")
 
-    body = last_text(harness)
+    body = harness.last_text()
     assert "<b>Discount:</b> 0.50 €" in body
     assert "1.95 € per l" in body
     assert "VAT" not in body

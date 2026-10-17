@@ -127,7 +127,7 @@ async def _resolve(
     except ReceiptNotFound, InvalidReceiptTransition:
         # The receipt was deleted while the walk was open.
         await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
-        await manager.done()
+        await manager.switch_to(ReceiptCardSG.main)
         return
     except UnknownIssue, InvalidIssueResolution:
         pass  # resolved from another device meanwhile: nothing to record, just move on
@@ -170,7 +170,7 @@ async def on_value(message: Message, widget: MessageInput, manager: DialogManage
         return
     except ReceiptNotFound, InvalidReceiptTransition:
         await message.answer(i18n.get("card-deleted-alert"))
-        await manager.done()
+        await manager.switch_to(ReceiptCardSG.main)
         return
     except UnknownIssue, InvalidIssueResolution:
         pass  # resolved from another device meanwhile: nothing to record, just move on
@@ -188,10 +188,6 @@ async def back_to_main(query: CallbackQuery, button: Button, manager: DialogMana
     await manager.switch_to(ReceiptCardSG.main)
 
 
-async def close(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
-    await manager.done()
-
-
 async def confirm_delete(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
     services: Services = manager.middleware_data["services"]
     user: CurrentUser = manager.middleware_data["user"]
@@ -203,19 +199,17 @@ async def confirm_delete(query: CallbackQuery, button: Button, manager: DialogMa
         # Either the receipt is still being read, or it was deleted meanwhile.
         if await _is_deleted(services, user.id, receipt_id):
             await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
-            await manager.done()
+            await manager.switch_to(ReceiptCardSG.main)
         else:
             await query.answer(i18n.get("card-cannot-delete-parsing"), show_alert=True)
             await manager.switch_to(ReceiptCardSG.main)
         return
     except ReceiptNotFound:
         await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
-        await manager.done()
+        await manager.switch_to(ReceiptCardSG.main)
         return
     await query.answer()
-    await manager.done()
-    if query.message is not None:
-        await query.message.answer(i18n.get("card-deleted-done"))
+    await manager.switch_to(ReceiptCardSG.main)  # shows the deleted text, with no buttons
 
 
 async def _is_deleted(services: Services, user_id: int, receipt_id: int) -> bool:

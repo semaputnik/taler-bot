@@ -35,6 +35,7 @@ from aiogram.types import (
     Update,
     User,
 )
+from aiogram_dialog.manager.updater import Updater
 
 from src.bot.dispatcher import create_dispatcher
 from src.bot.i18n import create_translator_hub
@@ -273,6 +274,13 @@ class BotHarness:
                 )
         return found
 
+    def last_text(self) -> str:
+        """The text of the latest message sent or edited."""
+        for call in reversed(self.session.calls):
+            if isinstance(call, SendMessage | EditMessageText):
+                return call.text
+        raise AssertionError("nothing sent")
+
     def last_keyboard(self) -> tuple[int, InlineKeyboardMarkup]:
         return self.keyboards()[-1]
 
@@ -306,10 +314,17 @@ class BotHarness:
 
 
 @pytest.fixture
-async def harness(make_uow, tmp_storage) -> AsyncIterator[BotHarness]:
+async def harness(make_uow, tmp_storage, monkeypatch) -> AsyncIterator[BotHarness]:
     recording = RecordingSession()
     bot = Bot("123456:TEST", session=recording)
     tasks = TaskRegistry()
+
+    async def tracked_notify(self, bot, update) -> None:
+        """A background dialog start (`bg.start`) runs as a fire-and-forget task; track it, so
+        `tasks.drain()` waits for the card message too."""
+        tasks.spawn(self._process_update(bot, update), name="dialog-update")
+
+    monkeypatch.setattr(Updater, "notify", tracked_notify)
     parser = StubReceiptParser(default=output_of(fixture("03")["raw"]))
     dispatcher = create_dispatcher(
         storage=MemoryStorage(),
