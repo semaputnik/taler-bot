@@ -8,3 +8,4 @@ button-review = ⚠️ Review ({ $count })
 button-correct = ✅ Correct
 button-enter-value = ✏️ Enter value
 button-skip = ⏭ Skip
+button-close = ✖ Close

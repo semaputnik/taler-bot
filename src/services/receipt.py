@@ -431,6 +431,7 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         status=str(receipt.status),
         received_at=receipt.photo.received_at,
         deleted=receipt.deleted_at is not None,
+        store_key=header.store_key,
         store_name=store_name,
         purchased_at=header.purchased_at,
         currency=header.currency,

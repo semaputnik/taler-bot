@@ -47,12 +47,19 @@ async def open_card(
         await _remove_keyboard(bot, query)
         return
     await query.answer()
-    # The current card is edited in place; a tap on an older one sends a fresh card, so the
-    # old message keeps its buttons.
     in_place = (
         query.message is not None
         and dialog_manager.current_stack().last_message_id == query.message.message_id
     )
+    if callback_data.window is CardWindow.CLOSE:
+        # Hide the card's buttons; the text stays. The current card's dialog ends with it.
+        if in_place:
+            await dialog_manager.reset_stack(remove_keyboard=True)
+        else:
+            await _remove_keyboard(bot, query)
+        return
+    # The current card is edited in place; a tap on an older one sends a fresh card, so the
+    # old message keeps its buttons.
     with ExitStack() as stack:
         if not in_place:
             stack.enter_context(keeping_previous_keyboard())  # the older card keeps its buttons

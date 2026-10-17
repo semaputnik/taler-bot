@@ -15,6 +15,7 @@ USER = 7
 ITEMS = "📋 Items"
 PHOTO = "🖼 Photo"
 DELETE = "🗑 Delete"
+CLOSE = "✖ Close"
 CORRECT = "✅ Correct"
 ENTER = "✏️ Enter value"
 SKIP = "⏭ Skip"
@@ -64,13 +65,13 @@ async def resolutions(session_factory) -> dict[str, str]:
 async def test_the_summary_offers_the_review_with_the_count(harness):
     await parsed(harness, TOTAL, LINE, STORE, LOW)
 
-    assert harness.button_texts() == [ITEMS, "⚠️ Review (3)", PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, "⚠️ Review (3)", PHOTO, DELETE, CLOSE]
 
 
 async def test_low_issues_alone_give_no_review_button(harness):
     await parsed(harness, LOW)
 
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, CLOSE]
 
 
 async def test_the_walk_opens_on_the_first_high_issue(harness):
@@ -135,7 +136,7 @@ async def test_skip_marks_skipped_and_the_count_on_the_card_stays(harness, sessi
     await harness.tap(USER, BACK)
 
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, "⚠️ Review (1)", PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, "⚠️ Review (1)", PHOTO, DELETE, CLOSE]
 
 
 async def test_back_after_resolving_everything_drops_the_review_button(harness):
@@ -148,12 +149,12 @@ async def test_back_after_resolving_everything_drops_the_review_button(harness):
 
     await harness.tap(USER, BACK)
 
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, CLOSE]
 
 
 async def test_the_card_offers_the_review_and_starts_the_same_walk(harness):
     await parsed(harness, TOTAL, STORE)
-    assert harness.button_texts() == [ITEMS, "⚠️ Review (2)", PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, "⚠️ Review (2)", PHOTO, DELETE, CLOSE]
 
     await harness.tap(USER, "⚠️ Review (2)")
 
@@ -164,7 +165,7 @@ async def test_the_card_offers_the_review_and_starts_the_same_walk(harness):
 async def test_a_card_without_reviewable_issues_has_no_review_button(harness):
     await parsed(harness, LOW)
 
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, CLOSE]
 
 
 async def test_back_mid_walk_lands_on_the_card_and_keeps_the_issues_open(harness, session_factory):
@@ -175,7 +176,7 @@ async def test_back_mid_walk_lands_on_the_card_and_keeps_the_issues_open(harness
     await harness.tap(USER, BACK)
 
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, "⚠️ Review (1)", PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, "⚠️ Review (1)", PHOTO, DELETE, CLOSE]
     assert (await resolutions(session_factory))["No address printed."] == "open"
 
 
@@ -224,7 +225,7 @@ async def test_a_walk_with_nothing_left_goes_straight_to_the_card(harness, sessi
     await harness.press(USER, data, summary_id)
 
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, PHOTO, DELETE, CLOSE]
 
 
 async def test_a_photo_sent_mid_walk_is_saved(harness, session_factory):

@@ -1,5 +1,6 @@
 """Texts about a receipt that both the parse reply and the card dialog show."""
 
+import re
 from decimal import Decimal
 from html import escape
 from zoneinfo import ZoneInfo
@@ -64,8 +65,8 @@ def payment(card: ReceiptCard, i18n: TranslatorRunner) -> str:
 
 
 def header(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
-    """The summary's first lines: store, date, total, payment, item count."""
-    return i18n.get(
+    """The card's text: store, a blank line, the facts, a blank line, the store's hashtag."""
+    text = i18n.get(
         "receipt-summary",
         store=store(card, i18n),
         date=date(card, tz),
@@ -73,3 +74,11 @@ def header(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
         payment=payment(card, i18n),
         items=str(card.item_count),
     )
+    if card.store_key:
+        text += "\n\n" + i18n.get("receipt-store-tag", tag=store_tag(card.store_key))
+    return text
+
+
+def store_tag(store_key: str) -> str:
+    """A Telegram hashtag body from the store's slug: lower case, letters, digits, underscores."""
+    return re.sub(r"[^a-z0-9_]", "_", store_key.lower()).strip("_") or "store"

@@ -13,6 +13,7 @@ ITEMS = "📋 Items"
 REVIEW = "⚠️ Review (1)"
 PHOTO = "🖼 Photo"
 DELETE = "🗑 Delete"
+CLOSE = "✖ Close"
 BACK = "◀ Back"
 BYTES = b"jpeg-bytes"
 
@@ -119,7 +120,7 @@ async def test_back_returns_to_the_card(harness):
     await harness.tap(USER, BACK)
 
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, CLOSE]
     assert [c for c in harness.session.calls if isinstance(c, DeleteMessage)]  # photo -> text
 
 
@@ -172,4 +173,4 @@ async def test_a_missing_file_shows_the_notice_when_editing_the_card(harness, tm
     assert harness.sent_messages[-1].text == i18n.get("card-photo-unavailable")
     assert harness.button_texts() == [BACK]
     await harness.tap(USER, BACK)
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, CLOSE]

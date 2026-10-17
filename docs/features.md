@@ -88,8 +88,8 @@ the `main` window shows the matching text and its buttons. It is not a reply to 
 inside the dialog, so they work on a card however old. A tap on the current card (the
 dialog's last message) edits it in place. A tap on an older card sends a fresh card message
 and leaves the old card with its buttons. A tap on a deleted receipt answers with an alert
-and removes the keyboard. A photo sent while a card is open is still accepted. There is no
-`Close` button: the resting state of a card is `main` with its buttons.
+and removes the keyboard. A photo sent while a card is open is still accepted. `✖ Close`
+hides the card's buttons and keeps its text; the resting state of a card is `main`.
 
 ### ReceiptCard
 

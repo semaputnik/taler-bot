@@ -10,10 +10,12 @@ receipt-duplicate = ♻️ Already recorded: <b>{ $store }</b>, { $date }, { $am
 
 receipt-summary =
     🧾 <b>{ $store }</b>
+    { "" }
     { $date }
     Total: <b>{ $amount }</b>
     Payment: { $payment }
     Items: { $items }
+receipt-store-tag = #{ $tag }
 receipt-unknown-store = Unknown store
 receipt-amount = { $total } { $currency }
 receipt-amount-unknown = unknown

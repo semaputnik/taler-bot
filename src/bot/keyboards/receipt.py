@@ -15,6 +15,7 @@ class CardWindow(StrEnum):
     REVIEW = "review"
     PHOTO = "photo"
     DELETE_CONFIRM = "delete_confirm"
+    CLOSE = "close"  # not a window: hides the card's buttons
 
 
 class ReceiptCallback(CallbackData, prefix="receipt"):
@@ -30,7 +31,7 @@ def receipt_keyboard(
     windows = [CardWindow.ITEMS] if item_count > 0 else []
     if review_count > 0:
         windows.append(CardWindow.REVIEW)
-    windows += [CardWindow.PHOTO, CardWindow.DELETE_CONFIRM]
+    windows += [CardWindow.PHOTO, CardWindow.DELETE_CONFIRM, CardWindow.CLOSE]
     buttons = [
         InlineKeyboardButton(
             text=i18n.get(_BUTTON_KEYS[window], **_button_args(window, review_count)),
@@ -38,8 +39,9 @@ def receipt_keyboard(
         )
         for window in windows
     ]
-    # Two buttons per row: four in one row are unreadable on a phone.
-    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    # Two buttons per row (four in one row are unreadable on a phone); Close on its own.
+    *actions, close = buttons
+    rows = [actions[i : i + 2] for i in range(0, len(actions), 2)] + [[close]]
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -48,6 +50,7 @@ _BUTTON_KEYS = {
     CardWindow.PHOTO: "button-photo",
     CardWindow.DELETE_CONFIRM: "button-delete",
     CardWindow.REVIEW: "button-review",
+    CardWindow.CLOSE: "button-close",
 }
 
 

@@ -43,6 +43,7 @@ class ReceiptCard(BaseModel):
     status: str
     received_at: datetime
     deleted: bool
+    store_key: str | None  # the store's slug, e.g. `ametller-origen`; the card's hashtag
     store_name: str | None
     purchased_at: datetime | None
     currency: str | None

@@ -14,6 +14,7 @@ from tests.stubs import fixture, output_of
 USER = 7
 PHOTO = "🖼 Photo"
 DELETE = "🗑 Delete"
+CLOSE = "✖ Close"
 ITEMS = "📋 Items"
 REVIEW = "⚠️ Review (1)"
 REVIEW_NO_ITEMS = "⚠️ Review (2)"  # the workflow raises issues for a receipt without lines
@@ -49,7 +50,7 @@ async def parsed(harness, **kwargs) -> int:
 async def test_the_parse_reply_carries_photo_and_delete_buttons(harness):
     await parsed(harness)
 
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, CLOSE]
 
 
 @pytest.mark.parametrize("outcome", ["not_receipt", "failed"])
@@ -66,7 +67,7 @@ async def test_every_parse_outcome_carries_the_keyboard(harness, outcome):
 
     assert harness.last_text().startswith(status)
     assert "Photo received:" in harness.last_text()
-    assert harness.button_texts() == [PHOTO, DELETE]
+    assert harness.button_texts() == [PHOTO, DELETE, CLOSE]
 
 
 async def test_the_duplicate_reply_carries_the_keyboard(harness):
@@ -76,7 +77,7 @@ async def test_the_duplicate_reply_carries_the_keyboard(harness):
     body = harness.sent_messages[-1].text
     assert body.startswith("♻️ Already recorded: <b>Consum</b>")
     assert "7.58 €" in body
-    assert harness.button_texts() == [PHOTO, DELETE]
+    assert harness.button_texts() == [PHOTO, DELETE, CLOSE]
 
 
 async def test_delete_opens_a_confirmation_in_place(harness):
@@ -99,7 +100,7 @@ async def test_back_returns_to_the_card(harness):
     await harness.tap(USER, "◀ Back")
 
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, CLOSE]
 
 
 async def test_confirming_deletes_the_receipt_and_ends_on_the_deleted_card(
@@ -119,12 +120,35 @@ async def test_confirming_deletes_the_receipt_and_ends_on_the_deleted_card(
     assert harness.last_keyboard() == (card_id, InlineKeyboardMarkup(inline_keyboard=[]))
 
 
-async def test_the_card_has_no_close_button(harness):
+async def test_close_hides_the_current_cards_buttons_and_keeps_its_text(harness):
+    card_id = await parsed(harness)
+    sent_before = len(harness.sent_messages)
+
+    await harness.tap(USER, CLOSE)
+
+    assert len(harness.sent_messages) == sent_before
+    assert harness.last_keyboard() == (card_id, InlineKeyboardMarkup(inline_keyboard=[]))
+    assert not [c for c in harness.session.calls if isinstance(c, EditMessageText)]
+
+
+async def test_close_on_an_older_card_removes_only_its_buttons(harness):
+    first = await parsed(harness, file_id="a")
+    second = await parsed(harness, file_id="b")
+    first_markup = next(m for mid, m in harness.keyboards() if mid == first)
+    close_data = first_markup.inline_keyboard[-1][0].callback_data
+
+    await harness.press(USER, close_data, first)
+
+    assert harness.last_keyboard() == (first, InlineKeyboardMarkup(inline_keyboard=[]))
+    assert harness.keyboards()[-2][0] == second  # the current card keeps its buttons
+
+
+async def test_the_card_text_has_the_store_hashtag(harness):
     await parsed(harness)
-    assert "✖ Close" not in harness.button_texts()
-    await harness.tap(USER, DELETE)
-    await harness.tap(USER, "◀ Back")
-    assert "✖ Close" not in harness.button_texts()
+
+    text = harness.last_text()
+    assert text.startswith("🧾 <b>Consum</b>\n\n")
+    assert text.endswith("\n\n#consum")
 
 
 async def test_a_tap_on_the_current_card_edits_it_in_place(harness):
@@ -283,7 +307,7 @@ async def test_a_receipt_without_items_has_no_items_button(harness):
 
     await parsed(harness)
 
-    assert harness.button_texts() == [REVIEW_NO_ITEMS, PHOTO, DELETE]
+    assert harness.button_texts() == [REVIEW_NO_ITEMS, PHOTO, DELETE, CLOSE]
 
 
 async def test_the_card_of_a_receipt_without_items_has_no_items_button(harness):
@@ -294,7 +318,7 @@ async def test_the_card_of_a_receipt_without_items_has_no_items_button(harness):
 
     await harness.tap(USER, "◀ Back")
 
-    assert harness.button_texts() == [REVIEW_NO_ITEMS, PHOTO, DELETE]
+    assert harness.button_texts() == [REVIEW_NO_ITEMS, PHOTO, DELETE, CLOSE]
 
 
 async def test_items_opens_the_list_in_place(harness):
@@ -338,7 +362,7 @@ async def test_back_goes_from_the_item_to_the_list_and_then_to_the_card(harness)
 
     await harness.tap(USER, "◀ Back")
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE]
+    assert harness.button_texts() == [ITEMS, REVIEW, PHOTO, DELETE, CLOSE]
 
 
 async def test_a_long_list_is_paged_by_eight(harness):

@@ -216,7 +216,7 @@ card, however old: a tap on the dialog's last message restarts the dialog with `
 (in place), a tap on an older card with `ShowMode.SEND` and leaves that card's keyboard alone
 (`StoredPhotoMessageManager` skips aiogram-dialog's keyboard removal for those sends). **The card
 never calls `done()`**: it would strip the buttons. Every exit goes `switch_to(ReceiptCardSG.main)`,
-which is also where a deleted receipt ends. There is no Close button.
+which is also where a deleted receipt ends. `✖ Close` (a plain card button) hides the buttons and keeps the text.
 
 The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue ids (`walk`), the
 `position`, `current_issue_id` and the counters, loaded once by `click_event.start_review`.
