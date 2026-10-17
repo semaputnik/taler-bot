@@ -78,6 +78,10 @@ class ReceiptNotFound(AppException):
     """No receipt with this id belongs to the user (another user's receipt counts as missing)."""
 
 
+class ExpenseNotFound(AppException):
+    """No expense with this id belongs to the user (another user's expense counts as missing)."""
+
+
 class UserNotFound(AppException):
     """No user with this id."""
 

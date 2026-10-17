@@ -295,7 +295,7 @@ async def test_store_and_card_names_are_escaped(harness, make_uow):
     await harness.send_text("/stats", user_id=USER)
 
     text = harness.last_text()
-    assert "&lt;b&gt;Shop" in text and "&lt;i&gt;X •1234" in text
+    assert "&lt;b&gt;Shop" in text and "&lt;I&gt;X •1234" in text  # a card brand is kept upper-case
 
 
 async def test_a_receipt_without_a_store_gets_the_unknown_store_label(harness, make_uow):

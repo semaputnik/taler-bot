@@ -26,8 +26,8 @@ async def send_history(
     i18n: TranslatorRunner,
 ) -> None:
     """A new history message for the month `shown` (page 0, store filter as given)."""
-    page = await services.receipts.history(
-        user.id, shown.year, shown.month, store_id=shown.store_id or None
+    page = await services.expenses.history(
+        user.id, shown.year, shown.month, payee_id=shown.store_id or None
     )
     await message.answer(
         view.show_text(page, i18n), reply_markup=view.show_keyboard(page, shown, i18n)

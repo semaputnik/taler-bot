@@ -49,11 +49,11 @@ def _percent(change: int | None, i18n: TranslatorRunner) -> str:
 def headline(report: SpendingReport, block: ComparedBlock, i18n: TranslatorRunner) -> str:
     total = render.money(block.total, i18n, block.currency)
     if block.previous_total is None or block.change is None:
-        return i18n.get("stats-headline-no-previous", total=total, count=block.receipt_count)
+        return i18n.get("stats-headline-no-previous", total=total, count=block.expense_count)
     return i18n.get(
         "stats-headline",
         total=total,
-        count=block.receipt_count,
+        count=block.expense_count,
         change=_percent(block.change, i18n),
         previous=_previous_name(report, i18n),
         previous_total=render.money(block.previous_total, i18n, block.currency),
@@ -104,15 +104,15 @@ def _block_text(report: SpendingReport, block: ComparedBlock, i18n: TranslatorRu
     sections = [
         (
             "stats-section-categories",
-            [_line(_category_label(c, i18n), c, block, i18n, share=True) for c in block.categories],
+            [_line(_category_label(c, i18n), c, block, i18n, share=True) for c in block.products],
         ),
         (
             "stats-section-stores",
-            [_line(_store_label(s, i18n), s, block, i18n, share=True) for s in block.stores],
+            [_line(_store_label(s, i18n), s, block, i18n, share=True) for s in block.payees],
         ),
         (
             "stats-section-cards",
-            [_line(_card_label(c, i18n), c, block, i18n, share=False) for c in block.cards],
+            [_line(_card_label(c, i18n), c, block, i18n, share=False) for c in block.sources],
         ),
     ]
     for key, lines in sections:

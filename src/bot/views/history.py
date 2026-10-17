@@ -39,12 +39,12 @@ def month_after(year: int, month: int) -> tuple[int, int]:
 
 def title(page: HistoryPage, i18n: TranslatorRunner) -> str:
     month = i18n.get(f"month-{page.month}")
-    if page.store_name:
+    if page.payee_name:
         return i18n.get(
             "history-title-filtered",
             month=month,
             year=str(page.year),
-            store=escape(page.store_name),
+            store=escape(page.payee_name),
         )
     return i18n.get("history-title", month=month, year=str(page.year))
 
@@ -52,10 +52,8 @@ def title(page: HistoryPage, i18n: TranslatorRunner) -> str:
 def summary(page: HistoryPage, i18n: TranslatorRunner) -> str:
     if page.total_rows == 0:
         return i18n.get("history-empty")
-    if page.parsed_count == 0:
-        return i18n.get("history-summary-none")
     totals = ", ".join(render.money(t.amount, i18n, t.currency) for t in page.totals)
-    return i18n.get("history-summary", count=page.parsed_count, totals=totals)
+    return i18n.get("history-summary", count=page.total_rows, totals=totals)
 
 
 def show_text(page: HistoryPage, i18n: TranslatorRunner) -> str:
@@ -65,12 +63,12 @@ def show_text(page: HistoryPage, i18n: TranslatorRunner) -> str:
 def _row_label(row: HistoryRow, i18n: TranslatorRunner) -> str:
     day = f"{row.day.day:02d}.{row.day.month:02d}"
     # A button is plain text, so the store name is not HTML-escaped here.
-    store = row.store_name or i18n.get("receipt-unknown-store")
+    store = row.payee_name or i18n.get("receipt-unknown-store")
     icon = _STATUS_ICONS.get(row.status)
     if icon is not None:
         return i18n.get("history-row-status", day=day, store=store, status=icon)
     return i18n.get(
-        "history-row", day=day, store=store, amount=render.money(row.total, i18n, row.currency)
+        "history-row", day=day, store=store, amount=render.money(row.amount, i18n, row.currency)
     )
 
 
@@ -97,6 +95,7 @@ def show_keyboard(
             )
         ]
         for row in page.rows
+        if row.receipt_id is not None  # an expense without a receipt has no screen yet
     ]
     nav: list[InlineKeyboardButton] = []
     if page.has_earlier:
@@ -149,13 +148,13 @@ def stores_keyboard(
         update={"year": page.year, "month": page.month, "action": HistoryAction.SHOW}
     )
     rows = []
-    for store in page.stores:
-        key = "button-store-selected" if store.store_id == shown.store_id else "button-store"
+    for store in page.payees:
+        key = "button-store-selected" if store.payee_id == shown.store_id else "button-store"
         rows.append(
             [
                 _button(
                     i18n.get(key, name=store.name),
-                    here.model_copy(update={"store_id": store.store_id, "page": 0}),
+                    here.model_copy(update={"store_id": store.payee_id, "page": 0}),
                 )
             ]
         )

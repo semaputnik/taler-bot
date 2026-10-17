@@ -1,15 +1,13 @@
 """ReceiptService through the Unit of Work on real Postgres. No LLM: parses are seeded by hand."""
 
 import logging
-from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import text
 
 from src.database.repositories.receipt import SqlAlchemyReceiptRepository
-from src.domain.enums import IssueResolution, IssueSeverity, IssueSource, ProductCategory
+from src.domain.enums import IssueResolution, IssueSeverity, IssueSource
 from src.domain.parse import Parse, ParsedIssue
 from src.domain.receipt import Receipt
 from src.exception import (
@@ -20,11 +18,10 @@ from src.exception import (
     InvalidReceiptTransition,
     ReceiptNotFound,
     UnknownIssue,
-    UserNotFound,
 )
 from src.integration.storage import StorageError
-from src.services.receipt import PAGE_SIZE, ReceiptService, _apply_parse
-from src.services.results import Compared, NewPhoto
+from src.services.receipt import ReceiptService, _apply_parse
+from src.services.results import NewPhoto
 from tests.domain.builders import WHEN, parse, photo, product
 from tests.helpers import MakeUow, add_allowed_user, add_receipt, seed_catalog
 from tests.stubs import StubReceiptParser
@@ -164,7 +161,7 @@ async def test_the_same_telegram_photo_twice_is_rejected_with_no_new_rows(servic
 
 
 async def test_edit_item_returns_the_updated_card_and_survives(service, make_uow):
-    receipt = await parsed_receipt(make_uow, parse(MILK, total="1.20"))
+    receipt = await parsed_receipt(make_uow, parse(MILK, total=Decimal("1.20")))
 
     card = await service.edit_item(1, receipt.id, "mercadona::leche#1", "line_total", "1.50")
 
@@ -349,7 +346,7 @@ async def test_the_card_of_a_duplicate_names_the_original(service, make_uow):
 
 
 async def test_items_come_in_parse_order_with_an_edit_applied(service, make_uow):
-    receipt = await parsed_receipt(make_uow, parse(MILK, BREAD, total="3.20"))
+    receipt = await parsed_receipt(make_uow, parse(MILK, BREAD, total=Decimal("3.20")))
     await service.edit_item(1, receipt.id, "mercadona::pan#1", "line_total", "2.50")
 
     rows = await service.items(1, receipt.id)
@@ -656,314 +653,3 @@ async def test_a_normalized_name_issue_with_a_matched_item_is_renamable(service,
     [card] = await service.review(1, receipt.id)
 
     assert (card.product_key, card.renamable) == ("mercadona::leche", True)
-
-
-# --- history ---------------------------------------------------------------------------------
-
-
-async def bought_on(make_uow: MakeUow, n: int, purchased_at: datetime, *, user_id: int = 1):
-    """A parsed receipt of the user, bought at this moment (each one has its own key)."""
-    bought = parse(
-        product(f"mercadona::item{n}"),
-        purchased_at=purchased_at,
-        receipt_number=str(n),
-        receipt_key=f"mercadona|{n}",
-    )
-    await seed_catalog(make_uow, bought, user_id=user_id)
-    receipt = Receipt.start(user_id, photo(f"history{user_id}-{n}"))
-    receipt.apply_parse(bought)
-    return await add_receipt(make_uow, receipt)
-
-
-async def test_history_uses_the_users_time_zone(service, make_uow, connection):
-    await bought_on(make_uow, 1, datetime(2026, 10, 31, 23, 30, tzinfo=UTC))
-
-    madrid = await service.history(1, 2026, 11)
-    assert [r.day for r in madrid.rows] == [date(2026, 11, 1)]
-    assert (await service.history(1, 2026, 10)).rows == []
-
-    await connection.execute(text("update users set timezone = 'UTC' where id = 1"))
-    utc = await service.history(1, 2026, 10)
-    assert [r.day for r in utc.rows] == [date(2026, 10, 31)]
-
-
-async def test_history_of_an_unknown_user_is_refused(service):
-    with pytest.raises(UserNotFound):
-        await service.history(404, 2026, 10)
-
-
-async def test_history_pages_by_eight_and_a_page_past_the_end_is_the_last_page(service, make_uow):
-    for n in range(1, 11):
-        await bought_on(make_uow, n, datetime(2026, 10, n, 12, tzinfo=UTC))
-
-    first = await service.history(1, 2026, 10)
-    second = await service.history(1, 2026, 10, page=1)
-    past = await service.history(1, 2026, 10, page=9)
-    before = await service.history(1, 2026, 10, page=-3)
-
-    assert PAGE_SIZE == 8
-    assert (len(first.rows), first.total_rows) == (8, 10)
-    assert [r.day.day for r in second.rows] == [2, 1]
-    assert past == second
-    assert before == first
-
-
-async def test_history_past_the_end_of_an_empty_month_is_an_empty_page(service):
-    page = await service.history(1, 2026, 10, page=3)
-
-    assert (page.rows, page.total_rows) == ([], 0)
-
-
-async def test_another_users_store_id_yields_an_empty_page(service, make_uow):
-    await add_allowed_user(make_uow, 2)
-    await bought_on(make_uow, 1, datetime(2026, 10, 10, 12, tzinfo=UTC))
-    await bought_on(make_uow, 2, datetime(2026, 10, 10, 12, tzinfo=UTC), user_id=2)
-    async with make_uow() as uow:
-        theirs = (await uow.catalog.get(2)).payees["mercadona"].id
-
-    page = await service.history(1, 2026, 10, store_id=theirs)
-
-    assert (page.rows, page.total_rows, page.parsed_count, page.totals) == ([], 0, 0, [])
-    assert page.store_name is None
-    assert len(page.stores) == 1
-
-
-async def test_there_is_no_later_month_for_the_current_month_or_beyond(service, make_uow):
-    now = datetime.now(ZoneInfo("Europe/Madrid"))  # the user's default time zone
-    next_month = datetime(now.year + (now.month == 12), now.month % 12 + 1, 15, 12, tzinfo=UTC)
-    await bought_on(make_uow, 1, now)
-    await bought_on(make_uow, 2, next_month)
-
-    current = await service.history(1, now.year, now.month)
-    last_year = await service.history(1, now.year - 1, now.month)
-    ahead = await service.history(1, next_month.year, next_month.month)
-
-    assert current.has_later is False
-    assert (current.has_earlier, last_year.has_later) == (False, True)
-    assert ahead.has_later is False
-
-
-# --- spending --------------------------------------------------------------------------------
-
-D = Decimal
-_spent_ids = iter(range(1, 10_000))
-
-
-async def spent(
-    make_uow: MakeUow,
-    purchased_at: datetime,
-    amount: str,
-    *,
-    category: ProductCategory = ProductCategory.DAIRY,
-    store: str = "mercadona",
-    currency: str = "EUR",
-    card: str | None = None,
-    total: str | None = None,
-    user_id: int = 1,
-) -> Receipt:
-    """A parsed receipt with one item line of `amount`; the receipt total is `total` if given."""
-    n = next(_spent_ids)
-    bought = parse(
-        product(f"{store}::item{n}", total=amount, category=category),
-        store_key=store,
-        store_name=store.capitalize(),
-        purchased_at=purchased_at,
-        receipt_number=str(n),
-        receipt_key=f"{store}|{n}",
-        total=D(total or amount),
-        currency=currency,
-        card_brand="VISA" if card else None,
-        card_last4=card,
-    )
-    await seed_catalog(make_uow, bought, user_id=user_id)
-    receipt = Receipt.start(user_id, photo(f"spent{user_id}-{n}"))
-    receipt.apply_parse(bought)
-    return await add_receipt(make_uow, receipt)
-
-
-def october(day: int = 10, hour: int = 12) -> datetime:
-    return datetime(2026, 10, day, hour, tzinfo=UTC)
-
-
-def september(day: int = 10) -> datetime:
-    return datetime(2026, 9, day, 12, tzinfo=UTC)
-
-
-def line(lines: list[Compared], key: str) -> Compared:
-    [found] = [x for x in lines if x.key == key]
-    return found
-
-
-async def test_spending_of_a_month_compares_with_the_previous_month(service, make_uow):
-    await spent(
-        make_uow, october(), "120.00", category=ProductCategory.MEAT, store="a", card="0848"
-    )
-    await spent(make_uow, october(11), "30.00", category=ProductCategory.DAIRY, store="b")
-    await spent(
-        make_uow, september(), "100.00", category=ProductCategory.MEAT, store="a", card="0848"
-    )
-    await spent(make_uow, september(11), "60.00", category=ProductCategory.DAIRY, store="b")
-    await spent(make_uow, september(12), "10.00", category=ProductCategory.PET, store="c")
-
-    report = await service.spending(1, "month", date(2026, 10, 14))
-
-    assert (report.kind, report.start, report.end) == (
-        "month",
-        date(2026, 10, 1),
-        date(2026, 11, 1),
-    )
-    [block] = report.blocks
-    assert (block.currency, block.total, block.receipt_count) == ("EUR", D("150.00"), 2)
-    assert block.previous_total == D("170.00")
-    assert block.change == -12
-    meat, dairy = block.categories
-    assert (meat.key, meat.value, meat.share, meat.previous, meat.change) == (
-        "meat",
-        D("120.00"),
-        80,
-        D("100.00"),
-        20,
-    )
-    assert (dairy.key, dairy.share, dairy.previous, dairy.change) == ("dairy", 20, D("60.00"), -50)
-    assert [(x.label, x.change) for x in block.stores] == [("A", 20), ("B", -50)]
-    assert [(x.label, x.share) for x in block.cards] == [("VISA •0848", 80), ("", 20)]
-    assert [x.key for x in block.cards] == ["0848", "cash"]
-
-
-async def test_a_line_without_a_previous_value_is_new_and_a_zero_previous_has_no_change(
-    service, make_uow
-):
-    await spent(make_uow, october(), "50.00", category=ProductCategory.MEAT, store="a")
-    await spent(make_uow, october(11), "20.00", category=ProductCategory.PET, store="b")
-    await spent(make_uow, september(), "10.00", category=ProductCategory.MEAT, store="a")
-    await spent(make_uow, september(11), "0.00", category=ProductCategory.PET, store="b")
-
-    [block] = (await service.spending(1, "month", date(2026, 10, 14))).blocks
-
-    pet = line(block.categories, "pet")
-    assert (pet.previous, pet.change) == (None, None)  # not in the previous period's lines
-    shop_b = block.stores[1]
-    assert (shop_b.label, shop_b.previous, shop_b.change) == ("B", D("0.00"), None)
-    assert line(block.categories, "meat").change == 400
-
-
-async def test_a_currency_new_this_period_has_no_previous_total(service, make_uow):
-    await spent(make_uow, october(), "50.00")
-    await spent(make_uow, september(), "10.00", currency="USD")
-
-    [block] = (await service.spending(1, "month", date(2026, 10, 14))).blocks
-
-    assert (block.previous_total, block.change) == (None, None)
-    assert {x.previous for x in block.categories} == {None}
-
-
-async def test_shares_sum_to_about_a_hundred_with_not_itemised_included(service, make_uow):
-    await spent(make_uow, october(), "10.00", category=ProductCategory.MEAT)
-    await spent(make_uow, october(), "10.00", category=ProductCategory.DAIRY)
-    await spent(make_uow, october(), "10.00", category=ProductCategory.PET, total="13.00")
-
-    [block] = (await service.spending(1, "month", date(2026, 10, 14))).blocks
-
-    assert block.total == D("33.00")
-    assert [x.share for x in block.categories if x.key != "not_itemised"] == [30, 30, 30]
-    extra = line(block.categories, "not_itemised")
-    assert (extra.value, extra.share, extra.label) == (D("3.00"), 9, "")
-    assert block.categories[-1] is extra
-    assert abs(sum(x.share for x in block.categories) - 100) <= 2
-
-
-async def test_a_negligible_not_itemised_remainder_is_left_out(service, make_uow):
-    await spent(make_uow, october(), "10.00")
-
-    [block] = (await service.spending(1, "month", date(2026, 10, 14))).blocks
-
-    assert [x.key for x in block.categories] == ["dairy"]
-
-
-async def test_only_the_five_largest_stores_are_kept(service, make_uow):
-    for n in range(7):
-        await spent(make_uow, october(), f"{10 + n}.00", store=f"shop{n}")
-
-    [block] = (await service.spending(1, "month", date(2026, 10, 14))).blocks
-
-    assert [x.label for x in block.stores] == ["Shop6", "Shop5", "Shop4", "Shop3", "Shop2"]
-    assert block.receipt_count == 7
-
-
-async def test_the_users_currency_comes_first_then_alphabetical(service, make_uow, connection):
-    await spent(make_uow, october(), "5.00", currency="EUR")
-    await spent(make_uow, october(), "5.00", currency="USD", store="us")
-    await spent(make_uow, october(), "5.00", currency="GBP", store="uk")
-
-    eur_first = await service.spending(1, "month", date(2026, 10, 14))
-    await connection.execute(text("update users set default_currency = 'USD' where id = 1"))
-    usd_first = await service.spending(1, "month", date(2026, 10, 14))
-
-    assert [b.currency for b in eur_first.blocks] == ["EUR", "GBP", "USD"]
-    assert [b.currency for b in usd_first.blocks] == ["USD", "EUR", "GBP"]
-
-
-async def test_has_earlier_looks_for_a_parsed_receipt_before_the_period(service, make_uow):
-    await spent(make_uow, october(), "5.00")
-
-    assert (await service.spending(1, "month", date(2026, 10, 14))).has_earlier is False
-    await spent(make_uow, datetime(2026, 9, 30, 22, tzinfo=UTC), "5.00")  # 1 Oct 00:00 in Madrid
-    assert (await service.spending(1, "month", date(2026, 10, 14))).has_earlier is False
-    await spent(make_uow, datetime(2026, 9, 30, 21, tzinfo=UTC), "5.00")  # 30 Sep 23:00
-    assert (await service.spending(1, "month", date(2026, 10, 14))).has_earlier is True
-    assert (await service.spending(1, "week", date(2026, 10, 14))).has_earlier is True
-
-
-async def test_an_empty_period_has_no_blocks_but_may_have_an_earlier_one(service, make_uow):
-    await spent(make_uow, september(), "5.00")
-
-    report = await service.spending(1, "month", date(2026, 10, 14))
-
-    assert report.blocks == []
-    assert report.has_earlier is True
-
-
-async def test_a_week_is_compared_with_the_week_before(service, make_uow):
-    await spent(make_uow, october(13), "30.00")
-    await spent(make_uow, october(6), "20.00")
-    await spent(make_uow, october(5, 6), "20.00")  # Monday 08:00 Madrid, the previous week
-    await spent(make_uow, october(4, 12), "99.00")  # the Sunday before that
-
-    report = await service.spending(1, "week", date(2026, 10, 14))
-
-    assert (report.start, report.end) == (date(2026, 10, 12), date(2026, 10, 19))
-    [block] = report.blocks
-    assert (block.total, block.previous_total, block.change) == (D("30.00"), D("40.00"), -25)
-
-
-async def test_is_current_for_the_period_that_holds_today(service):
-    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
-
-    here = await service.spending(1, "month", today)
-    later = await service.spending(1, "month", today + timedelta(days=62))
-    earlier = await service.spending(1, "week", today - timedelta(days=7))
-
-    assert (here.is_current, later.is_current, earlier.is_current) == (True, False, False)
-
-
-async def test_spending_uses_the_users_time_zone(service, make_uow, connection):
-    await spent(make_uow, datetime(2026, 10, 31, 23, 30, tzinfo=UTC), "5.00")
-
-    in_madrid = await service.spending(1, "month", date(2026, 10, 14))
-    await connection.execute(text("update users set timezone = 'UTC' where id = 1"))
-    in_utc = await service.spending(1, "month", date(2026, 10, 14))
-
-    assert in_madrid.blocks == []
-    assert in_utc.blocks[0].total == D("5.00")
-
-
-async def test_spending_of_an_unknown_user_is_refused(service):
-    with pytest.raises(UserNotFound):
-        await service.spending(404, "month", date(2026, 10, 14))
-
-
-async def test_spending_never_shows_another_users_receipts(service, make_uow):
-    await add_allowed_user(make_uow, 2)
-    await spent(make_uow, october(), "77.00", user_id=2)
-
-    assert (await service.spending(1, "month", date(2026, 10, 14))).blocks == []

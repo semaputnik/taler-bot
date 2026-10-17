@@ -26,7 +26,7 @@ async def send_stats(
     i18n: TranslatorRunner,
 ) -> None:
     """A new stats message for the period of `shown`."""
-    report = await services.receipts.spending(user.id, shown.kind.value, shown.anchor)
+    report = await services.expenses.spending(user.id, shown.kind.value, shown.anchor)
     await message.answer(
         view.show_text(report, i18n), reply_markup=view.show_keyboard(report, i18n)
     )

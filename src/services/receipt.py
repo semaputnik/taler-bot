@@ -1,8 +1,8 @@
 """`ReceiptService`: the receipt actions the bot offers (ADR-0001, ADR-0002).
 
 Every write is one Unit of Work: load the aggregate, call one aggregate method, apply the
-`ParseOutcome` to the catalog, save, commit. The service holds no receipt rule; a rule showing
-up here belongs on `Receipt`.
+`ParseOutcome` to the catalog, save, keep the receipt's expense in step (ADR-0003), commit.
+The service holds no receipt rule; a rule showing up here belongs on `Receipt`.
 
 `parse` is the exception: it is three short Units of Work around one model call that holds no
 transaction (CLAUDE.md "Code rules"), under a per-user lock so one user has one model call at a
@@ -13,15 +13,14 @@ import asyncio
 import logging
 import weakref
 from dataclasses import replace
-from datetime import date, datetime
-from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
-from src.domain.catalog import Catalog
+from src.domain.catalog import Catalog, PaymentSource
 from src.domain.edits import Edit
 from src.domain.enums import EditTarget, IssueResolution, ReceiptStatus
+from src.domain.expense import Expense
 from src.domain.normalize import PARSER_VERSION, normalize
 from src.domain.parse import Parse, ParseOutcome
 from src.domain.receipt import Photo, Receipt
@@ -35,15 +34,8 @@ from src.exception import (
 )
 from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
-from src.services import periods
 from src.services.results import (
-    PAGE_SIZE,
-    Amount,
     BulkResult,
-    Compared,
-    ComparedBlock,
-    CurrencyBlock,
-    HistoryPage,
     IssueCard,
     IssueLine,
     ItemRow,
@@ -52,7 +44,6 @@ from src.services.results import (
     PhotoRef,
     ReceiptCard,
     ReparseSummary,
-    SpendingReport,
 )
 
 logger = logging.getLogger(__name__)
@@ -235,7 +226,7 @@ class ReceiptService:
         async with self._uow_factory() as uow:
             receipt = await _load(uow, user_id, receipt_id)
             receipt.correct_issue(issue_id, value)
-            await uow.receipts.save(receipt)
+            await _save_with_catalog(uow, receipt)
             await uow.commit()
             return await _card(uow, receipt)
 
@@ -249,6 +240,7 @@ class ReceiptService:
             receipt = await _load(uow, user_id, receipt_id)
             receipt.soft_delete()
             await uow.receipts.save(receipt)
+            await _sync_expense(uow, receipt, None)
             await uow.commit()
             path = receipt.photo.path
         if path is None:
@@ -269,74 +261,6 @@ class ReceiptService:
             if original is None:
                 return card
             return card.model_copy(update={"duplicate_of": await _card(uow, original)})
-
-    async def history(
-        self, user_id: int, year: int, month: int, store_id: int | None = None, page: int = 0
-    ) -> HistoryPage:
-        """One page of the user's receipts of a month, in the user's time zone, newest first.
-
-        A page past the end is the last page. The current month (and later ones) have no later
-        month to go to, whatever receipts are dated ahead. A store that is not the user's
-        matches nothing.
-        """
-        async with self._uow_factory() as uow:
-            user = await uow.users.get(user_id)
-            if user is None:
-                raise UserNotFound(user_id)
-            timezone = user.timezone
-
-            async def fetch(number: int) -> HistoryPage:
-                return await uow.receipts.history(
-                    user_id,
-                    year,
-                    month,
-                    timezone,
-                    store_id=store_id,
-                    offset=number * PAGE_SIZE,
-                    limit=PAGE_SIZE,
-                )
-
-            number = max(page, 0)
-            found = await fetch(number)
-            if not found.rows and found.total_rows:
-                found = await fetch((found.total_rows - 1) // PAGE_SIZE)
-        now = datetime.now(ZoneInfo(timezone))
-        if (year, month) >= (now.year, now.month):
-            found = found.model_copy(update={"has_later": False})
-        return found
-
-    # --- spending ----------------------------------------------------------------------
-
-    async def spending(
-        self, user_id: int, kind: Literal["week", "month"], anchor: date
-    ) -> SpendingReport:
-        """The week or month of `anchor` (local dates, Monday weeks), against the period before.
-
-        Both periods are read in one Unit of Work: a fixed number of statements. Percentages are
-        whole numbers, computed here; blocks are those of the period itself, the user's default
-        currency first.
-        """
-        start, end = periods.period(kind, anchor)
-        before_start, before_end = periods.previous(start, end)
-        async with self._uow_factory() as uow:
-            user = await uow.users.get(user_id)
-            if user is None:
-                raise UserNotFound(user_id)
-            current = await uow.receipts.spending(user_id, start, end, user.timezone)
-            before = await uow.receipts.spending(user_id, before_start, before_end, user.timezone)
-            earliest = await uow.receipts.earliest_purchase(user_id, user.timezone)
-        today = datetime.now(ZoneInfo(user.timezone)).date()
-        earlier = {block.currency: block for block in before.blocks}
-        blocks = [_compare(block, earlier.get(block.currency)) for block in current.blocks]
-        blocks.sort(key=lambda b: (b.currency != user.default_currency, b.currency))
-        return SpendingReport(
-            kind=kind,
-            start=start,
-            end=end,
-            is_current=periods.is_current(start, end, today),
-            has_earlier=earliest is not None and earliest < start,
-            blocks=blocks,
-        )
 
     # --- re-parse ----------------------------------------------------------------------
 
@@ -463,7 +387,10 @@ class ReceiptService:
         async with self._uow_factory() as uow:
             receipt = await _load(uow, user_id, receipt_id)
             receipt.record_edit(edit)
-            await uow.receipts.save(receipt)
+            if edit.target is EditTarget.RECEIPT:
+                await _save_with_catalog(uow, receipt)  # the header moved: so does the expense
+            else:
+                await uow.receipts.save(receipt)
             await uow.commit()
             return await _card(uow, receipt)
 
@@ -509,17 +436,28 @@ async def _apply_parse(uow: UnitOfWork, receipt: Receipt, parse: Parse) -> None:
     await _save_with_catalog(uow, receipt, outcome)
 
 
-async def _save_with_catalog(uow: UnitOfWork, receipt: Receipt, outcome: ParseOutcome) -> None:
-    """Save a receipt whose parse changed, and keep the catalog in step.
+async def _save_with_catalog(
+    uow: UnitOfWork, receipt: Receipt, outcome: ParseOutcome | None = None
+) -> None:
+    """Save a receipt whose header or parse changed, and keep the catalog and the expense in
+    step. `outcome` is given when the parse was set or replaced.
 
-    Order matters: new stores and products must exist before the receipt's store and items
-    refer to them; released products can only be deleted once the receipt's items stop
-    referencing them.
+    Order matters: new payees, products and payment sources must exist before the receipt's
+    payee and items and the expense's source refer to them; the expense follows the saved
+    receipt; released products can only be deleted once the receipt's items stop referencing
+    them.
     """
     catalog = await uow.catalog.get(receipt.user_id)
-    _register(catalog, receipt)
+    if outcome is not None:
+        _register(catalog, receipt)
+    source = None
+    if receipt.backs_expense:
+        source = catalog.source_for(receipt.header.card_brand, receipt.header.card_last4)
     await uow.catalog.save(catalog)
     await uow.receipts.save(receipt)
+    await _sync_expense(uow, receipt, source)
+    if outcome is None:
+        return
 
     # Only products this receipt introduced and no other receipt uses are removed.
     candidates = {
@@ -535,6 +473,44 @@ async def _save_with_catalog(uow: UnitOfWork, receipt: Receipt, outcome: ParseOu
     if released:
         catalog.remove_unreferenced(released)
         await uow.catalog.save(catalog)
+
+
+async def _sync_expense(uow: UnitOfWork, receipt: Receipt, source: PaymentSource | None) -> None:
+    """Make the receipt's expense mirror its header (ADR-0003).
+
+    A receipt that backs an expense gets one on its first parse, and the existing one follows
+    the header (and is reopened if it was deleted). Any other receipt (not a receipt, a repeat,
+    deleted) has no live expense: an earlier one is deleted. `source` is the receipt's payment
+    source, saved in the catalog already so that it has its id; None when the receipt backs no
+    expense. The rule itself is on `Expense`; this only wires it.
+    """
+    assert receipt.id is not None
+    expense = await uow.expenses.find_by_receipt(receipt.id)
+    if not receipt.backs_expense:
+        if expense is not None and expense.deleted_at is None:
+            expense.soft_delete(receipt.deleted_at)
+            await uow.expenses.save(expense)
+        return
+    assert source is not None
+    user = await uow.users.get(receipt.user_id)
+    if user is None:
+        raise UserNotFound(receipt.user_id)
+    facts = {
+        "payee_key": receipt.header.store_key,
+        "payment_source_id": source.id,
+        "received_at": receipt.photo.received_at,
+        "tz": ZoneInfo(user.timezone),
+        "default_currency": user.default_currency,
+    }
+    if expense is None:
+        await uow.expenses.add(
+            Expense.from_receipt(receipt.user_id, receipt.id, receipt.header, **facts)
+        )
+        return
+    if expense.deleted_at is not None:
+        expense.restore()
+    expense.sync_with_receipt(receipt.header, **facts)
+    await uow.expenses.save(expense)
 
 
 def _register(catalog: Catalog, receipt: Receipt) -> None:
@@ -562,18 +538,20 @@ def _register(catalog: Catalog, receipt: Receipt) -> None:
 
 async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
     header = receipt.header
-    store_name = None
-    if header.store_key is not None:
-        store = (await uow.catalog.get(receipt.user_id)).payees.get(header.store_key)
-        store_name = store.name if store is not None else None
     assert receipt.id is not None
+    catalog = await uow.catalog.get(receipt.user_id)
+    store = catalog.payees.get(header.store_key) if header.store_key is not None else None
+    expense = await uow.expenses.find_by_receipt(receipt.id)
+    source = None
+    if expense is not None and expense.payment_source_id is not None:
+        source = catalog.payment_sources.get(expense.payment_source_id)
     return ReceiptCard(
         receipt_id=receipt.id,
         status=str(receipt.status),
         received_at=receipt.photo.received_at,
         deleted=receipt.deleted_at is not None,
         store_key=header.store_key,
-        store_name=store_name,
+        store_name=store.name if store is not None else None,
         purchased_at=header.purchased_at,
         currency=header.currency,
         total=header.total,
@@ -582,65 +560,10 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         card_last4=header.card_last4,
         can_reparse=receipt.can_reparse,
         error_message=receipt.error_message,
+        expense_id=expense.id if expense is not None else None,
+        expense_category=str(expense.category) if expense is not None else None,
+        payment_source_name=source.name if source is not None else None,
         item_count=len(receipt.items),
         open_issue_count=sum(1 for i in receipt.issues if i.resolution is IssueResolution.OPEN),
         review_count=len(receipt.reviewable_issues()),
-    )
-
-
-# --- spending comparison -------------------------------------------------------------------
-
-_STORES_SHOWN = 5
-_NOT_ITEMISED = "not_itemised"
-_NOT_ITEMISED_FROM = Decimal("0.01")
-
-
-def _percent(part: Decimal, whole: Decimal) -> int | None:
-    """`part` as a whole percent of `whole`, halves rounded up; None when `whole` is zero."""
-    if whole == 0:
-        return None
-    return int((part / whole * 100).quantize(Decimal(1), rounding=ROUND_HALF_UP))
-
-
-def _compared(amounts: list[Amount], total: Decimal, before: list[Amount] | None) -> list[Compared]:
-    """Each amount with its share of `total` and its change against the same key in `before`
-    (None when there is no earlier period or line)."""
-    earlier = {a.key: a.value for a in before or []}
-    found = []
-    for amount in amounts:
-        previous = earlier.get(amount.key)
-        found.append(
-            Compared(
-                key=amount.key,
-                label=amount.label,
-                value=amount.value,
-                share=_percent(amount.value, total) or 0,
-                previous=previous,
-                change=None
-                if previous is None
-                else _percent(amount.value - previous, abs(previous)),
-            )
-        )
-    return found
-
-
-def _compare(block: CurrencyBlock, before: CurrencyBlock | None) -> ComparedBlock:
-    categories = _compared(block.categories, block.total, before.categories if before else None)
-    if abs(block.not_itemised) >= _NOT_ITEMISED_FROM:
-        remainder = Amount(key=_NOT_ITEMISED, label="", value=block.not_itemised)
-        previous = (
-            [Amount(key=_NOT_ITEMISED, label="", value=before.not_itemised)] if before else None
-        )
-        categories += _compared([remainder], block.total, previous)
-    return ComparedBlock(
-        currency=block.currency,
-        total=block.total,
-        previous_total=before.total if before else None,
-        change=_percent(block.total - before.total, abs(before.total)) if before else None,
-        receipt_count=block.receipt_count,
-        categories=categories,
-        stores=_compared(block.stores, block.total, before.stores if before else None)[
-            :_STORES_SHOWN
-        ],
-        cards=_compared(block.cards, block.total, before.cards if before else None),
     )

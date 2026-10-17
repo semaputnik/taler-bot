@@ -1,8 +1,6 @@
 from dataclasses import replace
-from datetime import date, datetime, time
-from decimal import Decimal
 
-from sqlalchemy import Date, cast, delete, exists, func, insert, null, select, update
+from sqlalchemy import delete, exists, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,16 +17,7 @@ from src.database.models import (
 from src.database.models import (
     Receipt as ReceiptRow,
 )
-from src.database.read_models import (
-    Amount,
-    CurrencyBlock,
-    CurrencyTotal,
-    HistoryPage,
-    HistoryRow,
-    ReparseCandidates,
-    SpendingPeriod,
-    StoreOption,
-)
+from src.database.read_models import ReparseCandidates
 from src.domain.enums import ReceiptStatus
 from src.domain.receipt import Receipt
 from src.exception import ForeignKeyViolationError
@@ -317,217 +306,6 @@ class SqlAlchemyReceiptRepository:
     async def _get_or_none(self, receipt_id: int | None) -> Receipt | None:
         return None if receipt_id is None else await self.get(receipt_id)
 
-    async def history(
-        self,
-        user_id: int,
-        year: int,
-        month: int,
-        timezone: str,
-        store_id: int | None = None,
-        offset: int = 0,
-        limit: int = 8,
-    ) -> HistoryPage:
-        """Four SELECTs, whatever the month's size: the rows, the counts (with the filter's store
-        name), the totals, the stores.
-
-        The month is `coalesce(purchased_at, received_at)` converted to `timezone` (a naive
-        local timestamp, compared with the month's naive local bounds), so a late-evening
-        purchase falls on the user's own day.
-        """
-        local = func.timezone(
-            timezone, func.coalesce(ReceiptRow.purchased_at, ReceiptPhoto.received_at)
-        )
-        start = datetime(year, month, 1)
-        end = datetime(year + (month == 12), month % 12 + 1, 1)
-        mine = (
-            ReceiptRow.user_id == user_id,
-            ReceiptRow.deleted_at.is_(None),
-        )
-        in_month = (*mine, local >= start, local < end)
-        shown = (*in_month, ReceiptRow.payee_id == store_id) if store_id is not None else in_month
-        parsed = ReceiptRow.status == ReceiptStatus.PARSED.value
-        from_receipts = ReceiptRow.__table__.join(
-            ReceiptPhoto, ReceiptPhoto.receipt_id == ReceiptRow.id
-        )
-
-        found = await self._session.execute(
-            select(
-                ReceiptRow.id,
-                cast(local, Date),
-                Payee.name,
-                ReceiptRow.total,
-                ReceiptRow.currency,
-                ReceiptRow.status,
-            )
-            .select_from(from_receipts.outerjoin(Payee, Payee.id == ReceiptRow.payee_id))
-            .where(*shown)
-            .order_by(local.desc(), ReceiptRow.id.desc())
-            .offset(offset)
-            .limit(limit)
-        )
-        rows = [
-            HistoryRow(
-                receipt_id=receipt_id,
-                day=day,
-                store_name=store_name,
-                total=total,
-                currency=currency,
-                status=status,
-            )
-            for receipt_id, day, store_name, total, currency, status in found
-        ]
-
-        filter_name = (
-            select(Payee.name)
-            .where(Payee.id == store_id, Payee.user_id == user_id)
-            .scalar_subquery()
-            if store_id is not None
-            else null()
-        )
-        total_rows, parsed_count, earlier, later, store_name = (
-            await self._session.execute(
-                select(
-                    func.count().filter(*shown),
-                    func.count().filter(*shown, parsed),
-                    func.coalesce(func.bool_or(local < start), False),
-                    func.coalesce(func.bool_or(local >= end), False),
-                    filter_name,
-                )
-                .select_from(from_receipts)
-                .where(*mine)
-            )
-        ).one()
-        sums = await self._session.execute(
-            select(ReceiptRow.currency, func.sum(ReceiptRow.total))
-            .select_from(from_receipts)
-            .where(*shown, parsed, ReceiptRow.currency.is_not(None), ReceiptRow.total.is_not(None))
-            .group_by(ReceiptRow.currency)
-            .order_by(ReceiptRow.currency)
-        )
-        month_stores = await self._session.execute(
-            select(Payee.id, Payee.name)
-            .where(
-                Payee.user_id == user_id,
-                exists().where(
-                    ReceiptRow.payee_id == Payee.id,
-                    ReceiptPhoto.receipt_id == ReceiptRow.id,
-                    *in_month,
-                ),
-            )
-            .order_by(Payee.name, Payee.id)
-        )
-        return HistoryPage(
-            year=year,
-            month=month,
-            rows=rows,
-            total_rows=total_rows,
-            parsed_count=parsed_count,
-            totals=[CurrencyTotal(currency=c, amount=a) for c, a in sums],
-            stores=[StoreOption(store_id=i, name=n) for i, n in month_stores],
-            has_earlier=earlier,
-            has_later=later,
-            store_name=store_name,
-        )
-
-    async def spending(self, user_id: int, start: date, end: date, timezone: str) -> SpendingPeriod:
-        """Four SELECTs, whatever the number of receipts: totals per currency, item lines per
-        category, receipt totals per store, receipt totals per card.
-
-        Membership is `purchased_at` converted to `timezone` (a naive local timestamp), compared
-        with the naive local bounds. Items carry no currency: the receipt's applies.
-        """
-        local = func.timezone(timezone, ReceiptRow.purchased_at)
-        counted = (
-            ReceiptRow.user_id == user_id,
-            ReceiptRow.deleted_at.is_(None),
-            ReceiptRow.status == ReceiptStatus.PARSED.value,
-            ReceiptRow.currency.is_not(None),
-            ReceiptRow.total.is_not(None),
-            local >= datetime.combine(start, time.min),
-            local < datetime.combine(end, time.min),
-        )
-        value = func.sum(ReceiptRow.total)
-        totals = await self._session.execute(
-            select(ReceiptRow.currency, value, func.count())
-            .where(*counted)
-            .group_by(ReceiptRow.currency)
-        )
-        by_currency = {c: (t, n) for c, t, n in totals}
-
-        lines = await self._session.execute(
-            select(ReceiptRow.currency, StoreProduct.category, func.sum(ReceiptItem.line_total))
-            .select_from(ReceiptItem)
-            .join(ReceiptRow, ReceiptRow.id == ReceiptItem.receipt_id)
-            .join(StoreProduct, StoreProduct.id == ReceiptItem.store_product_id)
-            .where(*counted)
-            .group_by(ReceiptRow.currency, StoreProduct.category)
-            .having(func.coalesce(func.sum(ReceiptItem.line_total), 0) != 0)
-        )
-        categories: dict[str, list[Amount]] = {}
-        for currency, category, amount in lines:
-            categories.setdefault(currency, []).append(
-                Amount(key=category, label=category, value=amount)
-            )
-
-        shops = await self._session.execute(
-            select(ReceiptRow.currency, ReceiptRow.payee_id, func.max(Payee.name), value)
-            .select_from(ReceiptRow)
-            .outerjoin(Payee, Payee.id == ReceiptRow.payee_id)
-            .where(*counted)
-            .group_by(ReceiptRow.currency, ReceiptRow.payee_id)
-        )
-        stores: dict[str, list[Amount]] = {}
-        for currency, store_id, name, amount in shops:
-            stores.setdefault(currency, []).append(
-                Amount(
-                    key="none" if store_id is None else str(store_id),
-                    label=name or "",
-                    value=amount,
-                )
-            )
-
-        paid = await self._session.execute(
-            select(
-                ReceiptRow.currency, ReceiptRow.card_last4, func.max(ReceiptRow.card_brand), value
-            )
-            .where(*counted)
-            .group_by(ReceiptRow.currency, ReceiptRow.card_last4)
-        )
-        cards: dict[str, list[Amount]] = {}
-        for currency, last4, brand, amount in paid:
-            if last4 is None:
-                amount_line = Amount(key="cash", label="", value=amount)
-            else:
-                label = f"{brand} •{last4}" if brand else f"•{last4}"
-                amount_line = Amount(key=last4, label=label, value=amount)
-            cards.setdefault(currency, []).append(amount_line)
-
-        blocks = []
-        for currency in sorted(by_currency):
-            total, count = by_currency[currency]
-            itemised = sorted(categories.get(currency, []), key=_largest_first)
-            blocks.append(
-                CurrencyBlock(
-                    currency=currency,
-                    total=total,
-                    receipt_count=count,
-                    categories=itemised,
-                    not_itemised=total - sum((a.value for a in itemised), Decimal(0)),
-                    stores=sorted(stores.get(currency, []), key=_largest_first),
-                    cards=sorted(cards.get(currency, []), key=_largest_first),
-                )
-            )
-        return SpendingPeriod(start=start, end=end, blocks=blocks)
-
-    async def earliest_purchase(self, user_id: int, timezone: str) -> date | None:
-        return await self._session.scalar(
-            select(cast(func.min(func.timezone(timezone, ReceiptRow.purchased_at)), Date)).where(
-                ReceiptRow.user_id == user_id,
-                ReceiptRow.deleted_at.is_(None),
-                ReceiptRow.status == ReceiptStatus.PARSED.value,
-            )
-        )
-
     async def reparse_candidates(self, user_id: int, current_version: str) -> ReparseCandidates:
         mine = (ReceiptRow.user_id == user_id, ReceiptRow.deleted_at.is_(None))
         failed = await self._session.scalars(
@@ -556,7 +334,3 @@ class SqlAlchemyReceiptRepository:
             .order_by(ReceiptRow.id)
         )
         return list(found)
-
-
-def _largest_first(amount: Amount) -> tuple[Decimal, str, str]:
-    return -amount.value, amount.label, amount.key
