@@ -10,6 +10,7 @@ class MainPreview(BaseModel):
     can_delete: bool
     has_items: bool
     review_count: int
+    can_reparse: bool
 
     def to_data(self) -> dict:
         return {
@@ -17,6 +18,7 @@ class MainPreview(BaseModel):
             PreviewDataKeys.CAN_DELETE: self.can_delete,
             PreviewDataKeys.HAS_ITEMS: self.has_items,
             PreviewDataKeys.REVIEW_COUNT: self.review_count,
+            PreviewDataKeys.CAN_REPARSE: self.can_reparse,
         }
 
 

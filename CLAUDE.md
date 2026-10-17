@@ -73,6 +73,7 @@ src/
       command/             # one module per command (/start, /receipts), each exposes register_xxx(dp)
       callback/            # taps on plain buttons: receipt.py edits the current card in place or sends a fresh one; history.py edits the history message in place
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card; catch-all "send me a photo"
+      parse_task.py        # read_and_show_card: the background read (typing, parse, fresh card) shared by photo intake and the card's Re-parse
       dialog/              # common.py (TransferKeys), widgets.py (I18nText), media.py (StoredPhoto + its message manager), one folder per dialog
         receipt_card/      # dialog.py, getters.py, click_event.py, common.py, model.py, values.py (parses a typed issue value), keyboard.py (CardKeyboard: the card's plain buttons) (main, items, item, item_input, item_category, photo, delete_confirm, issue, issue_input, issue_rename, review_done)
     keyboards/receipt.py   # the card's inline keyboard, ReceiptCallback (prefix "receipt")

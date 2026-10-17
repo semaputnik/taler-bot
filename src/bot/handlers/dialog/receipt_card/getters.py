@@ -50,6 +50,7 @@ async def main_getter(
         can_delete=not card.deleted,
         has_items=card.status == "parsed" and card.item_count > 0 and not card.deleted,
         review_count=card.review_count if card.status == "parsed" and not card.deleted else 0,
+        can_reparse=card.can_reparse,
     ).to_data()
 
 
@@ -368,7 +369,7 @@ def _text(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
         return i18n.get("card-deleted")
     match card.status:
         case "parsed":
-            return render.header(card, i18n, tz)
+            return _with_error(render.header(card, i18n, tz), card, i18n)
         case "not_receipt":
             status = i18n.get("receipt-not-a-receipt")
         case "failed":
@@ -384,4 +385,13 @@ def _text(card: ReceiptCard, i18n: TranslatorRunner, tz: ZoneInfo) -> str:
         case _:
             status = i18n.get(_STATUS_KEYS[card.status])
     received = card.received_at.astimezone(tz).strftime(render.DATE_FORMAT)
-    return "\n".join([status, i18n.get("card-received", date=received)])
+    lines = [status, i18n.get("card-received", date=received)]
+    return _with_error("\n".join(lines), card, i18n)
+
+
+def _with_error(text: str, card: ReceiptCard, i18n: TranslatorRunner) -> str:
+    """The reason the last read failed, under the card's text (a failed receipt, or a receipt
+    that kept its previous reading when a re-parse failed)."""
+    if not card.error_message:
+        return text
+    return f"{text}\n\n{i18n.get('card-error', reason=escape(card.error_message))}"
