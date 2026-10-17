@@ -122,6 +122,7 @@ history-summary = { $count ->
     [one] 1 receipt
    *[other] { $count } receipts
   } · { $totals }
+history-summary-none = No parsed receipts
 history-empty = No receipts this month.
 history-row = • { $day } { $store } · { $amount }
 history-row-status = • { $day } { $store } · { $status }

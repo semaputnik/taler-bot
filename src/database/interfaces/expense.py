@@ -30,14 +30,19 @@ class ExpenseRepository(Protocol):
         user_id: int,
         year: int,
         month: int,
+        timezone: str,
         payee_id: int | None = None,
         offset: int = 0,
         limit: int = 8,
     ) -> HistoryPage:
-        """One page of the user's not deleted expenses of a month, newest first.
+        """One page of the user's month, newest first: the not deleted expenses, and the not
+        deleted receipts that have no live expense (failed, not a receipt, duplicate, pending,
+        parsing) as rows without an expense.
 
-        An expense belongs to the month of its `spent_at` (already the user's local day). A
-        fixed number of statements, whatever the month's size.
+        An expense belongs to the month of its `spent_at` (already the user's local day); a
+        receipt without an expense to the month of `coalesce(purchased_at, received_at)` in
+        `timezone`. Totals count the expenses only. A fixed number of statements, whatever the
+        month's size.
         """
         ...
 

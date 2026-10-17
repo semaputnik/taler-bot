@@ -11,23 +11,26 @@ from pydantic import BaseModel, ConfigDict
 
 
 class HistoryRow(BaseModel):
-    """One expense of the month. `day` is the expense's local day.
+    """One row of the month: an expense, or a receipt that has no expense. `day` is the local
+    day.
 
     A row backed by a receipt carries `receipt_id` and the receipt's `status`, so the history
-    can show a status icon and open the receipt card; a row without a receipt has `has_receipt`
-    false and both empty.
+    can show a status icon and open the receipt card; an expense without a receipt has
+    `has_receipt` false and both empty. A receipt that is not a purchase (failed, not a receipt,
+    duplicate, pending, parsing) has no expense: `expense_id`, `amount`, `currency` and
+    `category` are empty and `has_receipt` is true.
     """
 
     model_config = ConfigDict(frozen=True)
 
-    expense_id: int
+    expense_id: int | None
     receipt_id: int | None
     has_receipt: bool
     day: date
     payee_name: str | None
-    amount: Decimal
-    currency: str
-    category: str  # an `ExpenseCategory` value
+    amount: Decimal | None
+    currency: str | None
+    category: str | None  # an `ExpenseCategory` value
     status: str | None
 
 
@@ -46,14 +49,15 @@ class PayeeOption(BaseModel):
 
 
 class HistoryPage(BaseModel):
-    """One page of one month of a user's expenses, with what the header and the buttons need.
+    """One page of one month of a user's expenses and receipts without an expense, with what
+    the header and the buttons need.
 
     `rows` is the requested page of the month under the payee filter, newest first;
-    `total_rows` counts all of the month's rows under the filter (for paging). `totals` (one
-    entry per currency) sum the same rows. `payees` are the payees with an expense in the month,
-    whatever the filter. `has_earlier` / `has_later` say whether any expense of the user lies
-    before / after the month, whatever the filter. `payee_name` is the filter's payee, None
-    without a filter or for a payee that is not the user's.
+    `total_rows` counts all of the month's rows under the filter (for paging), `expense_count`
+    those that are expenses. `totals` (one entry per currency) sum the expenses only. `payees`
+    are the payees with a row in the month, whatever the filter. `has_earlier` / `has_later` say
+    whether any row of the user lies before / after the month, whatever the filter. `payee_name`
+    is the filter's payee, None without a filter or for a payee that is not the user's.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -62,6 +66,7 @@ class HistoryPage(BaseModel):
     month: int
     rows: list[HistoryRow]
     total_rows: int
+    expense_count: int
     totals: list[CurrencyTotal]
     payees: list[PayeeOption]
     has_earlier: bool

@@ -23,6 +23,7 @@ from tests.domain.builders import parse, photo, product
 from tests.helpers import MakeUow, add_receipt, add_user, seed_catalog
 
 D = Decimal
+MADRID = "Europe/Madrid"
 SPENDING_STATEMENTS = 5  # totals, expense categories, product categories, payees, sources
 HISTORY_STATEMENTS = 4  # rows, aggregates, totals per currency, the month's payees
 _ids = count(1)
@@ -117,7 +118,7 @@ async def expense_id_of(make_uow: MakeUow, receipt: Receipt) -> int:
 
 async def october(make_uow: MakeUow, *, user_id: int = 1, **kwargs) -> HistoryPage:
     async with make_uow() as uow:
-        return await uow.expenses.history(user_id, 2026, 10, **kwargs)
+        return await uow.expenses.history(user_id, 2026, 10, MADRID, **kwargs)
 
 
 async def payee_id_of(make_uow: MakeUow, key: str) -> int:
@@ -136,7 +137,7 @@ async def test_an_expense_lands_in_the_month_of_its_spent_at_day(make_uow):
     page = await october(make_uow)
 
     assert [r.receipt_id for r in page.rows] == [inside.id]
-    assert (page.year, page.month, page.total_rows) == (2026, 10, 1)
+    assert (page.year, page.month, page.total_rows, page.expense_count) == (2026, 10, 1, 1)
 
 
 async def test_the_day_is_the_users_local_day_of_the_purchase(make_uow):
@@ -153,7 +154,7 @@ async def test_the_day_is_the_users_local_day_of_the_purchase(make_uow):
 
 async def _history(make_uow: MakeUow, year: int, month: int) -> HistoryPage:
     async with make_uow() as uow:
-        return await uow.expenses.history(1, year, month)
+        return await uow.expenses.history(1, year, month, MADRID)
 
 
 async def test_a_receipt_row_carries_the_receipt_the_payee_the_amount_and_the_status(make_uow):
@@ -220,17 +221,131 @@ async def test_deleted_expenses_are_left_out_of_rows_counts_totals_and_payees(ma
     assert (page.has_earlier, page.has_later) == (False, False)
 
 
-async def test_a_duplicate_or_unread_receipt_has_no_expense_so_no_row(make_uow):
-    original = await bought(make_uow, at(4, month=9))
-    await bought(make_uow, at(4), duplicate_of=original.id)
-    async with make_uow() as uow:
-        failed = Receipt.start(1, replace(photo("fail"), received_at=at(5)))
-        failed.mark_parsing()
-        failed.mark_failed("timeout")
-        await uow.receipts.add(failed)
-        await uow.commit()
+async def unread(
+    make_uow: MakeUow,
+    received_at: datetime,
+    *,
+    status: str = "failed",
+    deleted: bool = False,
+    user_id: int = 1,
+) -> Receipt:
+    """A stored receipt that is not a purchase: it has no expense."""
+    await add_user(make_uow, user_id)
+    receipt = Receipt.start(user_id, replace(photo(f"u{next(_ids)}"), received_at=received_at))
+    if status == "failed":
+        receipt.mark_parsing()
+        receipt.mark_failed("timeout")
+    elif status == "parsing":
+        receipt.mark_parsing()
+    if deleted:
+        receipt.soft_delete()
+    return await add_receipt(make_uow, receipt, user_id=user_id)
 
-    assert (await october(make_uow)).rows == []
+
+async def test_a_receipt_without_an_expense_is_a_row_of_its_month_with_its_status(make_uow):
+    original = await bought(make_uow, at(4, month=9))
+    duplicate = await bought(make_uow, at(4), duplicate_of=original.id)
+    failed = await unread(make_uow, at(5))
+    pending = await unread(make_uow, at(6), status="pending")
+    parsing = await unread(make_uow, at(7), status="parsing")
+
+    page = await october(make_uow)
+
+    assert [(r.receipt_id, r.status) for r in page.rows] == [
+        (parsing.id, "parsing"),
+        (pending.id, "pending"),
+        (failed.id, "failed"),
+        (duplicate.id, "duplicate"),
+    ]
+    assert all(r.expense_id is None and r.has_receipt for r in page.rows)
+    assert all(r.amount is None and r.currency is None and r.category is None for r in page.rows)
+    assert (page.total_rows, page.expense_count) == (4, 0)
+    assert page.totals == []
+
+
+async def test_a_receipt_row_without_an_expense_shows_the_payee_of_its_parse(make_uow):
+    original = await bought(make_uow, at(4, month=9), store="lidl")
+    duplicate = await bought(make_uow, at(4), store="lidl", duplicate_of=original.id)
+
+    (row,) = (await october(make_uow)).rows
+
+    assert (row.receipt_id, row.payee_name, row.day) == (duplicate.id, "Lidl", date(2026, 10, 4))
+
+
+async def test_a_receipt_without_an_expense_is_placed_by_its_purchase_or_photo_time_locally(
+    make_uow,
+):
+    # No purchase time: the photo's received_at, in the user's time zone (00:30 on 1 November).
+    late = await unread(make_uow, datetime(2026, 10, 31, 23, 30, tzinfo=UTC))
+    kept = await unread(make_uow, datetime(2026, 10, 31, 22, 30, tzinfo=UTC))
+
+    november = await _history(make_uow, 2026, 11)
+    october_page = await october(make_uow)
+
+    assert [(r.receipt_id, r.day) for r in october_page.rows] == [(kept.id, date(2026, 10, 31))]
+    assert [(r.receipt_id, r.day) for r in november.rows] == [(late.id, date(2026, 11, 1))]
+
+
+async def test_deleted_receipts_without_an_expense_are_left_out(make_uow):
+    kept = await unread(make_uow, at(5))
+    await unread(make_uow, at(6), deleted=True)
+
+    page = await october(make_uow)
+
+    assert [r.receipt_id for r in page.rows] == [kept.id]
+    assert page.total_rows == 1
+
+
+async def test_receipt_rows_and_expense_rows_mix_newest_day_first_expenses_first_on_a_day(
+    make_uow,
+):
+    old = await bought(make_uow, at(3))
+    failed = await unread(make_uow, at(9))
+    same_day = await bought(make_uow, at(9))
+    typed_later = await typed(make_uow, date(2026, 10, 20))
+
+    page = await october(make_uow)
+
+    assert [(r.expense_id, r.receipt_id) for r in page.rows] == [
+        (typed_later.id, None),
+        (await expense_id_of(make_uow, same_day), same_day.id),
+        (None, failed.id),
+        (await expense_id_of(make_uow, old), old.id),
+    ]
+    assert (page.total_rows, page.expense_count) == (4, 3)
+    assert page.totals == [CurrencyTotal(currency="EUR", amount=D("40.00"))]
+
+
+async def test_the_payee_filter_applies_to_receipt_rows_without_an_expense_too(make_uow):
+    shop = await bought(make_uow, at(1, month=9), store="lidl")
+    other = await bought(make_uow, at(1, month=9), store="aldi")
+    kept = await bought(make_uow, at(4), store="lidl", duplicate_of=shop.id)
+    await bought(make_uow, at(5), store="aldi", duplicate_of=other.id)
+    await unread(make_uow, at(6))
+    lidl = await payee_id_of(make_uow, "lidl")
+
+    page = await october(make_uow, payee_id=lidl)
+
+    assert [r.receipt_id for r in page.rows] == [kept.id]
+    assert (page.total_rows, page.payee_name) == (1, "Lidl")
+    assert sorted(p.name for p in page.payees) == ["Aldi", "Lidl"]
+
+
+async def test_has_earlier_and_has_later_count_receipts_without_an_expense(make_uow):
+    await bought(make_uow, at(10))
+    await unread(make_uow, at(20, month=8))
+    await unread(make_uow, at(2, month=12))
+
+    page = await october(make_uow)
+
+    assert (page.has_earlier, page.has_later) == (True, True)
+
+
+async def test_another_users_receipts_without_an_expense_are_never_shown(make_uow):
+    await unread(make_uow, at(5))
+    await add_user(make_uow, 2)
+
+    assert (await october(make_uow, user_id=2)).rows == []
 
 
 async def test_rows_are_newest_day_first_with_the_id_breaking_ties(make_uow):
@@ -350,6 +465,7 @@ async def test_an_empty_month_is_an_empty_page(make_uow):
         month=10,
         rows=[],
         total_rows=0,
+        expense_count=0,
         totals=[],
         payees=[],
         has_earlier=False,
@@ -362,6 +478,7 @@ async def test_an_empty_month_is_an_empty_page(make_uow):
 async def test_history_runs_the_same_statements_whatever_the_month_size(make_uow, statements, size):
     for n in range(size):
         await bought(make_uow, at(1 + n % 28), store=f"shop{n % 4}")
+        await unread(make_uow, at(1 + n % 28))
     shop = await payee_id_of(make_uow, "shop1")
     statements.clear()
 

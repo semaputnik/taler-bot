@@ -2,13 +2,29 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, delete, exists, func, insert, null, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Date,
+    Integer,
+    Numeric,
+    String,
+    cast,
+    delete,
+    exists,
+    func,
+    insert,
+    literal,
+    null,
+    select,
+    union_all,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.mapping import expense as mapping
 from src.database.models import Expense as ExpenseRow
-from src.database.models import ExpenseTag, Payee, ReceiptItem, StoreProduct, Tag
+from src.database.models import ExpenseTag, Payee, ReceiptItem, ReceiptPhoto, StoreProduct, Tag
 from src.database.models import PaymentSource as SourceRow
 from src.database.models import Receipt as ReceiptRow
 from src.database.read_models import (
@@ -75,34 +91,88 @@ class SqlAlchemyExpenseRepository:
         user_id: int,
         year: int,
         month: int,
+        timezone: str,
         payee_id: int | None = None,
         offset: int = 0,
         limit: int = 8,
     ) -> HistoryPage:
         """Four SELECTs, whatever the month's size: the rows, the counts (with the filter's
-        payee name), the totals, the payees."""
+        payee name), the totals, the payees.
+
+        The rows are the user's live expenses (by `spent_at`) and the live receipts that have no
+        live expense (by `coalesce(purchased_at, received_at)` converted to `timezone`), as one
+        union; the totals are over the expenses only.
+        """
         start = date(year, month, 1)
         end = date(year + (month == 12), month % 12 + 1, 1)
         mine = (ExpenseRow.user_id == user_id, ExpenseRow.deleted_at.is_(None))
         in_month = (*mine, ExpenseRow.spent_at >= start, ExpenseRow.spent_at < end)
-        shown = (*in_month, ExpenseRow.payee_id == payee_id) if payee_id is not None else in_month
+        expense_shown = (
+            (*in_month, ExpenseRow.payee_id == payee_id) if payee_id is not None else in_month
+        )
+
+        local = func.timezone(
+            timezone, func.coalesce(ReceiptRow.purchased_at, ReceiptPhoto.received_at)
+        )
+        expense_rows = (
+            select(
+                ExpenseRow.id.label("expense_id"),
+                ExpenseRow.receipt_id.label("receipt_id"),
+                ExpenseRow.spent_at.label("day"),
+                literal(0).label("kind"),
+                ExpenseRow.payee_id.label("payee_id"),
+                ExpenseRow.amount.label("amount"),
+                ExpenseRow.currency.label("currency"),
+                ExpenseRow.category.label("category"),
+                ReceiptRow.status.label("status"),
+                ExpenseRow.id.label("sort_id"),
+            )
+            .select_from(ExpenseRow)
+            .outerjoin(ReceiptRow, ReceiptRow.id == ExpenseRow.receipt_id)
+            .where(*mine)
+        )
+        receipt_rows = (
+            select(
+                cast(null(), Integer).label("expense_id"),
+                ReceiptRow.id.label("receipt_id"),
+                cast(local, Date).label("day"),
+                literal(1).label("kind"),
+                ReceiptRow.payee_id.label("payee_id"),
+                cast(null(), Numeric(12, 2)).label("amount"),
+                cast(null(), String).label("currency"),
+                cast(null(), String).label("category"),
+                ReceiptRow.status.label("status"),
+                ReceiptRow.id.label("sort_id"),
+            )
+            .select_from(
+                ReceiptRow.__table__.join(ReceiptPhoto, ReceiptPhoto.receipt_id == ReceiptRow.id)
+            )
+            .where(
+                ReceiptRow.user_id == user_id,
+                ReceiptRow.deleted_at.is_(None),
+                ~exists().where(
+                    ExpenseRow.receipt_id == ReceiptRow.id, ExpenseRow.deleted_at.is_(None)
+                ),
+            )
+        )
+        union = union_all(expense_rows, receipt_rows).subquery("history_rows")
+        in_range = (union.c.day >= start, union.c.day < end)
+        shown = (*in_range, union.c.payee_id == payee_id) if payee_id is not None else in_range
 
         found = await self._session.execute(
             select(
-                ExpenseRow.id,
-                ExpenseRow.receipt_id,
-                ExpenseRow.spent_at,
+                union.c.expense_id,
+                union.c.receipt_id,
+                union.c.day,
                 Payee.name,
-                ExpenseRow.amount,
-                ExpenseRow.currency,
-                ExpenseRow.category,
-                ReceiptRow.status,
+                union.c.amount,
+                union.c.currency,
+                union.c.category,
+                union.c.status,
             )
-            .select_from(ExpenseRow)
-            .outerjoin(Payee, Payee.id == ExpenseRow.payee_id)
-            .outerjoin(ReceiptRow, ReceiptRow.id == ExpenseRow.receipt_id)
+            .select_from(union.outerjoin(Payee, Payee.id == union.c.payee_id))
             .where(*shown)
-            .order_by(ExpenseRow.spent_at.desc(), ExpenseRow.id.desc())
+            .order_by(union.c.day.desc(), union.c.kind, union.c.sort_id.desc())
             .offset(offset)
             .limit(limit)
         )
@@ -128,19 +198,20 @@ class SqlAlchemyExpenseRepository:
             if payee_id is not None
             else null()
         )
-        total_rows, earlier, later, payee_name = (
+        total_rows, expense_count, earlier, later, payee_name = (
             await self._session.execute(
                 select(
                     func.count().filter(*shown),
-                    func.coalesce(func.bool_or(ExpenseRow.spent_at < start), False),
-                    func.coalesce(func.bool_or(ExpenseRow.spent_at >= end), False),
+                    func.count().filter(*shown, union.c.expense_id.is_not(None)),
+                    func.coalesce(func.bool_or(union.c.day < start), False),
+                    func.coalesce(func.bool_or(union.c.day >= end), False),
                     filter_name,
-                ).where(*mine)
+                ).select_from(union)
             )
         ).one()
         sums = await self._session.execute(
             select(ExpenseRow.currency, func.sum(ExpenseRow.amount))
-            .where(*shown)
+            .where(*expense_shown)
             .group_by(ExpenseRow.currency)
             .order_by(ExpenseRow.currency)
         )
@@ -148,7 +219,7 @@ class SqlAlchemyExpenseRepository:
             select(Payee.id, Payee.name)
             .where(
                 Payee.user_id == user_id,
-                exists().where(ExpenseRow.payee_id == Payee.id, *in_month),
+                exists().where(union.c.payee_id == Payee.id, *in_range),
             )
             .order_by(Payee.name, Payee.id)
         )
@@ -157,6 +228,7 @@ class SqlAlchemyExpenseRepository:
             month=month,
             rows=rows,
             total_rows=total_rows,
+            expense_count=expense_count,
             totals=[CurrencyTotal(currency=c, amount=a) for c, a in sums],
             payees=[PayeeOption(payee_id=i, name=n) for i, n in month_payees],
             has_earlier=earlier,

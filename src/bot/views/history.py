@@ -52,8 +52,10 @@ def title(page: HistoryPage, i18n: TranslatorRunner) -> str:
 def summary(page: HistoryPage, i18n: TranslatorRunner) -> str:
     if page.total_rows == 0:
         return i18n.get("history-empty")
+    if page.expense_count == 0:
+        return i18n.get("history-summary-none")
     totals = ", ".join(render.money(t.amount, i18n, t.currency) for t in page.totals)
-    return i18n.get("history-summary", count=page.total_rows, totals=totals)
+    return i18n.get("history-summary", count=page.expense_count, totals=totals)
 
 
 def show_text(page: HistoryPage, i18n: TranslatorRunner) -> str:

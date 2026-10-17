@@ -1,6 +1,7 @@
 """ExpenseService through the Unit of Work on real Postgres: the expense actions, history and
 spending over expenses. Receipts come with their expenses (`tests.helpers.add_receipt`)."""
 
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -205,6 +206,26 @@ async def test_history_shows_the_day_in_the_users_time_zone_at_the_time_of_writi
     # The first receipt was written for a Madrid user, the second for a UTC one.
     assert [r.day for r in november.rows] == [date(2026, 11, 1)]
     assert [r.day for r in october.rows] == [date(2026, 10, 31)]
+
+
+async def test_history_lists_a_failed_receipt_by_the_users_local_day_without_counting_it(
+    service, make_uow
+):
+    failed = Receipt.start(
+        1, replace(photo("failed-late"), received_at=datetime(2026, 10, 31, 23, 30, tzinfo=UTC))
+    )
+    failed.mark_parsing()
+    failed.mark_failed("timeout")
+    failed = await add_receipt(make_uow, failed)
+
+    november = await service.history(1, 2026, 11)
+    october = await service.history(1, 2026, 10)
+
+    assert [(r.receipt_id, r.expense_id, r.status) for r in november.rows] == [
+        (failed.id, None, "failed")
+    ]
+    assert (november.total_rows, november.expense_count, november.totals) == (1, 0, [])
+    assert october.rows == []
 
 
 async def test_history_of_an_unknown_user_is_refused(service):

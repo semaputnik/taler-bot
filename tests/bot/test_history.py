@@ -109,14 +109,14 @@ async def test_receipts_shows_the_current_month_with_rows_count_and_total(harnes
     ]
 
 
-async def test_a_failed_receipt_has_no_expense_so_no_row(harness, make_uow):
+async def test_a_failed_receipt_row_shows_the_cross_and_no_amount(harness, make_uow):
     await bought(make_uow, 14)
     await failed(make_uow, 11)
 
     await harness.send_text("/receipts", user_id=USER)
 
     month = f"{this_month()[1]:02d}"
-    assert not [t for t in harness.button_texts() if t.startswith(f"• 11.{month}")]
+    assert f"• 11.{month} Unknown store · ❌" in harness.button_texts()
     assert harness.last_text().endswith("1 receipt · 47.85 €")
 
 
@@ -235,12 +235,12 @@ async def test_an_empty_month_says_so_and_still_offers_the_arrow(harness, make_u
     assert not [b for b in harness.button_texts() if b.startswith("•")]
 
 
-async def test_a_month_with_only_a_failed_receipt_is_empty(harness, make_uow):
+async def test_a_month_with_only_a_failed_receipt_has_no_total(harness, make_uow):
     await failed(make_uow, 11)
 
     await harness.send_text("/receipts", user_id=USER)
 
-    assert harness.last_text() == f"{title()}\n{i18n.get('history-empty')}"
+    assert harness.last_text() == f"{title()}\n{i18n.get('history-summary-none')}"
 
 
 async def test_a_row_tap_sends_a_fresh_card_and_the_history_keeps_its_buttons(harness, make_uow):
@@ -280,7 +280,7 @@ async def test_a_strangers_receipts_gets_no_reply(harness):
     assert harness.session.calls == []
 
 
-async def test_duplicate_and_pending_receipts_have_no_expense_so_no_rows(harness, make_uow):
+async def test_duplicate_and_pending_rows_show_their_icons(harness, make_uow):
     original = await bought(make_uow, 14)
     year, month = this_month()
     n = next(_ids)
@@ -296,6 +296,6 @@ async def test_duplicate_and_pending_receipts_have_no_expense_so_no_rows(harness
     await harness.send_text("/receipts", user_id=USER)
 
     texts = harness.button_texts()
-    assert not any(t.endswith("· ♻️") or t.endswith("· ⏳") for t in texts)
-    assert len([t for t in texts if t.startswith("• ")]) == 1
+    assert any(t.endswith("· ♻️") for t in texts)
+    assert any(t.endswith("· ⏳") for t in texts)
     assert (year, month) == this_month()

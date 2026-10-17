@@ -80,7 +80,8 @@ class ExpenseService:
     async def history(
         self, user_id: int, year: int, month: int, payee_id: int | None = None, page: int = 0
     ) -> HistoryPage:
-        """One page of the user's expenses of a month, newest first.
+        """One page of the user's month, newest first: the expenses, and the receipts that have
+        no expense (failed, not a receipt, duplicate, pending, parsing) so they can be reached.
 
         A page past the end is the last page. The current month (and later ones) have no later
         month to go to, whatever expenses are dated ahead. A payee that is not the user's
@@ -97,6 +98,7 @@ class ExpenseService:
                     user_id,
                     year,
                     month,
+                    timezone,
                     payee_id=payee_id,
                     offset=number * PAGE_SIZE,
                     limit=PAGE_SIZE,
