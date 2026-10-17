@@ -118,10 +118,10 @@ class Expense:
         tags: list[str] | None = None,
     ) -> Expense:
         """An expense typed by the user: the amount must be above zero."""
-        _require_positive(amount)
+        amount = _require_positive(amount)
         return cls(
             user_id=user_id,
-            amount=_money(amount),
+            amount=amount,
             currency=currency,
             spent_at=spent_at,
             category=category,
@@ -199,8 +199,7 @@ class Expense:
 
     def set_amount(self, amount: Decimal) -> None:
         self._ensure_editable("amount")
-        _require_positive(amount)
-        self.amount = _money(amount)
+        self.amount = _require_positive(amount)
 
     def set_payee(self, payee_key: str | None) -> None:
         self._ensure_editable("payee")
@@ -242,6 +241,9 @@ class Expense:
             raise ExpenseFollowsReceipt(f"the {what} comes from the receipt; correct the receipt")
 
 
-def _require_positive(amount: Decimal) -> None:
-    if amount <= 0:
+def _require_positive(amount: Decimal) -> Decimal:
+    """The amount in cents; a sum that rounds to zero is refused too."""
+    cents = _money(amount)
+    if cents <= 0:
         raise InvalidExpense("an amount must be above zero")
+    return cents

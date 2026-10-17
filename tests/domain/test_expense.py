@@ -79,7 +79,7 @@ def test_a_manual_expense_keeps_what_was_typed():
     assert (expense.id, expense.deleted_at) == (None, None)
 
 
-@pytest.mark.parametrize("amount", ["0", "0.00", "-1", "-0.01"])
+@pytest.mark.parametrize("amount", ["0", "0.00", "-1", "-0.01", "0.004"])
 def test_a_manual_expense_needs_a_positive_amount(amount):
     with pytest.raises(InvalidExpense):
         manual(amount=D(amount))
@@ -249,7 +249,7 @@ def test_set_payee_and_source_accept_none():
     assert (expense.payee_key, expense.payment_source_id) == (None, None)
 
 
-@pytest.mark.parametrize("amount", ["0", "-3"])
+@pytest.mark.parametrize("amount", ["0", "-3", "0.004"])
 def test_set_amount_needs_a_positive_amount(amount):
     expense = manual()
 

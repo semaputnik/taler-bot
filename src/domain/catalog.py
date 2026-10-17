@@ -15,15 +15,19 @@ the repository updates the changed ones on `save`. The repository calls `mark_sa
 afterwards.
 
 `payment_sources` is keyed by the source's id once it is stored. A source that is new has no
-id yet, so it sits under a temporary key (`"cash"`, or `"card:<last4>"`) until the repository
-assigns the id with `assign_source_id`, which moves it under the id. Read `source.id` after
-saving the catalog, never the temporary key.
+id yet, so it sits under a temporary key (`"cash"`, `"card:<last4>"`, or `"new-card:<name>"` for
+a card added by hand) until the repository assigns the id with `assign_source_id`, which moves
+it under the id. Read `source.id` after saving the catalog, never the temporary key.
+
+Source names are unique per user ignoring case (the database has the same index); a hand-added
+card has no brand and no last four digits, so a receipt never links to it.
 """
 
 import re
 from dataclasses import dataclass, field
 
 from src.domain.enums import PaymentSourceKind, ProductCategory
+from src.domain.slug import slug
 from src.exception import (
     InvalidEdit,
     InvalidPaymentSource,
@@ -105,6 +109,15 @@ class Catalog:
             self.payees[payee_key] = payee
         return payee
 
+    def ensure_payee_named(self, name: str) -> Payee:
+        """The payee a user typed: keyed by the slug of the name, so "mercadona" and "Mercadona"
+        are one payee. An existing payee keeps its name."""
+        name = name.strip()
+        payee_key = slug(name)
+        if not payee_key:
+            raise InvalidEdit("a payee name needs letters or digits")
+        return self.ensure_payee(payee_key, name)
+
     def has_catalog(self, payee_key: str) -> bool:
         """True for a payee with products: a store."""
         return any(p.payee_key == payee_key for p in self.products.values())
@@ -141,6 +154,17 @@ class Catalog:
         self.payment_sources[_CASH_KEY] = source
         return source
 
+    def add_card(self, name: str) -> PaymentSource:
+        """A card the user added by hand: no brand, no last four digits, a name that no other
+        source of the user has (ignoring case)."""
+        name = name.strip()
+        if not name:
+            raise InvalidPaymentSource("a card needs a name")
+        self._ensure_name_free(name)
+        source = PaymentSource(kind=PaymentSourceKind.CARD, name=name)
+        self.payment_sources[f"new-card:{name.lower()}"] = source
+        return source
+
     def source_for(self, card_brand: str | None, card_last4: str | None) -> PaymentSource:
         """What a receipt was paid with: the card of its printed ending, else cash."""
         if card_last4:
@@ -157,6 +181,7 @@ class Catalog:
         name = name.strip()
         if not name:
             raise InvalidEdit("a payment source name cannot be empty")
+        self._ensure_name_free(name, besides=source)
         source.name = name
         self._renamed_sources[source_id] = source
         return source
@@ -170,6 +195,12 @@ class Catalog:
                     self._renamed_sources[source_id] = self._renamed_sources.pop(key)
         source.id = source_id
         self.payment_sources[source_id] = source
+
+    def _ensure_name_free(self, name: str, besides: PaymentSource | None = None) -> None:
+        taken = name.lower()
+        for other in self.payment_sources.values():
+            if other is not besides and other.name.lower() == taken:
+                raise InvalidPaymentSource(f"a payment source named {other.name!r} exists")
 
     # --- products ----------------------------------------------------------------------
 

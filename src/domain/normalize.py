@@ -6,7 +6,6 @@ Rules run in the same order as the JavaScript, so the two can be read side by si
 """
 
 import re
-import unicodedata
 from collections.abc import Collection, Mapping
 from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
@@ -16,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 from src.domain.enums import IssueSeverity, IssueSource, ProductCategory
 from src.domain.parse import Parse, ParsedIssue, ParsedItem
+from src.domain.slug import slug, strip
 from src.exception import InvalidReceiptData
 
 # Bump whenever the prompt, the schema, the model or this module changes (n8n was 2026-10-15.1).
@@ -53,17 +53,6 @@ NAME_NOTES = frozenset({"unknown_abbreviation", "ambiguous"})
 LENIENT_DATETIME = re.compile(
     r"\s*(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*"
 )
-
-
-def strip(s: Any) -> str:
-    """Remove accents."""
-    text = "" if s is None else str(s)
-    return "".join(c for c in unicodedata.normalize("NFD", text) if not "̀" <= c <= "ͯ")
-
-
-def slug(s: Any) -> str:
-    text = strip(s).lower().replace("&", " and ")
-    return re.sub(r"[^a-z0-9а-яё]+", "-", text).strip("-")
 
 
 def clean(s: Any) -> str | None:
