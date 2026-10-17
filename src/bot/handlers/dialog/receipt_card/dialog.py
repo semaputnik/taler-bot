@@ -5,6 +5,7 @@ from aiogram_dialog.widgets.kbd import Button, Group, Row, ScrollingGroup, Selec
 from aiogram_dialog.widgets.media import DynamicMedia
 from aiogram_dialog.widgets.text import Const, Format
 
+from src.bot.handlers.dialog.cards import PlainKeyboardFactory
 from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.handlers.dialog.receipt_card import click_event
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewDataKeys
@@ -21,7 +22,7 @@ from src.bot.handlers.dialog.receipt_card.getters import (
     photo_getter,
     review_done_getter,
 )
-from src.bot.handlers.dialog.receipt_card.keyboard import CardKeyboard, PlainKeyboardFactory
+from src.bot.handlers.dialog.receipt_card.keyboard import receipt_card_keyboard
 from src.bot.handlers.dialog.widgets import I18nText
 from src.bot.states.receipt_card import ReceiptCardSG
 
@@ -49,7 +50,7 @@ def create_receipt_card_dialog() -> Dialog:
     return Dialog(
         Window(
             Format(f"{{{PreviewDataKeys.TEXT}}}"),
-            CardKeyboard(),
+            receipt_card_keyboard(),
             getter=main_getter,
             markup_factory=PlainKeyboardFactory(),
             state=ReceiptCardSG.main,
