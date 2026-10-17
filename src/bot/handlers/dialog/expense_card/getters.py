@@ -4,7 +4,7 @@ from aiogram_dialog import DialogManager
 from fluentogram import TranslatorRunner
 
 from src.bot import render
-from src.bot.handlers.dialog import pickers
+from src.bot.handlers.dialog import pickers, tags
 from src.bot.handlers.dialog.expense_card.common import DialogDataKeys, PreviewDataKeys
 from src.exception import ExpenseNotFound
 from src.services.container import Services
@@ -89,10 +89,8 @@ async def tags_getter(
     card = await load_card(dialog_manager, services, user)
     if card is None:
         return _data(i18n.get("expense-deleted"))
-    tags = " ".join(tag for tag in map(render.hashtag, card.tags) if tag)
-    key = "expense-edit-tags"
-    text = i18n.get(key, tags=tags or i18n.get("item-not-specified"))
-    return _data(_with_error(text, key, dialog_manager, i18n))
+    refused = bool(dialog_manager.dialog_data.get(DialogDataKeys.INPUT_ERROR))
+    return tags.prompt_data(card.tags, i18n, refused=refused)
 
 
 async def rename_getter(
