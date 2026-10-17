@@ -7,7 +7,12 @@ from src.config.bot import BotConfig
 from src.config.database import DatabaseConfig
 from src.config.llm import LLMConfig
 from src.config.settings import Settings
+from src.domain.receipt import Receipt
+from src.services.container import Services
 from tests.bot.conftest import RecordingSession
+from tests.domain.builders import photo
+from tests.helpers import add_allowed_user
+from tests.stubs import StubReceiptParser
 
 
 async def test_lifespan_closes_the_bot_session_on_exit():
@@ -101,3 +106,32 @@ async def test_lifespan_with_a_pending_task_finishes_within_the_timeout(monkeypa
         await asyncio.sleep(0)
 
     assert cancelled == [True]
+
+
+async def test_run_recovers_receipts_left_parsing_before_polling_starts(make_uow, tmp_storage):
+    await add_allowed_user(make_uow, 1)
+    async with make_uow() as uow:
+        receipt = await uow.receipts.add(Receipt.start(1, photo("stuck")))
+        receipt.mark_parsing()
+        await uow.receipts.save(receipt)
+        await uow.commit()
+    settings = Settings(
+        _env_file=None,
+        bot=BotConfig(token="123456:TEST"),
+        database=DatabaseConfig(url="postgresql+asyncpg://u:p@localhost:1/db"),
+        llm=LLMConfig(api_key="x"),
+    )
+    app = App(settings, bot_session=RecordingSession())
+    app.services = Services.build(make_uow, storage=tmp_storage, parser=StubReceiptParser())
+    seen = []
+
+    async def polling(bot, **kwargs) -> None:
+        async with make_uow() as uow:
+            stored = await uow.receipts.get(receipt.id)
+        seen.append((stored.status, stored.error_message))
+
+    app.dispatcher.start_polling = polling
+
+    await app.run()
+
+    assert seen == [("failed", "interrupted")]

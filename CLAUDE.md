@@ -183,6 +183,16 @@ the history dialog.
   2. `ReceiptService.parse` runs as a background task (`asyncio.create_task`, with a reference
      kept and errors logged). It calls the LLM with no transaction open, then writes the
      result in a new UoW and sends the summary.
+- **A re-parse is the same two Units of Work.** `ReceiptService.parse` reads a `parsed`,
+  `failed` or `not_receipt` receipt again exactly like a first photo. A failed re-read leaves
+  the previous parse, items, issues and resolutions alone; `Receipt.mark_failed` restores the
+  status by data (a parse that is a receipt: `parsed`; one that is not: `not_receipt`; no
+  parse: `failed`) and records `error_message`. `reparse_many` calls `parse` once per
+  receipt, so the per-user lock is released between receipts and a photo intake can slip in.
+- **Start-up recovery.** A read cut off by a stop leaves its receipt in `parsing`. `App.run`
+  calls `ReceiptService.recover_interrupted()` before polling: every `parsing` receipt (all
+  users) gets `recover_interrupted()` (same restore rule, reason "interrupted") in one Unit
+  of Work.
 - Everything is async. Never block the event loop: no `time.sleep` (use `asyncio.sleep`),
   and file I/O goes through `asyncio.to_thread`.
 - Getters must not query in a loop (N+1). Load what a window needs in one repository
