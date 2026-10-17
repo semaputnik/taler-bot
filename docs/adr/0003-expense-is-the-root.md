@@ -47,8 +47,12 @@ inside groceries.
 ## Consequences
 
 - New tables: `expenses`, `payees` (from `stores`), `payment_sources`, `tags`, `expense_tags`.
-  `receipts.expense_id` (unique). `store_products.store_id` points at a payee. The migration
-  creates an expense for every receipt and a payment source for every card ending seen.
+  `expenses.receipt_id` (unique). `store_products.payee_id` points at a payee. The migration
+  creates an expense for every parsed receipt (a receipt that is failed, not a receipt, a
+  duplicate or still being read is not a purchase and has none) and a payment source for every
+  card ending seen.
+- An amount read from a receipt may be 0.00 when the total is unknown; a manual amount must be
+  positive. The database only forbids negative amounts.
 - `Expense` is an aggregate with its own repository and service (`ExpenseService`); `Receipt`
   stays an aggregate. A receipt's header change updates its expense in the same Unit of Work
   (the service does both saves; the rule "an expense mirrors its receipt's header" lives on

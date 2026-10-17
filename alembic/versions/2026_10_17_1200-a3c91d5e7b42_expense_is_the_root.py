@@ -13,8 +13,9 @@ Schema: `stores` becomes `payees` (`store_key` -> `payee_key`, and the `store_id
 
 Data: one cash source for every user that has a receipt without a card ending; one card for
 every distinct (user, card ending), branded with the most frequent brand (ties: alphabetical,
-so a rerun on a copy gives the same result); one expense for every receipt, whatever its
-status. `receipts.card_brand` and `card_last4` stay as printed.
+so a rerun on a copy gives the same result); one expense for every parsed receipt (deleted ones
+included); failed, not_receipt, duplicate, pending and parsing receipts are not purchases and
+get none. `receipts.card_brand` and `card_last4` stay as printed.
 
 Downgrade drops the new tables and renames back. The receipt tables are untouched by the data
 step, so nothing is lost; expenses, cards and tags created after the upgrade are.
@@ -286,6 +287,7 @@ def upgrade() -> None:
         LEFT JOIN payment_sources s
                ON s.user_id = r.user_id
               AND ((r.card_last4 IS NULL AND s.kind = 'cash') OR s.last4 = r.card_last4)
+        WHERE r.status = 'parsed'
         ORDER BY r.id
         """
     )

@@ -329,7 +329,8 @@ Models: `src/database/models/`. Enums: `src/domain/enums.py`. Decisions: ADR-000
 - `Catalog.payment_sources` is keyed by id; a source not yet stored sits under a temporary key
   (`"cash"`, `"card:<last4>"`) until `CatalogRepository.save` assigns its id. Read `source.id`
   after saving the catalog.
-- The expense migration (`a3c91d5e7b42`) creates one expense per receipt (every status),
+- The expense migration (`a3c91d5e7b42`) creates one expense per `parsed` receipt (deleted ones included; failed, not_receipt,
+  duplicate, pending and parsing receipts get none),
   a cash source per user with a card-less receipt and a card per distinct `(user, last4)`
   (most frequent brand). It is tested on a seeded database in `tests/test_expense_migration.py`.
 - `ReceiptRepository.history(user_id, year, month, timezone, store_id, offset, limit)` is the

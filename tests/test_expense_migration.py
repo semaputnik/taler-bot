@@ -33,6 +33,11 @@ INSERT INTO receipts (id, user_id, status, store_id, total, currency, purchased_
     (4, 1, 'parsed', NULL, 3.00, 'EUR', '2026-09-03 10:00+00', NULL, '1111', NULL),
     (5, 1, 'failed', NULL, NULL, NULL, NULL, NULL, NULL, NULL),
     (6, 1, 'parsed', NULL, 8.00, 'EUR', '2026-09-04 10:00+00', 'MC', '0848', NULL);
+INSERT INTO receipts (id, user_id, status, total, currency, purchased_at, card_last4,
+                      duplicate_of_id) VALUES
+    (8, 1, 'duplicate', 47.50, 'EUR', '2026-10-14 23:30+00', '0848', 1);
+INSERT INTO receipts (id, user_id, status) VALUES (9, 1, 'not_receipt'), (10, 1, 'pending'),
+    (11, 1, 'parsing');
 -- user 2
 INSERT INTO receipts (id, user_id, status, total, currency, purchased_at, card_brand, card_last4)
 VALUES (7, 2, 'parsed', 20.00, NULL, '2026-10-14 03:30+00', 'AMEX', '1111');
@@ -145,7 +150,8 @@ async def test_the_migration_turns_receipts_into_expenses_and_back() -> None:
             (2, "card", "AMEX •1111", "AMEX", "1111"),
         ]
 
-        # One expense per receipt, whatever its status; the day is the user's local day.
+        # One expense per parsed receipt (deleted ones too); failed, not_receipt, duplicate, pending
+        # and parsing receipts are not purchases and get none. The day is the user's local day.
         expenses = await _rows(
             engine,
             """
@@ -160,7 +166,6 @@ async def test_the_migration_turns_receipts_into_expenses_and_back() -> None:
             (2, 1, D("10.00"), "EUR", date(2026, 10, 21), None, "Cash", "groceries", False),
             (3, 1, D("5.25"), "EUR", date(2026, 9, 1), 10, "VISA •0848", "groceries", True),
             (4, 1, D("3.00"), "EUR", date(2026, 9, 3), None, "•1111", "groceries", False),
-            (5, 1, D("0.00"), "EUR", date(2026, 10, 14), None, "Cash", "groceries", False),
             (6, 1, D("8.00"), "EUR", date(2026, 9, 4), None, "VISA •0848", "groceries", False),
             (7, 2, D("20.00"), "USD", date(2026, 10, 13), None, "AMEX •1111", "groceries", False),
         ]
@@ -182,7 +187,7 @@ async def test_the_migration_turns_receipts_into_expenses_and_back() -> None:
 
         # And forward again from the downgraded database.
         await asyncio.to_thread(command.upgrade, config, "head")
-        assert len(await _rows(engine, "SELECT 1 FROM expenses")) == 7
+        assert len(await _rows(engine, "SELECT 1 FROM expenses")) == 6
         async with engine.connect() as conn:
             assert await conn.run_sync(lambda c: _diff(c)) == []
     finally:
