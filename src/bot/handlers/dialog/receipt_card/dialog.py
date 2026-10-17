@@ -21,8 +21,10 @@ from src.bot.handlers.dialog.receipt_card.getters import (
     main_getter,
     photo_getter,
     review_done_getter,
+    tags_getter,
 )
 from src.bot.handlers.dialog.receipt_card.keyboard import receipt_card_keyboard
+from src.bot.handlers.dialog.tags import tags_window
 from src.bot.handlers.dialog.widgets import I18nText
 from src.bot.states.receipt_card import ReceiptCardSG
 
@@ -133,6 +135,13 @@ def create_receipt_card_dialog() -> Dialog:
             getter=expense_categories_getter,
             state=ReceiptCardSG.category,
             parse_mode=ParseMode.HTML,
+        ),
+        tags_window(
+            ReceiptCardSG.tags,
+            tags_getter,
+            click_event.on_tags,
+            click_event.clear_tags,
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_main),
         ),
         Window(
             Format(f"{{{PreviewDataKeys.TEXT}}}"),

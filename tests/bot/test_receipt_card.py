@@ -13,6 +13,7 @@ from tests.stubs import fixture, output_of
 
 USER = 7
 CATEGORY = "🏷 Category"
+TAGS = "#️⃣ Tags"
 PHOTO = "🖼 Photo"
 DELETE = "🗑 Delete"
 CLOSE = "✖ Close"
@@ -52,7 +53,7 @@ async def parsed(harness, **kwargs) -> int:
 async def test_the_parse_reply_carries_photo_and_delete_buttons(harness):
     await parsed(harness)
 
-    assert harness.button_texts() == [ITEMS, REVIEW, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [ITEMS, REVIEW, CATEGORY, TAGS, PHOTO, DELETE, REPARSE, CLOSE]
 
 
 @pytest.mark.parametrize("outcome", ["not_receipt", "failed"])
@@ -102,7 +103,7 @@ async def test_back_returns_to_the_card(harness):
     await harness.tap(USER, "◀ Back")
 
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, REVIEW, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [ITEMS, REVIEW, CATEGORY, TAGS, PHOTO, DELETE, REPARSE, CLOSE]
 
 
 async def test_confirming_deletes_the_receipt_and_ends_on_the_deleted_card(
@@ -309,7 +310,15 @@ async def test_a_receipt_without_items_has_no_items_button(harness):
 
     await parsed(harness)
 
-    assert harness.button_texts() == [REVIEW_NO_ITEMS, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [
+        REVIEW_NO_ITEMS,
+        CATEGORY,
+        TAGS,
+        PHOTO,
+        DELETE,
+        REPARSE,
+        CLOSE,
+    ]
 
 
 async def test_the_card_of_a_receipt_without_items_has_no_items_button(harness):
@@ -320,7 +329,15 @@ async def test_the_card_of_a_receipt_without_items_has_no_items_button(harness):
 
     await harness.tap(USER, "◀ Back")
 
-    assert harness.button_texts() == [REVIEW_NO_ITEMS, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [
+        REVIEW_NO_ITEMS,
+        CATEGORY,
+        TAGS,
+        PHOTO,
+        DELETE,
+        REPARSE,
+        CLOSE,
+    ]
 
 
 async def test_items_opens_the_list_in_place(harness):
@@ -364,7 +381,7 @@ async def test_back_goes_from_the_item_to_the_list_and_then_to_the_card(harness)
 
     await harness.tap(USER, "◀ Back")
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, REVIEW, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [ITEMS, REVIEW, CATEGORY, TAGS, PHOTO, DELETE, REPARSE, CLOSE]
 
 
 async def test_a_long_list_is_paged_by_eight(harness):

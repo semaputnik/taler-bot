@@ -14,6 +14,7 @@ from tests.stubs import fixture, output_of
 USER = 7
 ITEMS = "📋 Items"
 CATEGORY = "🏷 Category"
+TAGS = "#️⃣ Tags"
 PHOTO = "🖼 Photo"
 DELETE = "🗑 Delete"
 CLOSE = "✖ Close"
@@ -71,6 +72,7 @@ async def test_the_summary_offers_the_review_with_the_count(harness):
         ITEMS,
         "⚠️ Review (3)",
         CATEGORY,
+        TAGS,
         PHOTO,
         DELETE,
         REPARSE,
@@ -81,7 +83,7 @@ async def test_the_summary_offers_the_review_with_the_count(harness):
 async def test_low_issues_alone_give_no_review_button(harness):
     await parsed(harness, LOW)
 
-    assert harness.button_texts() == [ITEMS, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [ITEMS, CATEGORY, TAGS, PHOTO, DELETE, REPARSE, CLOSE]
 
 
 async def test_the_walk_opens_on_the_first_high_issue(harness):
@@ -150,6 +152,7 @@ async def test_skip_marks_skipped_and_the_count_on_the_card_stays(harness, sessi
         ITEMS,
         "⚠️ Review (1)",
         CATEGORY,
+        TAGS,
         PHOTO,
         DELETE,
         REPARSE,
@@ -167,7 +170,7 @@ async def test_back_after_resolving_everything_drops_the_review_button(harness):
 
     await harness.tap(USER, BACK)
 
-    assert harness.button_texts() == [ITEMS, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [ITEMS, CATEGORY, TAGS, PHOTO, DELETE, REPARSE, CLOSE]
 
 
 async def test_the_card_offers_the_review_and_starts_the_same_walk(harness):
@@ -176,6 +179,7 @@ async def test_the_card_offers_the_review_and_starts_the_same_walk(harness):
         ITEMS,
         "⚠️ Review (2)",
         CATEGORY,
+        TAGS,
         PHOTO,
         DELETE,
         REPARSE,
@@ -191,7 +195,7 @@ async def test_the_card_offers_the_review_and_starts_the_same_walk(harness):
 async def test_a_card_without_reviewable_issues_has_no_review_button(harness):
     await parsed(harness, LOW)
 
-    assert harness.button_texts() == [ITEMS, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [ITEMS, CATEGORY, TAGS, PHOTO, DELETE, REPARSE, CLOSE]
 
 
 async def test_back_mid_walk_lands_on_the_card_and_keeps_the_issues_open(harness, session_factory):
@@ -206,6 +210,7 @@ async def test_back_mid_walk_lands_on_the_card_and_keeps_the_issues_open(harness
         ITEMS,
         "⚠️ Review (1)",
         CATEGORY,
+        TAGS,
         PHOTO,
         DELETE,
         REPARSE,
@@ -259,7 +264,7 @@ async def test_a_walk_with_nothing_left_goes_straight_to_the_card(harness, sessi
     await harness.press(USER, data, summary_id)
 
     assert "Consum" in harness.last_text()
-    assert harness.button_texts() == [ITEMS, CATEGORY, PHOTO, DELETE, REPARSE, CLOSE]
+    assert harness.button_texts() == [ITEMS, CATEGORY, TAGS, PHOTO, DELETE, REPARSE, CLOSE]
 
 
 async def test_a_photo_sent_mid_walk_is_saved(harness, session_factory):

@@ -1,6 +1,7 @@
 """Tags on the receipt card: the line, the `#️⃣ Tags` button and its window."""
 
 import pytest
+from aiogram.methods import AnswerCallbackQuery
 from sqlalchemy import text
 
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
@@ -49,7 +50,13 @@ async def test_the_button_sits_in_the_row_of_the_category_button(harness):
     await parsed(harness)
 
     rows = [[b.text for b in row] for row in harness.last_keyboard()[1].inline_keyboard]
-    assert [CATEGORY, TAGS] in rows
+    assert rows == [
+        ["📋 Items", "⚠️ Review (3)"],
+        [CATEGORY, TAGS],
+        ["🖼 Photo", "🗑 Delete"],
+        [REPARSE],
+        ["✖ Close"],
+    ]
 
 
 async def test_an_untagged_card_has_no_tags_line(harness):
@@ -62,9 +69,7 @@ async def test_a_line_sets_the_tags_edits_the_card_in_place_and_saves(harness, s
     card_id = await parsed(harness)
     await harness.tap(USER, TAGS)
     assert harness.button_texts() == [CLEAR, BACK]
-    assert harness.last_text() == i18n.get(
-        "expense-edit-tags", tags=i18n.get("item-not-specified")
-    )
+    assert harness.last_text() == i18n.get("expense-edit-tags", tags=i18n.get("item-not-specified"))
 
     await harness.send_text("Kids, holiday", user_id=USER)
 
@@ -151,7 +156,7 @@ async def test_a_card_without_an_expense_has_no_tags_button(harness, outcome):
     assert tag_lines(harness) == []
 
 
-async def test_a_deleted_receipt_alerts_on_a_stale_tags_button(harness, session_factory):
+async def test_a_stale_tags_button_of_a_deleted_receipt_alerts(harness, session_factory):
     card_id = await parsed(harness)
     callback = next(
         b.callback_data
@@ -166,7 +171,24 @@ async def test_a_deleted_receipt_alerts_on_a_stale_tags_button(harness, session_
 
     await harness.press(USER, callback, card_id)
 
+    alerts = [c for c in harness.session.calls if isinstance(c, AnswerCallbackQuery) and c.text]
+    assert (alerts[-1].text, alerts[-1].show_alert) == (i18n.get("card-deleted-alert"), True)
+
+
+async def test_a_line_typed_after_the_receipt_was_deleted_shows_the_deleted_card(
+    harness, session_factory
+):
+    await parsed(harness)
+    await harness.tap(USER, TAGS)
+    async with session_factory() as session:
+        await session.execute(text("update receipts set deleted_at = now()"))
+        await session.execute(text("update expenses set deleted_at = now()"))
+        await session.commit()
+
+    await harness.send_text("kids", user_id=USER)
+
     assert harness.last_text() == i18n.get("card-deleted")
+    assert await stored_tags(session_factory) == []
 
 
 async def test_a_reparse_keeps_the_tags(harness, session_factory):
