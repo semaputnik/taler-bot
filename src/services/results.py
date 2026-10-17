@@ -6,10 +6,17 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from src.database.read_models import CurrencyTotal, HistoryPage, HistoryRow, StoreOption
+from src.database.read_models import (
+    CurrencyTotal,
+    HistoryPage,
+    HistoryRow,
+    ReparseCandidates,
+    StoreOption,
+)
 
 __all__ = [
     "PAGE_SIZE",
+    "BulkResult",
     "CurrencyTotal",
     "CurrentUser",
     "HistoryPage",
@@ -22,6 +29,8 @@ __all__ = [
     "PhotoRef",
     "ProductCard",
     "ReceiptCard",
+    "ReparseCandidates",
+    "ReparseSummary",
     "StoreOption",
 ]
 
@@ -75,6 +84,8 @@ class ReceiptCard(BaseModel):
     item_count: int
     open_issue_count: int
     review_count: int  # open issues of severity high or medium: what the review walk visits
+    can_reparse: bool  # the photo can be read again: parsed, failed or not_receipt, not deleted
+    error_message: str | None  # why the last read failed; kept on a restored receipt too
     duplicate_of: ReceiptCard | None = None  # set by `ReceiptService.card` for a duplicate
 
 
@@ -170,3 +181,22 @@ class ParseResult(BaseModel):
     duplicate_of: ReceiptCard | None = None
     issues: list[IssueLine] = []
     error: str | None = None
+
+
+class ReparseSummary(BaseModel):
+    """What a bulk re-parse would read: counts per reason and the current parser version."""
+
+    model_config = ConfigDict(frozen=True)
+
+    failed_count: int
+    outdated_count: int
+    parser_version: str
+
+
+class BulkResult(BaseModel):
+    """How a bulk re-parse ended: receipts read again, and receipts that failed again."""
+
+    model_config = ConfigDict(frozen=True)
+
+    ok: int
+    failed: int

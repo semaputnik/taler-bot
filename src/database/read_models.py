@@ -61,3 +61,16 @@ class HistoryPage(BaseModel):
     has_earlier: bool
     has_later: bool
     store_name: str | None
+
+
+class ReparseCandidates(BaseModel):
+    """The ids of a user's receipts worth reading again, oldest first.
+
+    `failed_ids` are receipts whose last read failed; `outdated_ids` are parsed or not-receipt
+    receipts read by a parser other than the current version.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    failed_ids: list[int]
+    outdated_ids: list[int]

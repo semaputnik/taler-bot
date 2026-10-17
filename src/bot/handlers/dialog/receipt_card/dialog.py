@@ -189,5 +189,18 @@ def create_receipt_card_dialog() -> Dialog:
             state=ReceiptCardSG.delete_confirm,
             parse_mode=ParseMode.HTML,
         ),
+        Window(
+            I18nText("card-reparse-confirm"),
+            Row(
+                Button(
+                    I18nText("button-reparse-confirm"),
+                    id="confirm_reparse",
+                    on_click=click_event.confirm_reparse,
+                ),
+                Button(I18nText("button-back"), id="back", on_click=click_event.back_to_main),
+            ),
+            state=ReceiptCardSG.reparse_confirm,
+            parse_mode=ParseMode.HTML,
+        ),
         on_start=on_start,
     )

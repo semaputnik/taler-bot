@@ -22,6 +22,7 @@ from src.database.read_models import (
     CurrencyTotal,
     HistoryPage,
     HistoryRow,
+    ReparseCandidates,
     StoreOption,
 )
 from src.domain.enums import ReceiptStatus
@@ -423,3 +424,32 @@ class SqlAlchemyReceiptRepository:
             has_later=later,
             store_name=store_name,
         )
+
+    async def reparse_candidates(self, user_id: int, current_version: str) -> ReparseCandidates:
+        mine = (ReceiptRow.user_id == user_id, ReceiptRow.deleted_at.is_(None))
+        failed = await self._session.scalars(
+            select(ReceiptRow.id)
+            .where(*mine, ReceiptRow.status == ReceiptStatus.FAILED.value)
+            .order_by(ReceiptRow.id)
+        )
+        outdated = await self._session.scalars(
+            select(ReceiptRow.id)
+            .join(ReceiptParse, ReceiptParse.receipt_id == ReceiptRow.id)
+            .where(
+                *mine,
+                ReceiptRow.status.in_(
+                    [ReceiptStatus.PARSED.value, ReceiptStatus.NOT_RECEIPT.value]
+                ),
+                ReceiptParse.parser_version != current_version,
+            )
+            .order_by(ReceiptRow.id)
+        )
+        return ReparseCandidates(failed_ids=list(failed), outdated_ids=list(outdated))
+
+    async def parsing_ids(self) -> list[int]:
+        found = await self._session.scalars(
+            select(ReceiptRow.id)
+            .where(ReceiptRow.status == ReceiptStatus.PARSING.value)
+            .order_by(ReceiptRow.id)
+        )
+        return list(found)

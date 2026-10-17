@@ -76,4 +76,5 @@ class App:
     async def run(self) -> None:
         """Long polling until Ctrl+C / SIGTERM (aiogram handles the signals)."""
         async with self.lifespan():
+            await self.services.receipts.recover_interrupted()
             await self.dispatcher.start_polling(self.bot, close_bot_session=False)

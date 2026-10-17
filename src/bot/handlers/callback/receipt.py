@@ -25,6 +25,7 @@ _WINDOWS = {
     CardWindow.REVIEW: ReceiptCardSG.issue,
     CardWindow.PHOTO: ReceiptCardSG.photo,
     CardWindow.DELETE_CONFIRM: ReceiptCardSG.delete_confirm,
+    CardWindow.REPARSE: ReceiptCardSG.reparse_confirm,
 }
 _GONE_MARKERS = ("message to edit not found", "message is not modified")
 
@@ -39,12 +40,16 @@ async def open_card(
     bot: Bot,
 ) -> None:
     try:
-        deleted = (await services.receipts.card(user.id, callback_data.receipt_id)).deleted
+        card = await services.receipts.card(user.id, callback_data.receipt_id)
+        deleted = card.deleted
     except ReceiptNotFound:
-        deleted = True
+        card, deleted = None, True
     if deleted:
         await query.answer(i18n.get("card-deleted-alert"), show_alert=True)
         await _remove_keyboard(bot, query)
+        return
+    if callback_data.window is CardWindow.REPARSE and not card.can_reparse:
+        await query.answer(i18n.get("reparse-not-possible"), show_alert=True)
         return
     await query.answer()
     in_place = (

@@ -24,6 +24,7 @@ class CardKeyboard(Keyboard):
             manager.dialog_data[DialogDataKeys.RECEIPT_ID],
             item_count=1 if data[PreviewDataKeys.HAS_ITEMS] else 0,
             review_count=data[PreviewDataKeys.REVIEW_COUNT],
+            can_reparse=data[PreviewDataKeys.CAN_REPARSE],
         )
         return markup.inline_keyboard
 

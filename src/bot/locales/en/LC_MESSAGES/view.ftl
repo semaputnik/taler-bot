@@ -5,6 +5,13 @@ photo-too-large = This file is too large (the limit is 20 MB). Send a smaller ph
 photo-already-have = I already have this photo.
 
 receipt-saved = ✅ Saved, reading…
+reparse-started = 🔄 Reading again…
+reparse-not-possible = This receipt cannot be read again.
+reparse-summary = { $failed } failed · { $outdated } read by an older parser (now { $version })
+reparse-none = Nothing to re-parse: every receipt was read by the current parser.
+reparse-progress = 🔁 Re-parsing { $count } receipts…
+reparse-done = Re-parsed { $total }: { $ok } ok, { $failed } failed
+reparse-running = A re-parse is already running. I will report when it is done.
 receipt-not-a-receipt = 🤔 This does not look like a receipt. Nothing was recorded.
 receipt-duplicate = ♻️ Already recorded: <b>{ $store }</b>, { $date }, { $amount }
 
@@ -28,8 +35,10 @@ card-deleted-alert = This receipt was deleted.
 card-deleted = 🗑 This receipt was deleted.
 card-status-pending = ⏳ Waiting to be read.
 card-status-parsing = ⏳ Being read…
+card-error = ⚠️ The last reading failed: { $reason }
 card-received = Photo received: { $date }
 card-delete-confirm = Delete this receipt? The photo is kept in the trash.
+card-reparse-confirm = Read this receipt again? It takes up to two minutes and costs a model call. Your edits stay.
 card-cannot-delete-parsing = This receipt is still being read. Try again in a moment.
 
 card-items-title = 📋 Items ({ $count })

@@ -1,14 +1,17 @@
 from zoneinfo import ZoneInfo
 
+from aiogram import Bot
 from aiogram.types import CallbackQuery, Message
-from aiogram_dialog import DialogManager
+from aiogram_dialog import DialogManager, ShowMode
 from aiogram_dialog.widgets.input import MessageInput
 from aiogram_dialog.widgets.kbd import Button, Select
 from fluentogram import TranslatorRunner
 
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys
 from src.bot.handlers.dialog.receipt_card.values import ITEM_FIELD_KINDS, InvalidValue, parse_value
+from src.bot.handlers.parse_task import read_and_show_card, send_reply
 from src.bot.states.receipt_card import ReceiptCardSG
+from src.bot.tasks import TaskRegistry
 from src.exception import (
     InvalidEdit,
     InvalidIssueResolution,
@@ -311,6 +314,37 @@ async def show_photo(query: CallbackQuery, button: Button, manager: DialogManage
 
 async def back_to_main(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
     await manager.switch_to(ReceiptCardSG.main)
+
+
+async def confirm_reparse(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    """Read the receipt again in the background: a model call, so it sits behind a confirmation.
+    The card returns to `main` and keeps its buttons; the new reading arrives as a fresh card."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    bot: Bot = manager.middleware_data["bot"]
+    tasks: TaskRegistry = manager.middleware_data["tasks"]
+    receipt_id = manager.dialog_data[DialogDataKeys.RECEIPT_ID]
+    try:
+        card = await services.receipts.card(user.id, receipt_id)
+    except ReceiptNotFound:
+        card = None
+    if card is None or not card.can_reparse or query.message is None:
+        await query.answer(i18n.get("reparse-not-possible"), show_alert=True)
+        await manager.switch_to(ReceiptCardSG.main)
+        return
+    await query.answer()
+    chat_id, card_message_id = query.message.chat.id, query.message.message_id
+    # Put the card back to `main` and render it now, before the background read starts: the
+    # read must not interleave with this update's own rendering.
+    await manager.switch_to(ReceiptCardSG.main)
+    await manager.show()
+    manager.show_mode = ShowMode.NO_UPDATE
+    await send_reply(bot, chat_id, card_message_id, i18n.get("reparse-started"))
+    tasks.spawn(
+        read_and_show_card(bot, manager.bg(), chat_id, user.id, receipt_id, services),
+        name=f"reparse-receipt-{receipt_id}",
+    )
 
 
 async def confirm_delete(query: CallbackQuery, button: Button, manager: DialogManager) -> None:

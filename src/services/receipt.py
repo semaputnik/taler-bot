@@ -36,6 +36,7 @@ from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
 from src.services.results import (
     PAGE_SIZE,
+    BulkResult,
     HistoryPage,
     IssueCard,
     IssueLine,
@@ -44,6 +45,7 @@ from src.services.results import (
     ParseResult,
     PhotoRef,
     ReceiptCard,
+    ReparseSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -100,16 +102,18 @@ class ReceiptService:
     # --- parsing -----------------------------------------------------------------------
 
     async def parse(self, user_id: int, receipt_id: int) -> ParseResult:
-        """Read a `pending` or `failed` receipt's photo with the model and store the parse.
+        """Read a receipt's photo with the model and store the parse: the first read of a
+        `pending` receipt, or a re-parse of a `failed`, `parsed` or `not_receipt` one.
 
         1. Unit of Work: load, read the photo and the normalization context, `mark_parsing`.
         2. No transaction: read the file, call the model, `normalize`.
         3. Unit of Work: load again, `apply_parse`, mark a duplicate, save with the catalog.
 
-        A model, storage or normalization failure marks the receipt `failed` (outcome
-        `failed`); any other error marks it failed and is re-raised. A cancelled task (shutdown)
-        awaits no database work, so its receipt stays `parsing`: recovering those at start-up is
-        a follow-up.
+        A model, storage or normalization failure ends the read (outcome `failed`); any other
+        error ends it too and is re-raised. The receipt becomes `failed`, or, for a re-parse,
+        goes back to its previous status and parse with the reason recorded (the aggregate
+        decides). A cancelled task (shutdown) awaits no database work, so its receipt stays
+        `parsing`; `recover_interrupted` fixes those at the next start.
         """
         lock = self._parse_locks.setdefault(user_id, asyncio.Lock())
         async with lock:
@@ -179,7 +183,7 @@ class ReceiptService:
             )
 
     async def _fail(self, user_id: int, receipt_id: int, message: str) -> ParseResult:
-        """Mark the receipt `failed` in its own Unit of Work."""
+        """End the read as failed in its own Unit of Work; the aggregate restores a re-parse."""
         async with self._uow_factory() as uow:
             receipt = await _load(uow, user_id, receipt_id)
             receipt.mark_failed(message)
@@ -293,6 +297,61 @@ class ReceiptService:
         if (year, month) >= (now.year, now.month):
             found = found.model_copy(update={"has_later": False})
         return found
+
+    # --- re-parse ----------------------------------------------------------------------
+
+    async def reparse_candidates(self, user_id: int) -> ReparseSummary:
+        """How many receipts a bulk re-parse could read: failed ones and outdated ones."""
+        async with self._uow_factory() as uow:
+            found = await uow.receipts.reparse_candidates(user_id, PARSER_VERSION)
+        return ReparseSummary(
+            failed_count=len(found.failed_ids),
+            outdated_count=len(found.outdated_ids),
+            parser_version=PARSER_VERSION,
+        )
+
+    async def reparse_many(
+        self, user_id: int, reason: Literal["failed", "outdated"], limit: int = 50
+    ) -> BulkResult:
+        """Read up to `limit` candidates again, oldest first, one after the other.
+
+        Each `parse` takes the per-user lock on its own, so a photo sent meanwhile is read
+        right after the current receipt. One receipt's failure, expected or not, is counted and
+        never stops the run; cancellation (shutdown) propagates.
+        """
+        async with self._uow_factory() as uow:
+            found = await uow.receipts.reparse_candidates(user_id, PARSER_VERSION)
+        ids = found.failed_ids if reason == "failed" else found.outdated_ids
+        ok = failed = 0
+        for receipt_id in ids[: max(limit, 0)]:
+            try:
+                result = await self.parse(user_id, receipt_id)
+            except Exception:
+                logger.exception("Re-parse of receipt %s failed unexpectedly", receipt_id)
+                failed += 1
+                continue
+            if result.outcome == "failed":
+                failed += 1
+            else:
+                ok += 1
+        return BulkResult(ok=ok, failed=failed)
+
+    async def recover_interrupted(self) -> int:
+        """Start-up: end the reads the bot's last run left in `parsing`, for every user.
+
+        Returns how many receipts were recovered, in one Unit of Work.
+        """
+        async with self._uow_factory() as uow:
+            ids = await uow.receipts.parsing_ids()
+            for receipt_id in ids:
+                receipt = await uow.receipts.get(receipt_id)
+                assert receipt is not None
+                receipt.recover_interrupted()
+                await uow.receipts.save(receipt)
+            await uow.commit()
+        if ids:
+            logger.warning("Recovered %s receipt(s) left in parsing: marked interrupted", len(ids))
+        return len(ids)
 
     async def items(self, user_id: int, receipt_id: int) -> list[ItemRow]:
         """The receipt's items in parse order, edits applied. A deleted receipt still answers."""
@@ -481,6 +540,8 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         payment_method=header.payment_method,
         card_brand=header.card_brand,
         card_last4=header.card_last4,
+        can_reparse=receipt.can_reparse,
+        error_message=receipt.error_message,
         item_count=len(receipt.items),
         open_issue_count=sum(1 for i in receipt.issues if i.resolution is IssueResolution.OPEN),
         review_count=len(receipt.reviewable_issues()),

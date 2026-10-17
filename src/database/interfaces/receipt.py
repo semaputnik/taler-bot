@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from src.database.read_models import HistoryPage
+from src.database.read_models import HistoryPage, ReparseCandidates
 from src.domain.receipt import Receipt
 
 
@@ -50,4 +50,14 @@ class ReceiptRepository(Protocol):
         A receipt belongs to the month of `coalesce(purchased_at, photo.received_at)` in the
         IANA time zone `timezone`. A fixed number of statements, whatever the month's size.
         """
+        ...
+
+    async def reparse_candidates(self, user_id: int, current_version: str) -> ReparseCandidates:
+        """Ids of the user's not deleted `failed` receipts, and of `parsed` or `not_receipt`
+        ones whose parse was made by a parser version other than `current_version`; oldest
+        first. Two statements."""
+        ...
+
+    async def parsing_ids(self) -> list[int]:
+        """Ids of every receipt left in `parsing`, of all users, oldest first."""
         ...

@@ -17,6 +17,7 @@ class PreviewDataKeys:
     TEXT = "text"
     CAN_DELETE = "can_delete"
     HAS_ITEMS = "has_items"
+    CAN_REPARSE = "can_reparse"
     ITEMS = "items"
     PHOTO = "photo"
     REVIEW_COUNT = "review_count"

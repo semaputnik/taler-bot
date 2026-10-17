@@ -15,6 +15,7 @@ class CardWindow(StrEnum):
     REVIEW = "review"
     PHOTO = "photo"
     DELETE_CONFIRM = "delete_confirm"
+    REPARSE = "reparse"  # not a window: reads the receipt again, then sends a fresh card
     CLOSE = "close"  # not a window: hides the card's buttons
 
 
@@ -24,24 +25,34 @@ class ReceiptCallback(CallbackData, prefix="receipt"):
 
 
 def receipt_keyboard(
-    i18n: TranslatorRunner, receipt_id: int, *, item_count: int = 0, review_count: int = 0
+    i18n: TranslatorRunner,
+    receipt_id: int,
+    *,
+    item_count: int = 0,
+    review_count: int = 0,
+    can_reparse: bool = False,
 ) -> InlineKeyboardMarkup:
     """Buttons under the parse reply: Items (only when the receipt has items), Review (only when
-    issues wait for the user), Photo, Delete."""
+    issues wait for the user), Photo, Delete; Re-parse on its own row (only when the receipt can
+    be read again), then Close."""
     windows = [CardWindow.ITEMS] if item_count > 0 else []
     if review_count > 0:
         windows.append(CardWindow.REVIEW)
-    windows += [CardWindow.PHOTO, CardWindow.DELETE_CONFIRM, CardWindow.CLOSE]
-    buttons = [
-        InlineKeyboardButton(
+    windows += [CardWindow.PHOTO, CardWindow.DELETE_CONFIRM]
+
+    def button(window: CardWindow) -> InlineKeyboardButton:
+        return InlineKeyboardButton(
             text=i18n.get(_BUTTON_KEYS[window], **_button_args(window, review_count)),
             callback_data=ReceiptCallback(receipt_id=receipt_id, window=window).pack(),
         )
-        for window in windows
-    ]
-    # Two buttons per row (four in one row are unreadable on a phone); Close on its own.
-    *actions, close = buttons
-    rows = [actions[i : i + 2] for i in range(0, len(actions), 2)] + [[close]]
+
+    # Two buttons per row (four in one row are unreadable on a phone); Re-parse and Close each
+    # on their own row.
+    buttons = [button(window) for window in windows]
+    rows = [buttons[i : i + 2] for i in range(0, len(buttons), 2)]
+    if can_reparse:
+        rows.append([button(CardWindow.REPARSE)])
+    rows.append([button(CardWindow.CLOSE)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -50,6 +61,7 @@ _BUTTON_KEYS = {
     CardWindow.PHOTO: "button-photo",
     CardWindow.DELETE_CONFIRM: "button-delete",
     CardWindow.REVIEW: "button-review",
+    CardWindow.REPARSE: "button-reparse",
     CardWindow.CLOSE: "button-close",
 }
 

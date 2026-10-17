@@ -417,28 +417,175 @@ def test_apply_parse_is_allowed_from_every_status_but_duplicate(setup):
 # --- mark_parsing -----------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("setup", ["pending", "failed"])
-def test_mark_parsing_is_allowed_from_pending_and_failed_and_clears_the_error(setup):
+@pytest.mark.parametrize("setup", ["pending", "failed", "parsed", "not_receipt"])
+def test_mark_parsing_is_allowed_from_every_readable_status_and_clears_the_error(setup):
     receipt = started()
     if setup == "failed":
         receipt.mark_failed("timeout")
+    elif setup == "parsed":
+        receipt.apply_parse(parse())
+    elif setup == "not_receipt":
+        receipt.apply_parse(parse(is_receipt=False))
     receipt.mark_parsing()
     assert (receipt.status, receipt.error_message) == (ReceiptStatus.PARSING, None)
 
 
-@pytest.mark.parametrize("setup", ["parsing", "parsed", "not_receipt", "duplicate"])
-def test_mark_parsing_is_refused_from_every_other_status(setup):
+@pytest.mark.parametrize("setup", ["parsing", "duplicate"])
+def test_mark_parsing_is_refused_from_duplicate_and_parsing(setup):
     receipt = started()
     if setup == "parsing":
         receipt.mark_parsing()
-    elif setup in ("parsed", "duplicate"):
+    else:
+        receipt.apply_parse(parse())
+        receipt.mark_duplicate(99)
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.mark_parsing()
+
+
+def parsed_with_issue(**fields) -> Receipt:
+    receipt = started()
+    receipt.apply_parse(parse(issues=(ParsedIssue(**ISSUE),), **fields))
+    receipt.issues[0].id = 7
+    receipt.resolve_issue(7, IssueResolution.CONFIRMED, WHEN)
+    return receipt
+
+
+def test_a_failed_reread_of_a_parsed_receipt_restores_it_untouched_with_the_reason():
+    receipt = parsed_with_issue()
+    receipt.edits.append(total_edit())
+    receipt.apply_parse(receipt.parse)  # settle header and items with the edit
+    before = (receipt.parse, receipt.header, receipt.items, receipt.issues)
+
+    receipt.mark_parsing()
+    receipt.mark_failed("model timed out")
+
+    assert (receipt.status, receipt.error_message) == (ReceiptStatus.PARSED, "model timed out")
+    assert (receipt.parse, receipt.header, receipt.items, receipt.issues) == before
+    assert receipt.issues[0].resolution is IssueResolution.CONFIRMED
+
+
+def test_a_failed_reread_of_a_not_receipt_restores_not_receipt():
+    receipt = started()
+    receipt.apply_parse(parse(is_receipt=False))
+    receipt.mark_parsing()
+    receipt.mark_failed("boom")
+    assert (receipt.status, receipt.error_message) == (ReceiptStatus.NOT_RECEIPT, "boom")
+
+
+def test_a_failed_read_without_a_parse_is_failed():
+    receipt = started()
+    receipt.mark_parsing()
+    receipt.mark_failed("boom")
+    assert (receipt.status, receipt.error_message) == (ReceiptStatus.FAILED, "boom")
+
+
+def test_recover_interrupted_restores_by_data_and_records_the_reason():
+    fresh, reread = started(), parsed_with_issue()
+    fresh.mark_parsing()
+    reread.mark_parsing()
+    fresh.recover_interrupted()
+    reread.recover_interrupted()
+    assert (fresh.status, fresh.error_message) == (ReceiptStatus.FAILED, "interrupted")
+    assert (reread.status, reread.error_message) == (ReceiptStatus.PARSED, "interrupted")
+    assert reread.issues[0].resolution is IssueResolution.CONFIRMED
+
+
+@pytest.mark.parametrize("setup", ["pending", "parsed", "failed"])
+def test_recover_interrupted_is_only_for_a_parsing_receipt(setup):
+    receipt = started()
+    if setup == "parsed":
+        receipt.apply_parse(parse())
+    elif setup == "failed":
+        receipt.mark_failed("x")
+    with pytest.raises(InvalidReceiptTransition):
+        receipt.recover_interrupted()
+
+
+ISSUE = dict(
+    source=IssueSource.MODEL,
+    issue_type="unclear",
+    severity=IssueSeverity.MEDIUM,
+    field="total",
+    item_name=None,
+    message="Is the total right?",
+)
+
+
+def test_a_reparse_carries_the_resolution_of_an_equal_issue_and_not_of_a_changed_one():
+    receipt = parsed_with_issue()
+    changed = {**ISSUE, "message": "Another doubt"}
+    receipt.apply_parse(parse(issues=(ParsedIssue(**ISSUE), ParsedIssue(**changed))))
+    kept, new = receipt.issues
+    assert (kept.resolution, kept.resolved_at) == (IssueResolution.CONFIRMED, WHEN)
+    assert (new.resolution, new.resolved_at) == (IssueResolution.OPEN, None)
+    assert kept.id is None  # a new issue; the repository inserts it
+
+
+def test_each_previous_issue_is_carried_to_one_new_issue_only():
+    receipt = parsed_with_issue()
+    receipt.apply_parse(parse(issues=(ParsedIssue(**ISSUE), ParsedIssue(**ISSUE))))
+    assert [i.resolution for i in receipt.issues] == [
+        IssueResolution.CONFIRMED,
+        IssueResolution.OPEN,
+    ]
+
+
+def test_merge_issues_are_regenerated_not_carried():
+    receipt = parsed_with_issue()
+    receipt.record_edit(total_edit("50.00"))
+    receipt.apply_parse(parse())  # disagrees with the edit: one merge issue
+    (conflict,) = merge_issues(receipt)
+    receipt.issues[0].id = 9
+    receipt.resolve_issue(9, IssueResolution.SKIPPED, WHEN)
+    receipt.apply_parse(parse())
+    (again,) = merge_issues(receipt)
+    assert again is not conflict
+    assert again.resolution is IssueResolution.OPEN
+
+
+def test_a_not_receipt_whose_new_parse_is_a_receipt_becomes_parsed_with_items():
+    receipt = started()
+    receipt.apply_parse(parse(is_receipt=False))
+    receipt.mark_parsing()
+    receipt.apply_parse(parse())
+    assert receipt.status is ReceiptStatus.PARSED
+    assert len(receipt.items) == 1
+
+
+@pytest.mark.parametrize(
+    ("setup", "expected"),
+    [
+        ("pending", False),
+        ("parsing", False),
+        ("parsed", True),
+        ("failed", True),
+        ("not_receipt", True),
+        ("duplicate", False),
+        ("deleted", False),
+    ],
+)
+def test_can_reparse(setup, expected):
+    receipt = started()
+    if setup == "parsing":
+        receipt.mark_parsing()
+    elif setup in ("parsed", "duplicate", "deleted"):
         receipt.apply_parse(parse())
         if setup == "duplicate":
             receipt.mark_duplicate(99)
-    else:
-        receipt.mark_not_receipt()
-    with pytest.raises(InvalidReceiptTransition):
-        receipt.mark_parsing()
+        if setup == "deleted":
+            receipt.soft_delete()
+    elif setup == "failed":
+        receipt.mark_failed("x")
+    elif setup == "not_receipt":
+        receipt.apply_parse(parse(is_receipt=False))
+    assert receipt.can_reparse is expected
+
+
+def test_parser_version_is_the_parses_or_none():
+    receipt = started()
+    assert receipt.parser_version is None
+    receipt.apply_parse(parse(parser_version="v9"))
+    assert receipt.parser_version == "v9"
 
 
 def test_a_parsing_receipt_can_be_marked_failed_and_gets_its_parse_applied():

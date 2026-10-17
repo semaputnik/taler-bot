@@ -23,7 +23,8 @@ and dependencies, not commitments.
 failures, the same photo sent twice and the same receipt photographed twice.
 
 **Stage 1: working with a receipt after parsing**
-1. **Receipt card.** The parse reply is the card, with inline buttons: `Items`, `Photo`, `Delete`
+1. **Receipt card.** The parse reply is the card, with inline buttons: `Items`, `Photo`, `Delete`,
+   `Re-parse` (when the receipt can be read again) and `Close`.
    `Review (n)` appears when issues wait. Done (items are read-only until the item-edit spec).
 2. **Issue review.** Walk through high/medium issues one at a time. For each, confirm the
    assumed value or enter the right one (date, total, card last 4, lines that don't add up).
@@ -34,7 +35,12 @@ failures, the same photo sent twice and the same receipt photographed twice.
 4. **Receipt history** `/receipts`. Paginated, filtered by month and store; a row opens
    the card.
 5. **Reparse.** One receipt by hand, or in bulk for `failed` receipts and receipts with an
-   old `parser_version`.
+   old `parser_version`. Done. The card's `🔄 Re-parse` button reads one receipt again. The
+   `/reparse` command shows "N failed · M read by an older parser (now <version>)" with the
+   buttons `🔁 Re-parse failed (N)` and `🔁 Re-parse outdated (M)` (each only when its count is
+   above 0). A tap edits the message to "🔁 Re-parsing N receipts…", reads up to 50 receipts one
+   after the other in the background and replies "Re-parsed 12: 10 ok, 2 failed". A second tap
+   while a run is going answers an alert.
 
 **Stage 2: analytics**
 
@@ -91,12 +97,16 @@ dialog's last message) edits it in place. A tap on an older card sends a fresh c
 and leaves the old card with its buttons. A tap on a deleted receipt answers with an alert
 and removes the keyboard. A photo sent while a card is open is still accepted. `✖ Close`
 hides the card's buttons and keeps its text; the resting state of a card is `main`.
+`🔄 Re-parse` first asks for a confirmation (a model call costs money); `🔄 Yes, read again` replies "🔄 Reading again…" to the card, shows the typing status while the
+receipt is read, then sends a fresh card with the new reading (or the old reading and the
+error line if the read failed); the old card keeps its buttons. A stale button on a receipt
+that can no longer be read again (duplicate, deleted) answers an alert.
 
 ### ReceiptCard
 
 | window | content |
 |---|---|
-| `main` | the parse reply: the summary and buttons (`Items`, `⚠️ Review (n)` when n > 0, `Photo`, `Delete`); a receipt that is not `parsed` shows the outcome text (not a receipt, failed, duplicate with the receipt it repeats, waiting, being read) and the photo's date; a deleted receipt shows "🗑 This receipt was deleted." and no buttons |
+| `main` | the parse reply: the summary and buttons (`Items`, `⚠️ Review (n)` when n > 0, `Photo`, `Delete`, and `🔄 Re-parse` on its own row when the receipt is `parsed`, `failed` or `not_receipt`); the error line (`⚠️ The last reading failed: …`) is added when the last read failed, also on a parsed card that kept its previous reading; a receipt that is not `parsed` shows the outcome text (not a receipt, failed, duplicate with the receipt it repeats, waiting, being read) and the photo's date; a deleted receipt shows "🗑 This receipt was deleted." and no buttons |
 | `items` | paginated item list (`ScrollingGroup`, 8 per page); a tap opens `item` |
 | `item` | all parsed fields, and the edit buttons `[✏️ Name] [🏷 Category]`, `[🔢 Quantity] [💶 Unit price]`, `[🧾 Line total]`, `[◀ Back]` |
 | `item_input` | "Enter the quantity (a number with a point, like 1.5)" with the current value, and a text input; `◀ Back` returns to `item`. Read like the review's input (`text` for the name, `number` for quantity and unit price, `money` for the line total). A wrong value (text, empty name, zero or negative quantity, negative price) keeps the window with an error line and changes nothing. The name is saved to the catalog and changes the product on every receipt of the store; the numbers are saved as edits of this receipt and survive a re-parse. A good value returns to `item` with the new value; a receipt deleted meanwhile gives the deleted alert and `main` |
@@ -106,6 +116,7 @@ hides the card's buttons and keeps its text; the resting state of a card is `mai
 | `issue_input` | "Enter the total (a number with a point, like 12.50)" and a text input; `◀ Back` returns to `issue`. The text is read by the issue's input kind (date and time `dd.mm.yyyy hh:mm` in the user's time zone, number with a point or comma, four digits, 3-letter currency, free text). A wrong value or a non-text message keeps the window with an error line and the issue open; a good one is saved as an edit, the issue is marked corrected and the walk moves on |
 | `review_done` | the tally ("3 reviewed: 1 corrected, 1 confirmed, 1 skipped") and `◀ Back` to `main` |
 | `photo` | the stored photo by Telegram file id, uploaded from disk if Telegram refuses the id |
+| `reparse_confirm` | "Read this receipt again? …" with `🔄 Yes, read again` and `◀ Back` |
 | `delete_confirm` | confirms the delete (soft delete; the photo moves to the trash). Refused while the receipt is being read. After a delete the card shows `main` in its deleted form |
 
 The `⚠️ Review (n)` button sits in `main` (between Items and Photo),

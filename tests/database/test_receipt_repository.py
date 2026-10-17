@@ -851,3 +851,131 @@ async def test_history_runs_the_same_statements_whatever_the_month_size(make_uow
     await october(make_uow, store_id=lidl, limit=8)
 
     assert len([s for s in statements if s.startswith("SELECT")]) == HISTORY_STATEMENTS
+
+
+# --- re-parse candidates -----------------------------------------------------------------
+
+
+async def read(
+    make_uow: MakeUow,
+    version: str,
+    *,
+    user_id: int = 1,
+    not_receipt: bool = False,
+    deleted: bool = False,
+) -> Receipt:
+    n = next(_history_ids)
+    await add_user(make_uow, user_id)
+    receipt = Receipt.start(user_id, photo(f"c{n}"))
+    if not_receipt:
+        receipt.apply_parse(parse(is_receipt=False, parser_version=version))
+    else:
+        one = parse(
+            product(f"mercadona::c{n}"), parser_version=version, receipt_key=f"mercadona|c{n}"
+        )
+        await seed_catalog(make_uow, one, user_id=user_id)
+        receipt.apply_parse(one)
+    if deleted:
+        receipt.soft_delete()
+    return await persist(make_uow, receipt)
+
+
+async def failed_read(make_uow: MakeUow, *, user_id: int = 1, deleted: bool = False) -> Receipt:
+    n = next(_history_ids)
+    await add_user(make_uow, user_id)
+    receipt = Receipt.start(user_id, photo(f"c{n}"))
+    receipt.mark_failed("down")
+    if deleted:
+        receipt.soft_delete()
+    return await persist(make_uow, receipt)
+
+
+async def candidates(make_uow: MakeUow, version: str = "v2", user_id: int = 1):
+    async with make_uow() as uow:
+        return await uow.receipts.reparse_candidates(user_id, version)
+
+
+async def test_failed_candidates_are_the_users_failed_receipts_oldest_first(make_uow):
+    first = await failed_read(make_uow)
+    await read(make_uow, "v2")
+    second = await failed_read(make_uow)
+    await failed_read(make_uow, deleted=True)
+    await failed_read(make_uow, user_id=2)
+
+    found = await candidates(make_uow)
+
+    assert found.failed_ids == [first.id, second.id]
+    assert found.outdated_ids == []
+
+
+async def test_outdated_candidates_are_parsed_and_not_receipts_of_another_version(make_uow):
+    old = await read(make_uow, "v1")
+    await read(make_uow, "v2")
+    old_not_receipt = await read(make_uow, "v1", not_receipt=True)
+    await read(make_uow, "v1", deleted=True)
+    await read(make_uow, "v1", user_id=2)
+    duplicate = await read(make_uow, "v1")
+    async with make_uow() as uow:
+        receipt = await uow.receipts.get(duplicate.id)
+        receipt.mark_duplicate(old.id)
+        await uow.receipts.save(receipt)
+        await uow.commit()
+
+    found = await candidates(make_uow)
+
+    assert found.outdated_ids == [old.id, old_not_receipt.id]
+    assert found.failed_ids == []
+
+
+async def test_a_reparsed_receipt_is_no_longer_outdated(make_uow):
+    old = await read(make_uow, "v1")
+    async with make_uow() as uow:
+        receipt = await uow.receipts.get(old.id)
+        receipt.apply_parse(replace(receipt.parse, parser_version="v2"))
+        await uow.receipts.save(receipt)
+        await uow.commit()
+
+    assert (await candidates(make_uow)).outdated_ids == []
+
+
+async def test_parsing_ids_are_every_users_parsing_receipts_oldest_first(make_uow):
+    await add_user(make_uow, 1)
+    await add_user(make_uow, 2)
+    ids = []
+    for user_id, parsing in ((1, True), (2, True), (1, False), (2, True)):
+        receipt = Receipt.start(user_id, photo(f"p{next(_history_ids)}"))
+        if parsing:
+            receipt.mark_parsing()
+        ids.append((await persist(make_uow, receipt)).id)
+
+    async with make_uow() as uow:
+        found = await uow.receipts.parsing_ids()
+
+    assert found == [ids[0], ids[1], ids[3]]
+
+
+async def test_a_reparse_rewrites_the_issues_with_the_carried_resolutions(make_uow):
+    doubt = ParsedIssue(issue_type="unclear", severity=IssueSeverity.MEDIUM, message="Check it")
+    await add_user(make_uow)
+    one = parse(product("mercadona::carry"), issues=(doubt,))
+    await seed_catalog(make_uow, one)
+    receipt = Receipt.start(1, photo("carry"))
+    receipt.apply_parse(one)
+    receipt = await persist(make_uow, receipt)
+    async with make_uow() as uow:
+        receipt = await uow.receipts.get(receipt.id)
+        receipt.resolve_issue(receipt.issues[0].id, IssueResolution.SKIPPED, WHEN)
+        await uow.receipts.save(receipt)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        receipt = await uow.receipts.get(receipt.id)
+        receipt.mark_parsing()
+        receipt.apply_parse(replace(one, parser_version="v2"))
+        await uow.receipts.save(receipt)
+        await uow.commit()
+
+    stored = await load(make_uow, receipt.id)
+    assert [(i.message, i.resolution, i.resolved_at) for i in stored.issues] == [
+        ("Check it", IssueResolution.SKIPPED, WHEN)
+    ]
