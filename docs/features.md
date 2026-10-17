@@ -32,7 +32,7 @@ failures, the same photo sent twice and the same receipt photographed twice.
 3. **Item edit.** Name, category, quantity/price. Name and category are saved to
    `store_products`, so future receipts pick them up. Done, including `Rename` from the
    issue review.
-4. **Receipt history** `/receipts`. Paginated, filtered by month and store; a row opens
+4. **Receipt history** `/receipts` (now `/expenses`). Paginated, filtered by month and store; a row opens
    the card.
 5. **Reparse.** One receipt by hand, or in bulk for `failed` receipts and receipts with an
    old `parser_version`. Done. The card's `🔄 Re-parse` button reads one receipt again. The
@@ -120,7 +120,7 @@ category, tags, and optionally the receipt it came from.
 
    Buttons: `📋 Items` `⚠️ Review (n)` / `🏷 Category` `#️⃣ Tags` / `🖼 Photo` `🗑 Delete` /
    `🔄 Re-parse` / `✖ Close`.
-   `/receipts` lists the expenses of the month plus the receipts that have no expense (with
+   `/expenses` (then `/receipts`) lists the expenses of the month plus the receipts that have no expense (with
    their status icon), so a failed or duplicate receipt stays reachable for deleting.
 8. **Manual entry.** A message that is only a number (`12.50`, `12,50`, `7`; up to 8 digits and
    2 decimals, above zero) starts the entry with that amount: payee (the five most recent as
