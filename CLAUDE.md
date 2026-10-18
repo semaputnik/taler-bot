@@ -293,7 +293,7 @@ with the entry.
 buttons must outlive any dialog stack.** `/expenses` is a plain message whose `HistoryCallback`
 buttons carry the whole view state (month, payee, page); `callback/history.py` edits the message in
 place. Its row buttons are `ReceiptCallback`s (or `ExpenseCallback`s for an expense typed by hand, shown
-with 💸), so a tap goes through `open_card` / `open_expense_card`, which send a fresh
+without the 🧾 receipt icon), so a tap goes through `open_card` / `open_expense_card`, which send a fresh
 card and leaves the history keyboard alone. The `/start` button uses `HistoryAction.OPEN`: it sends
 the list as a new message instead of editing the greeting.
 

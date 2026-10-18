@@ -176,9 +176,9 @@ history-summary = { $count ->
   } · { $totals }
 history-summary-none = No expenses yet
 history-empty = No expenses this month.
-history-row = • { $day } { $payee } · { $amount }
-history-row-manual = 💸 { $day } { $payee } · { $amount }
-history-row-status = • { $day } { $payee } · { $status }
+history-row = 🧾 { $day } { $payee } · { $amount }
+history-row-manual = { $day } { $payee } · { $amount }
+history-row-status = 🧾 { $day } { $payee } · { $status }
 history-page = { $page }/{ $pages }
 
 month-1 = January

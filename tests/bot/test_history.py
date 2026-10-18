@@ -104,8 +104,8 @@ async def test_expenses_shows_the_current_month_with_rows_count_and_total(harnes
     assert harness.last_text() == f"{title()}\n2 expenses · 70.95 €"
     month = f"{this_month()[1]:02d}"
     assert harness.button_texts()[:2] == [
-        f"• 14.{month} Mercadona · 47.85 €",
-        f"• 12.{month} Lidl · 23.10 €",
+        f"🧾 14.{month} Mercadona · 47.85 €",
+        f"🧾 12.{month} Lidl · 23.10 €",
     ]
 
 
@@ -116,7 +116,7 @@ async def test_a_failed_receipt_row_shows_the_cross_and_no_amount(harness, make_
     await harness.send_text("/expenses", user_id=USER)
 
     month = f"{this_month()[1]:02d}"
-    assert f"• 11.{month} Unknown store · ❌" in harness.button_texts()
+    assert f"🧾 11.{month} Unknown store · ❌" in harness.button_texts()
     assert harness.last_text().endswith("1 expense · 47.85 €")
 
 
@@ -177,7 +177,7 @@ async def test_the_store_chooser_filters_rows_and_totals_and_the_filter_survives
 
     await harness.tap(USER, "Lidl")
     assert harness.last_text() == f"{title(0, 'Lidl')}\n1 expense · 20.00 €"
-    assert len([b for b in harness.button_texts() if b.startswith("•")]) == 1
+    assert len([b for b in harness.button_texts() if b.startswith("🧾")]) == 1
 
     await harness.tap(USER, PAYEES)
     assert "✓ Lidl" in harness.button_texts()
@@ -210,15 +210,15 @@ async def test_paging_appears_at_nine_expenses(harness, make_uow):
 
     await bought(make_uow, 9)
     await harness.send_text("/expenses", user_id=USER)
-    rows = [b for b in harness.button_texts() if b.startswith("•")]
+    rows = [b for b in harness.button_texts() if b.startswith("🧾")]
     assert len(rows) == 8
     assert "1/2" in harness.button_texts()
     assert PREV_PAGE not in harness.button_texts()
 
     await harness.tap(USER, NEXT_PAGE)
 
-    rows = [b for b in harness.button_texts() if b.startswith("•")]
-    assert rows == [f"• 01.{this_month()[1]:02d} Mercadona · 47.85 €"]
+    rows = [b for b in harness.button_texts() if b.startswith("🧾")]
+    assert rows == [f"🧾 01.{this_month()[1]:02d} Mercadona · 47.85 €"]
     assert "2/2" in harness.button_texts()
     assert NEXT_PAGE not in harness.button_texts()
     await harness.tap(USER, PREV_PAGE)
@@ -232,7 +232,7 @@ async def test_an_empty_month_says_so_and_still_offers_the_arrow(harness, make_u
 
     assert harness.last_text() == f"{title()}\nNo expenses this month."
     assert label(-1, "prev") in harness.button_texts()
-    assert not [b for b in harness.button_texts() if b.startswith("•")]
+    assert not [b for b in harness.button_texts() if b.startswith("🧾")]
 
 
 async def test_a_month_with_only_a_failed_receipt_has_no_total(harness, make_uow):

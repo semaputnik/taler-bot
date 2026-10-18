@@ -185,8 +185,8 @@ category, tags, and optionally the receipt it came from.
    | `date_text` | `dd.mm` or `dd.mm.yyyy`; a future or malformed date is refused. `◀ Back` to `date` |
    | `tags` | the current tags and a text input (comma-separated, replaces them); `🧹 Clear`. `◀ Back` |
    | `delete_confirm` | "Delete this expense?" `🗑 Yes, delete` / `◀ Back` |
-10. **History `/expenses`** replaces `/receipts` (no alias): every expense of the month, a `•` on
-    those read from a photo and a `💸` on those typed by hand; filter by payee. Done.
+10. **History `/expenses`** replaces `/receipts` (no alias): every expense of the month, a `🧾` on
+    those read from a photo and none on those typed by hand; filter by payee. Done.
 11. **Expiring screens.** Screens opened by a command or a menu button (`/start`, `/expenses`,
     `/stats`, the `/reparse` summary, an unfinished entry) are deleted after
     `SCREEN_TTL_MINUTES` (30) without a tap; a tap extends the time. Cards, "Saved, reading…",
@@ -301,9 +301,9 @@ message keeps working however old it is and however many cards were opened from 
 ```
 🗓 October 2026 · Mercadona
 12 expenses · 384.20 €
-[• 14.10 Mercadona · 47.85 €]
-[• 12.10 Lidl · 23.10 €]
-[• 11.10 Consum · ❌]
+[🧾 14.10 Mercadona · 47.85 €]
+[🧾 12.10 Lidl · 23.10 €]
+[🧾 11.10 Consum · ❌]
 [◀ Sep] [Payee ▾] [Nov ▶]
 [◀] [2/3] [▶]
 ```
@@ -318,7 +318,7 @@ message keeps working however old it is and however many cards were opened from 
 - `Payee ▾` lists the payees with a row in the month, `✓` on the selected one, `All payees`
   and `◀ Back`. The filter stays while moving between months and pages.
 - A row opens the receipt's card as a new message; the history keeps its buttons. An expense
-  typed by hand has no receipt: its row starts with 💸 instead of the bullet and opens the
+  typed by hand has no receipt: its row has no receipt icon and opens the
   expense card the same way.
 
 ### Main menu (`/start`)
