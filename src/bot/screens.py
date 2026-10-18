@@ -55,10 +55,10 @@ class MemoryScreenStore:
         self._due.pop(screen, None)
 
     async def due(self, now: float) -> list[Screen]:
-        ready = sorted((at, screen) for screen, at in self._due.items() if at <= now)
-        for _, screen in ready:
+        ready = sorted((s for s, at in self._due.items() if at <= now), key=self._due.__getitem__)
+        for screen in ready:
             del self._due[screen]
-        return [screen for _, screen in ready]
+        return ready
 
 
 class ScreenRegistry:

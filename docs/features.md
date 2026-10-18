@@ -193,8 +193,9 @@ category, tags, and optionally the receipt it came from.
     error replies and re-parse results stay. Tracked in Redis so it survives a restart.
     **In progress** (spec #77). Done (#78): the registry, the Redis and memory stores, the
     `screens-sweeper` task, the settings `SCREEN_TTL_MINUTES` / `SCREEN_SWEEP_SECONDS`; the `/start`
-    greeting expires. To do (#79, #80): `/expenses`, `/stats`, `/reparse`, taps that
-    extend the time, and the unfinished entry.
+    greeting expires. Done (#79): the plain screens (`/expenses`, `/stats`, `/reparse`, and the history
+    and stats opened from the `/start` and `/stats` buttons) expire; a tap on their buttons extends the
+    time; confirming a re-parse stops the question expiring. Pending #80: the unfinished entry.
 
 **Later**
 

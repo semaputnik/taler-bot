@@ -10,7 +10,9 @@ from aiogram.utils.chat_action import ChatActionSender
 from fluentogram import TranslatorRunner
 
 from src.bot.handlers.parse_task import TYPING_INTERVAL, send_reply
+from src.bot.handlers.screens import screen_of
 from src.bot.keyboards.reparse import ReparseCallback
+from src.bot.screens import ScreenRegistry
 from src.bot.tasks import TaskRegistry
 from src.services.container import Services
 from src.services.results import CurrentUser
@@ -65,6 +67,7 @@ async def start_reparse(
     tasks: TaskRegistry,
     i18n: TranslatorRunner,
     bot: Bot,
+    screens: ScreenRegistry,
 ) -> None:
     summary = await services.receipts.reparse_candidates(user.id)
     # No await between this check and the spawn, so two quick taps cannot both start a run.
@@ -73,6 +76,8 @@ async def start_reparse(
         return
     message = query.message
     if message is not None:
+        # The question becomes the progress line and then stays: it is no longer a screen.
+        await screens.forget(screen_of(message))
         count = summary.failed_count if callback_data.reason == "failed" else summary.outdated_count
         tasks.spawn(
             _run(

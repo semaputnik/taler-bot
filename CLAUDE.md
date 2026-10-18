@@ -239,7 +239,7 @@ the history dialog.
 - `SCREEN_TTL_MINUTES` (default 30, `>= 0`; 0 = expiry off: the registry is a no-op and no sweeper is spawned) and
   `SCREEN_SWEEP_SECONDS` (default 30, `>= 1`) are top-level settings. A screen is a message opened by a command or
   a menu button; it is deleted after the TTL without a tap, a card is not a screen. Handlers reach the registry as
-  handler data `screens` (`track` after sending, `touch` on a tap, `forget`); today only the `/start` greeting is tracked.
+  handler data `screens` (`track` after sending, `touch` on a tap, `forget`); tracked: the `/start` greeting, the history, the stats and the `/reparse` question (`handlers/screens.py`: `track_sent`, `touch_tapped`); the in-place history and stats callbacks touch, the re-parse confirmation forgets; cards, "Saved, reading…", errors and the photo hint are not screens (the manual entry: a later ticket).
 - `LOG_LEVEL` (top-level setting, default `INFO`, one of CRITICAL/ERROR/WARNING/INFO/DEBUG,
   case-insensitive) sets the root log level in `src/__main__.py`.
 - Config, not code: no whitelist ids or tokens in source. Access is `users.is_allowed`
