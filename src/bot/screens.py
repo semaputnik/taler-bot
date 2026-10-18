@@ -1,0 +1,98 @@
+"""Expiring screens: a screen is a message opened by a command or a menu button.
+
+The registry knows ids and a kind, never aiogram objects. It tracks a screen with a due time
+(now + TTL), moves the time on a tap (`touch`, only for a tracked screen), drops it (`forget`)
+and hands out the screens whose time has come (`due`). Where the times live is a `ScreenStore`.
+"""
+
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import StrEnum
+from typing import Protocol
+
+
+class ScreenKind(StrEnum):
+    PLAIN = "plain"  # a message with plain callback buttons
+    ENTRY = "entry"  # the message of a manual entry dialog (closing the dialog: a later ticket)
+
+
+@dataclass(frozen=True)
+class Screen:
+    chat_id: int
+    message_id: int
+    kind: ScreenKind = ScreenKind.PLAIN
+
+
+class ScreenStore(Protocol):
+    async def add(self, screen: Screen, due_at: float) -> None:
+        """Track the screen, or move the time of one already tracked."""
+        ...
+
+    async def update(self, screen: Screen, due_at: float) -> None:
+        """Move the time of a tracked screen; an untracked one stays untracked."""
+        ...
+
+    async def remove(self, screen: Screen) -> None: ...
+
+    async def due(self, now: float) -> list[Screen]:
+        """Remove and return the screens due at `now`, the earliest first."""
+        ...
+
+
+class MemoryScreenStore:
+    def __init__(self) -> None:
+        self._due: dict[Screen, float] = {}
+
+    async def add(self, screen: Screen, due_at: float) -> None:
+        self._due[screen] = due_at
+
+    async def update(self, screen: Screen, due_at: float) -> None:
+        if screen in self._due:
+            self._due[screen] = due_at
+
+    async def remove(self, screen: Screen) -> None:
+        self._due.pop(screen, None)
+
+    async def due(self, now: float) -> list[Screen]:
+        ready = sorted((at, screen) for screen, at in self._due.items() if at <= now)
+        for _, screen in ready:
+            del self._due[screen]
+        return [screen for _, screen in ready]
+
+
+class ScreenRegistry:
+    """With a TTL of 0 the registry is off: nothing is tracked and nothing is ever due."""
+
+    def __init__(
+        self,
+        store: ScreenStore,
+        *,
+        ttl_minutes: int,
+        clock: Callable[[], float] = time.time,
+    ) -> None:
+        self._store = store
+        self._ttl = ttl_minutes * 60
+        self._clock = clock
+
+    @property
+    def enabled(self) -> bool:
+        return self._ttl > 0
+
+    def now(self) -> float:
+        return self._clock()
+
+    async def track(self, screen: Screen) -> None:
+        if self.enabled:
+            await self._store.add(screen, self._clock() + self._ttl)
+
+    async def touch(self, screen: Screen) -> None:
+        if self.enabled:
+            await self._store.update(screen, self._clock() + self._ttl)
+
+    async def forget(self, screen: Screen) -> None:
+        if self.enabled:
+            await self._store.remove(screen)
+
+    async def due(self, now: float) -> list[Screen]:
+        return await self._store.due(now) if self.enabled else []

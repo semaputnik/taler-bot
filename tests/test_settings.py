@@ -11,6 +11,8 @@ DB_URL = "postgresql+asyncpg://u:p@db:5432/app"
 
 KEYS = [
     "LOG_LEVEL",
+    "SCREEN_TTL_MINUTES",
+    "SCREEN_SWEEP_SECONDS",
     "BOT__TOKEN",
     "DATABASE__URL",
     "REDIS__URL",
@@ -156,4 +158,33 @@ def test_an_unknown_log_level_is_refused_with_the_valid_names(
     monkeypatch.setenv("LOG_LEVEL", "LOUD")
 
     with pytest.raises(ValidationError, match="LOG_LEVEL must be one of"):
+        Settings(_env_file=None)
+
+
+@pytest.mark.usefixtures("full_env")
+def test_screen_settings_default_to_thirty_minutes_and_thirty_seconds() -> None:
+    settings = Settings(_env_file=None)
+
+    assert (settings.screen_ttl_minutes, settings.screen_sweep_seconds) == (30, 30)
+
+
+@pytest.mark.usefixtures("full_env")
+def test_screen_ttl_zero_switches_expiry_off_and_a_negative_one_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SCREEN_TTL_MINUTES", "0")
+    assert Settings(_env_file=None).screen_ttl_minutes == 0
+
+    monkeypatch.setenv("SCREEN_TTL_MINUTES", "-1")
+    with pytest.raises(ValidationError, match="screen_ttl_minutes"):
+        Settings(_env_file=None)
+
+
+@pytest.mark.usefixtures("full_env")
+def test_screen_sweep_seconds_must_be_at_least_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCREEN_SWEEP_SECONDS", "1")
+    assert Settings(_env_file=None).screen_sweep_seconds == 1
+
+    monkeypatch.setenv("SCREEN_SWEEP_SECONDS", "0")
+    with pytest.raises(ValidationError, match="screen_sweep_seconds"):
         Settings(_env_file=None)

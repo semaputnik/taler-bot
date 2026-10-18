@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.config.bot import BotConfig
@@ -52,6 +52,10 @@ _LOG_LEVELS = ("CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG")
 
 class Settings(DatabaseSettings):
     log_level: str = "INFO"
+    # Screens (messages opened by a command or a menu button) are deleted after this many
+    # minutes without a tap; 0 switches expiry off. The sweeper checks every N seconds.
+    screen_ttl_minutes: int = Field(default=30, ge=0)
+    screen_sweep_seconds: int = Field(default=30, ge=1)
     bot: BotConfig
     redis: RedisConfig = RedisConfig()
     llm: LLMConfig
