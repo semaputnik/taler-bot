@@ -18,6 +18,7 @@ _WINDOWS = {
     CardWindow.ITEMS: ReceiptCardSG.items,
     CardWindow.REVIEW: ReceiptCardSG.issue,
     CardWindow.CATEGORY: ReceiptCardSG.category,
+    CardWindow.TAGS: ReceiptCardSG.tags,
     CardWindow.PHOTO: ReceiptCardSG.photo,
     CardWindow.DELETE_CONFIRM: ReceiptCardSG.delete_confirm,
     CardWindow.REPARSE: ReceiptCardSG.reparse_confirm,
@@ -46,6 +47,9 @@ async def open_card(
         return
     if callback_data.window is CardWindow.CATEGORY and card.expense_id is None:
         await query.answer(i18n.get("category-not-possible"), show_alert=True)
+        return
+    if callback_data.window is CardWindow.TAGS and card.expense_id is None:
+        await query.answer(i18n.get("tags-not-possible"), show_alert=True)
         return
     await open_window(
         query,

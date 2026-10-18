@@ -8,6 +8,7 @@ class ReceiptCardSG(StatesGroup):
     item_input = State()
     item_category = State()
     category = State()
+    tags = State()
     photo = State()
     issue = State()
     issue_input = State()

@@ -1,4 +1,4 @@
-"""Taps on the history message: month, store filter and page. The message is edited in place."""
+"""Taps on the history message: month, payee filter and page. The message is edited in place."""
 
 import logging
 
@@ -7,7 +7,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 from fluentogram import TranslatorRunner
 
-from src.bot.handlers.command.receipts import send_history
+from src.bot.handlers.command.expenses import send_history
 from src.bot.keyboards.history import HistoryAction, HistoryCallback
 from src.bot.views import history as view
 from src.services.container import Services
@@ -38,14 +38,14 @@ async def show_history(
         user.id,
         callback_data.year,
         callback_data.month,
-        payee_id=callback_data.store_id or None,
+        payee_id=callback_data.payee_id or None,
         page=callback_data.page,
     )
     text = view.show_text(page, i18n)
     markup: InlineKeyboardMarkup
-    if callback_data.action is HistoryAction.STORES:
-        text = view.stores_text(page, i18n)
-        markup = view.stores_keyboard(page, callback_data, i18n)
+    if callback_data.action is HistoryAction.PAYEES:
+        text = view.payees_text(page, i18n)
+        markup = view.payees_keyboard(page, callback_data, i18n)
     else:
         markup = view.show_keyboard(page, callback_data, i18n)
     try:

@@ -12,6 +12,7 @@ from fluentogram import TranslatorRunner
 from src.bot.handlers.dialog import pickers
 from src.bot.handlers.dialog.expense_card.common import DialogDataKeys
 from src.bot.handlers.dialog.receipt_card.values import InvalidValue, parse_value
+from src.bot.handlers.dialog.tags import tags_of
 from src.bot.states.expense_card import ExpenseCardSG
 from src.exception import (
     ExpenseNotFound,
@@ -297,11 +298,11 @@ async def _set_tags(manager: DialogManager, query: CallbackQuery | None, tags: l
 
 async def on_tags(message: Message, widget: MessageInput, manager: DialogManager) -> None:
     try:
-        text = _text_of(message)
+        tags = tags_of(message)
     except InvalidValue:
         _refuse(manager)
         return
-    await _set_tags(manager, None, text.split(","))
+    await _set_tags(manager, None, tags)
 
 
 async def clear_tags(query: CallbackQuery, button: Button, manager: DialogManager) -> None:

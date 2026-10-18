@@ -144,6 +144,7 @@ def test_the_steps_that_read_typed_text_are_known():
         "ExpenseCardSG:date_text",
         "ExpenseCardSG:tags",
         "ReceiptCardSG:item_input",
+        "ReceiptCardSG:tags",
         "ReceiptCardSG:issue_input",
         "ReceiptCardSG:issue_rename",
     }
@@ -484,7 +485,7 @@ async def test_the_manual_expense_is_in_receipts_and_in_stats(harness):
     await to_tags(harness)
     await harness.send_text("holiday", user_id=USER)
 
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
     # The month counts it; its row opens a card, which arrives with the expense card dialog.
     assert i18n.get("history-summary", count=1, totals="12.50 €") in harness.last_text()
     await harness.send_text("/stats", user_id=USER)

@@ -1,4 +1,4 @@
-"""The /receipts screen through the real dispatcher on real Postgres."""
+"""The /expenses screen through the real dispatcher on real Postgres."""
 
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -15,9 +15,9 @@ from tests.domain.builders import parse, photo, product
 from tests.helpers import MakeUow, add_receipt, seed_catalog
 
 USER = 7
-RECEIPTS = "🧾 Receipts"
-STORES = "Store ▾"
-ALL_STORES = "All stores"
+EXPENSES = "💸 Expenses"
+PAYEES = "Payee ▾"
+ALL_PAYEES = "All payees"
 PREV_PAGE = "◀"
 NEXT_PAGE = "▶"
 
@@ -95,13 +95,13 @@ def edits(harness) -> list[EditMessageText]:
     return [c for c in harness.session.calls if isinstance(c, EditMessageText)]
 
 
-async def test_receipts_shows_the_current_month_with_rows_count_and_total(harness, make_uow):
+async def test_expenses_shows_the_current_month_with_rows_count_and_total(harness, make_uow):
     await bought(make_uow, 14, store="Mercadona", total="47.85")
     await bought(make_uow, 12, store="Lidl", total="23.10")
 
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
 
-    assert harness.last_text() == f"{title()}\n2 receipts · 70.95 €"
+    assert harness.last_text() == f"{title()}\n2 expenses · 70.95 €"
     month = f"{this_month()[1]:02d}"
     assert harness.button_texts()[:2] == [
         f"• 14.{month} Mercadona · 47.85 €",
@@ -113,21 +113,21 @@ async def test_a_failed_receipt_row_shows_the_cross_and_no_amount(harness, make_
     await bought(make_uow, 14)
     await failed(make_uow, 11)
 
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
 
     month = f"{this_month()[1]:02d}"
     assert f"• 11.{month} Unknown store · ❌" in harness.button_texts()
-    assert harness.last_text().endswith("1 receipt · 47.85 €")
+    assert harness.last_text().endswith("1 expense · 47.85 €")
 
 
 async def test_the_total_is_given_per_currency(harness, make_uow):
     await bought(make_uow, 14, total="10.00")
     await bought(make_uow, 13, total="5.00", currency="USD")
 
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
 
     text = harness.last_text()
-    assert "2 receipts" in text and "10.00 €" in text and "5.00 $" in text
+    assert "2 expenses" in text and "10.00 €" in text and "5.00 $" in text
 
 
 async def test_prev_edits_the_message_to_the_previous_month_and_stops_at_the_oldest(
@@ -135,7 +135,7 @@ async def test_prev_edits_the_message_to_the_previous_month_and_stops_at_the_old
 ):
     await bought(make_uow, 14)
     await bought(make_uow, 20, months=-1)
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
     message_id = harness.last_keyboard()[0]
     assert label(-1, "prev") in harness.button_texts()
 
@@ -152,7 +152,7 @@ async def test_prev_edits_the_message_to_the_previous_month_and_stops_at_the_old
 async def test_next_is_absent_in_the_current_month_and_present_in_a_past_one(harness, make_uow):
     await bought(make_uow, 14)
     await bought(make_uow, 20, months=-1)
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
     assert not [b for b in harness.button_texts() if b.endswith("▶")]
 
     await harness.tap(USER, label(-1, "prev"))
@@ -169,47 +169,47 @@ async def test_the_store_chooser_filters_rows_and_totals_and_the_filter_survives
     await bought(make_uow, 12, store="Lidl", total="20.00")
     await bought(make_uow, 9, months=-1, store="Lidl", total="5.00")
     await bought(make_uow, 8, months=-1, store="Mercadona", total="6.00")
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
 
-    await harness.tap(USER, STORES)
-    assert harness.button_texts() == ["Lidl", "Mercadona", ALL_STORES, "◀ Back"]
+    await harness.tap(USER, PAYEES)
+    assert harness.button_texts() == ["Lidl", "Mercadona", ALL_PAYEES, "◀ Back"]
     assert harness.last_text().startswith(title())
 
     await harness.tap(USER, "Lidl")
-    assert harness.last_text() == f"{title(0, 'Lidl')}\n1 receipt · 20.00 €"
+    assert harness.last_text() == f"{title(0, 'Lidl')}\n1 expense · 20.00 €"
     assert len([b for b in harness.button_texts() if b.startswith("•")]) == 1
 
-    await harness.tap(USER, STORES)
+    await harness.tap(USER, PAYEES)
     assert "✓ Lidl" in harness.button_texts()
     await harness.tap(USER, "◀ Back")
     assert harness.last_text().startswith(title(0, "Lidl"))
 
     await harness.tap(USER, label(-1, "prev"))
-    assert harness.last_text() == f"{title(-1, 'Lidl')}\n1 receipt · 5.00 €"
+    assert harness.last_text() == f"{title(-1, 'Lidl')}\n1 expense · 5.00 €"
 
-    await harness.tap(USER, STORES)
-    await harness.tap(USER, ALL_STORES)
-    assert harness.last_text() == f"{title(-1)}\n2 receipts · 11.00 €"
+    await harness.tap(USER, PAYEES)
+    await harness.tap(USER, ALL_PAYEES)
+    assert harness.last_text() == f"{title(-1)}\n2 expenses · 11.00 €"
 
 
 async def test_a_store_name_is_escaped_in_the_header(harness, make_uow):
     await bought(make_uow, 14, store="<b>Shop")
-    await harness.send_text("/receipts", user_id=USER)
-    await harness.tap(USER, STORES)
+    await harness.send_text("/expenses", user_id=USER)
+    await harness.tap(USER, PAYEES)
 
     await harness.tap(USER, "<b>Shop")
 
     assert harness.last_text().startswith(title(0, "&lt;b&gt;Shop"))
 
 
-async def test_paging_appears_at_nine_receipts(harness, make_uow):
+async def test_paging_appears_at_nine_expenses(harness, make_uow):
     for day in range(1, 9):
         await bought(make_uow, day)
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
     assert not [b for b in harness.button_texts() if "/" in b]
 
     await bought(make_uow, 9)
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
     rows = [b for b in harness.button_texts() if b.startswith("•")]
     assert len(rows) == 8
     assert "1/2" in harness.button_texts()
@@ -228,9 +228,9 @@ async def test_paging_appears_at_nine_receipts(harness, make_uow):
 async def test_an_empty_month_says_so_and_still_offers_the_arrow(harness, make_uow):
     await bought(make_uow, 14, months=-2)
 
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
 
-    assert harness.last_text() == f"{title()}\n{i18n.get('history-empty')}"
+    assert harness.last_text() == f"{title()}\nNo expenses this month."
     assert label(-1, "prev") in harness.button_texts()
     assert not [b for b in harness.button_texts() if b.startswith("•")]
 
@@ -238,14 +238,14 @@ async def test_an_empty_month_says_so_and_still_offers_the_arrow(harness, make_u
 async def test_a_month_with_only_a_failed_receipt_has_no_total(harness, make_uow):
     await failed(make_uow, 11)
 
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
 
-    assert harness.last_text() == f"{title()}\n{i18n.get('history-summary-none')}"
+    assert harness.last_text() == f"{title()}\nNo expenses yet"
 
 
 async def test_a_row_tap_sends_a_fresh_card_and_the_history_keeps_its_buttons(harness, make_uow):
     receipt = await bought(make_uow, 14, store="Mercadona")
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
     history_id, history_markup = harness.last_keyboard()
     row = harness.button_texts()[0]
 
@@ -263,19 +263,25 @@ async def test_a_row_tap_sends_a_fresh_card_and_the_history_keeps_its_buttons(ha
     assert harness.last_keyboard()[0] == history_id
 
 
-async def test_start_carries_the_receipts_button_and_it_opens_the_list(harness, make_uow):
+async def test_start_carries_the_expenses_button_and_it_opens_the_list(harness, make_uow):
     await bought(make_uow, 14)
     await harness.send_text("/start", user_id=USER)
-    assert harness.button_texts() == [RECEIPTS, "📊 Spending"]
+    assert harness.button_texts() == [EXPENSES, "📊 Spending"]
 
-    await harness.tap(USER, RECEIPTS)
+    await harness.tap(USER, EXPENSES)
 
     assert harness.sent_messages[-1].text.startswith(title())
-    assert harness.sent_messages[-1].text.endswith("1 receipt · 47.85 €")
+    assert harness.sent_messages[-1].text.endswith("1 expense · 47.85 €")
 
 
-async def test_a_strangers_receipts_gets_no_reply(harness):
-    await harness.send_text("/receipts", user_id=99)
+async def test_receipts_is_no_longer_a_command(harness):
+    await harness.send_text("/receipts", user_id=USER)
+
+    assert harness.last_text() == "Send me a photo of a receipt."
+
+
+async def test_a_strangers_expenses_gets_no_reply(harness):
+    await harness.send_text("/expenses", user_id=99)
 
     assert harness.session.calls == []
 
@@ -293,7 +299,7 @@ async def test_duplicate_and_pending_rows_show_their_icons(harness, make_uow):
     pending = Receipt.start(USER, replace(photo("pend"), received_at=datetime.now(UTC)))
     await add_receipt(make_uow, pending, user_id=USER)
 
-    await harness.send_text("/receipts", user_id=USER)
+    await harness.send_text("/expenses", user_id=USER)
 
     texts = harness.button_texts()
     assert any(t.endswith("· ♻️") for t in texts)

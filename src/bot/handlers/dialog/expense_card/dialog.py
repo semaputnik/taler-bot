@@ -10,6 +10,7 @@ from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.handlers.dialog.expense_card import click_event, getters
 from src.bot.handlers.dialog.expense_card.common import DialogDataKeys, PreviewDataKeys
 from src.bot.handlers.dialog.expense_card.keyboard import expense_card_keyboard
+from src.bot.handlers.dialog.tags import tags_window
 from src.bot.handlers.dialog.widgets import I18nText
 from src.bot.states.expense_card import ExpenseCardSG
 
@@ -114,12 +115,8 @@ def create_expense_card_dialog() -> Dialog:
         _window(
             S.date_text, getters.date_text_getter, _text_input(click_event.on_date), _back(S.date)
         ),
-        _window(
-            S.tags,
-            getters.tags_getter,
-            _text_input(click_event.on_tags),
-            Button(I18nText("button-clear"), id="clear", on_click=click_event.clear_tags),
-            _back(),
+        tags_window(
+            S.tags, getters.tags_getter, click_event.on_tags, click_event.clear_tags, _back()
         ),
         Window(
             I18nText("expense-delete-confirm"),

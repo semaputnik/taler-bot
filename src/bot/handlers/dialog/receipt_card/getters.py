@@ -7,6 +7,7 @@ from aiogram_dialog import DialogManager
 from fluentogram import TranslatorRunner
 
 from src.bot import render
+from src.bot.handlers.dialog import tags
 from src.bot.handlers.dialog.media import StoredPhoto
 from src.bot.handlers.dialog.receipt_card.click_event import settle
 from src.bot.handlers.dialog.receipt_card.common import (
@@ -180,6 +181,23 @@ async def expense_categories_getter(
             label = i18n.get("category-current", name=label)
         choices.append(CategoryChoice(id=category, text=label))
     return CategoriesPreview(text=i18n.get("expense-category-prompt"), categories=choices).to_data()
+
+
+async def tags_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The prompt with the expense's current tags (and the error line after a refused line)."""
+    card = await services.receipts.card(
+        user.id, dialog_manager.dialog_data[DialogDataKeys.RECEIPT_ID]
+    )
+    if card.deleted or card.expense_id is None:
+        return {tags.TEXT: i18n.get("card-deleted")}
+    refused = bool(dialog_manager.dialog_data.get(DialogDataKeys.INPUT_ERROR))
+    return tags.prompt_data(card.tags, i18n, refused=refused)
 
 
 async def issue_getter(
