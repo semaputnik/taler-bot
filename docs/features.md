@@ -193,8 +193,11 @@ category, tags, and optionally the receipt it came from.
     error replies and re-parse results stay. Tracked in Redis so it survives a restart.
     **In progress** (spec #77). Done (#78): the registry, the Redis and memory stores, the
     `screens-sweeper` task, the settings `SCREEN_TTL_MINUTES` / `SCREEN_SWEEP_SECONDS`; the `/start`
-    greeting expires. To do (#79, #80): `/expenses`, `/stats`, `/reparse`, taps that
-    extend the time, and the unfinished entry.
+    greeting expires. Done (#80): the unfinished entry. The dialog message manager tracks the
+    entry's message and moves its time on every step (a tap or a typed value); the sweeper deletes
+    the message and closes the dialog, so a word typed afterwards gets the photo hint, a number
+    starts a fresh entry and nothing is saved. A finished entry's prompt and the card stay. To do
+    (#79): `/expenses`, `/stats`, `/reparse` and taps that extend the time.
 
 **Later**
 

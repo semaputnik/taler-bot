@@ -70,7 +70,7 @@ src/
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
     screens.py             # expiring screens: Screen(chat_id, message_id, kind plain|entry), ScreenStore Protocol, MemoryScreenStore (tests), ScreenRegistry (track, touch, forget, due; TTL and clock; no-op when SCREEN_TTL_MINUTES = 0)
     screens_redis.py       # RedisScreenStore: sorted set `screens:due`, member `chat_id:message_id:kind`, score = due unix time
-    sweeper.py             # ScreenSweeper: task `screens-sweeper`, every SCREEN_SWEEP_SECONDS deletes due screens (fallback: remove the keyboard; then a warning)
+    sweeper.py             # ScreenSweeper: task `screens-sweeper`, every SCREEN_SWEEP_SECONDS deletes due screens (fallback: remove the keyboard; then a warning); for kind `entry` it first closes the chat's dialog through the `BgManagerFactory` (`done`, `ShowMode.NO_UPDATE`)
     middlewares/           # services, tasks and screens injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (/start, /expenses, /reparse, /stats), each exposes register_xxx(dp)
@@ -309,8 +309,14 @@ The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue 
 reviewable (domain `reviewable_issues`), so Skip does not lower the `Review (n)` count.
 
 A window that shows a stored receipt photo uses `DynamicMedia` with a `StoredPhoto` (by Telegram
-file id). `StoredPhotoMessageManager`, passed to `setup_dialogs`, uploads the bytes only when Telegram
+file id). `StoredPhotoMessageManager` (given the `ScreenRegistry`), passed to `setup_dialogs` through `TrackingManagerFactory`, uploads the bytes only when Telegram
 refuses the id, and shows a notice if the bytes are unreadable.
+
+**The manual entry expires through the message manager.** `TrackingManager` (`dialog/tracking.py`)
+publishes the state group being shown in a context variable; `StoredPhotoMessageManager.show_message`
+tracks the message as `Screen(..., ScreenKind.ENTRY)` when that group is `ExpenseEntrySG` and the TTL is
+on, so every show moves the time. The entry's last step `forget`s its prompt before resetting the stack.
+Cards are never tracked. When the entry expires the sweeper deletes the message and closes the dialog.
 
 ### Tests
 

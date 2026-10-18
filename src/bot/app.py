@@ -64,6 +64,7 @@ class App:
             translator_hub=self.translator_hub,
             tasks=self.tasks,
             screens=self.screens,
+            sweeper=self.screen_sweeper,
         )
 
     @asynccontextmanager

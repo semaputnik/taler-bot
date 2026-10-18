@@ -13,6 +13,7 @@ from src.bot.handlers.dialog import pickers
 from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.handlers.dialog.expense_entry.common import DialogDataKeys
 from src.bot.handlers.dialog.receipt_card.values import InvalidValue, parse_value
+from src.bot.screens import Screen, ScreenKind
 from src.bot.states.expense_card import ExpenseCardSG
 from src.bot.states.expense_entry import ExpenseEntrySG
 from src.exception import (
@@ -236,6 +237,7 @@ async def _save(manager: DialogManager, chat_id: int, tags: list[str]) -> None:
         return
     # The entry ends: its last prompt loses its buttons and the expense card is sent as a new
     # message (a dialog of its own).
+    await _forget_prompt(manager)
     await manager.reset_stack(remove_keyboard=True)
     await manager.start(
         ExpenseCardSG.main,
@@ -243,6 +245,16 @@ async def _save(manager: DialogManager, chat_id: int, tags: list[str]) -> None:
         mode=StartMode.RESET_STACK,
         show_mode=ShowMode.SEND,
     )
+
+
+async def _forget_prompt(manager: DialogManager) -> None:
+    """The finished prompt stays in the chat: it must not expire with an abandoned entry."""
+    message_id = manager.current_stack().last_message_id
+    if message_id is not None:
+        chat_id = manager.middleware_data["event_chat"].id
+        await manager.middleware_data["screens"].forget(
+            Screen(chat_id, message_id, ScreenKind.ENTRY)
+        )
 
 
 async def _back_with_error(manager: DialogManager, state) -> None:
