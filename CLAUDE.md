@@ -70,7 +70,7 @@ src/
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
     screens.py             # expiring screens: Screen(chat_id, message_id, kind plain|entry), ScreenStore Protocol, MemoryScreenStore (tests), ScreenRegistry (track, touch, forget, due; TTL and clock; no-op when SCREEN_TTL_MINUTES = 0)
     screens_redis.py       # RedisScreenStore: sorted set `screens:due`, member `chat_id:message_id:kind`, score = due unix time
-    sweeper.py             # ScreenSweeper: task `screens-sweeper`, every SCREEN_SWEEP_SECONDS deletes due screens (fallback: remove the keyboard; then a warning); for kind `entry` it first closes the chat's dialog through the `BgManagerFactory` (`done`, `ShowMode.NO_UPDATE`)
+    sweeper.py             # ScreenSweeper: task `screens-sweeper`, every SCREEN_SWEEP_SECONDS deletes due screens (fallback: remove the keyboard; then a warning); for kind `entry` it first closes the chat's dialog through the `BgManagerFactory` (`done`, `ShowMode.NO_UPDATE`), only if that dialog still shows the screen's message
     middlewares/           # services, tasks and screens injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (/start, /expenses, /reparse, /stats), each exposes register_xxx(dp)
