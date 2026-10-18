@@ -42,10 +42,23 @@ class CurrencyTotal(BaseModel):
 
 
 class PayeeOption(BaseModel):
+    """A payee to pick: its id (for a filter), its key (for an expense) and its name."""
+
     model_config = ConfigDict(frozen=True)
 
     payee_id: int
+    payee_key: str
     name: str
+
+
+class SourceOption(BaseModel):
+    """A payment source to pick; `kind` is a `PaymentSourceKind` value (`card` or `cash`)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    name: str
+    kind: str
 
 
 class HistoryPage(BaseModel):

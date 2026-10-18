@@ -5,7 +5,7 @@ catches it for a `StoredPhoto` and retries once with the bytes the attachment ca
 message only. If the bytes cannot be loaded either, the message shows the attachment's notice
 text instead of the photo.
 
-It also keeps the keyboards of older receipt cards when a new card is sent.
+It also keeps the keyboards of older cards (receipt and expense) when a new card is sent.
 """
 
 import logging
@@ -20,7 +20,7 @@ from aiogram.types import BufferedInputFile, ContentType, InputFile, Message
 from aiogram_dialog.api.entities import MediaAttachment, MediaId, NewMessage, OldMessage
 from aiogram_dialog.manager.message_manager import MessageManager
 
-from src.bot.keyboards.receipt import is_card_markup
+from src.bot.keyboards.cards import is_card_markup
 from src.integration.storage import StorageError
 
 logger = logging.getLogger(__name__)

@@ -317,3 +317,149 @@ def test_source_for_no_card_ending_is_cash_whatever_the_brand():
     assert catalog.source_for(None, None) is catalog.cash()
     assert catalog.source_for("VISA", None) is catalog.cash()
     assert len(catalog.payment_sources) == 1
+
+
+# --- a payee typed by hand ------------------------------------------------------------------
+
+
+def test_the_slug_helper_is_shared_with_normalize():
+    from src.domain import normalize, slug
+
+    assert normalize.slug is slug.slug
+    assert slug.slug("  Café & Bar  ") == "cafe-and-bar"
+
+
+def test_ensure_payee_named_keys_the_payee_by_the_slug_of_the_typed_name():
+    catalog = Catalog(user_id=1)
+
+    payee = catalog.ensure_payee_named("  Café Granja ")
+
+    assert (payee.payee_key, payee.name) == ("cafe-granja", "Café Granja")
+    assert catalog.payees == {"cafe-granja": payee}
+
+
+def test_ensure_payee_named_reuses_a_payee_whatever_the_case():
+    catalog = Catalog(user_id=1)
+    existing = catalog.ensure_payee("mercadona", "Mercadona")
+
+    assert catalog.ensure_payee_named("MERCADONA") is existing
+    assert catalog.ensure_payee_named("mercadona") is existing
+    assert len(catalog.payees) == 1
+    assert existing.name == "Mercadona"
+
+
+@pytest.mark.parametrize("name", ["", "   ", "!!!", "☕"])
+def test_ensure_payee_named_needs_letters_or_digits(name):
+    catalog = Catalog(user_id=1)
+
+    with pytest.raises(InvalidEdit):
+        catalog.ensure_payee_named(name)
+
+    assert catalog.payees == {}
+
+
+# --- a card added by hand -------------------------------------------------------------------
+
+
+def test_add_card_makes_a_card_without_brand_and_digits():
+    catalog = Catalog(user_id=1)
+
+    card = catalog.add_card("  Revolut ")
+
+    assert (card.kind, card.name, card.brand, card.last4, card.id) == (
+        PaymentSourceKind.CARD,
+        "Revolut",
+        None,
+        None,
+        None,
+    )
+    assert list(catalog.payment_sources.values()) == [card]
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_add_card_needs_a_name(name):
+    catalog = Catalog(user_id=1)
+
+    with pytest.raises(InvalidPaymentSource):
+        catalog.add_card(name)
+
+    assert catalog.payment_sources == {}
+
+
+def test_add_card_refuses_a_name_in_use_whatever_the_case():
+    catalog = Catalog(user_id=1)
+    catalog.ensure_card("VISA", "0848")
+    catalog.cash()
+    catalog.add_card("Revolut")
+
+    for name in ("revolut", " REVOLUT ", "visa •0848", "cash"):
+        with pytest.raises(InvalidPaymentSource):
+            catalog.add_card(name)
+
+    assert len(catalog.payment_sources) == 3
+
+
+def test_two_hand_added_cards_have_their_own_temporary_keys_and_ids():
+    catalog = Catalog(user_id=1)
+    first, second = catalog.add_card("Revolut"), catalog.add_card("N26")
+
+    catalog.assign_source_id(first, 4)
+    catalog.assign_source_id(second, 5)
+
+    assert catalog.payment_sources == {4: first, 5: second}
+
+
+def test_rename_source_refuses_a_name_another_source_has():
+    catalog = Catalog(user_id=1)
+    catalog.ensure_card("VISA", "0848")
+    catalog.add_card("Revolut")
+
+    with pytest.raises(InvalidPaymentSource):
+        catalog.rename_source("card:0848", "REVOLUT")
+
+    assert catalog.payment_sources["card:0848"].name == "VISA •0848"
+    assert catalog.renamed_sources == ()
+
+
+def test_rename_source_may_change_only_the_case_of_its_own_name():
+    catalog = Catalog(user_id=1)
+    catalog.add_card("revolut")
+    key = next(iter(catalog.payment_sources))
+
+    assert catalog.rename_source(key, "Revolut").name == "Revolut"
+
+
+def test_payee_and_source_look_up_what_the_catalog_holds_or_raise():
+    catalog = Catalog(user_id=1)
+    payee = catalog.ensure_payee("lidl", "Lidl")
+    cash = catalog.cash()
+
+    assert catalog.payee("lidl") is payee
+    assert catalog.source("cash") is cash
+    with pytest.raises(UnknownPayee):
+        catalog.payee("aldi")
+    with pytest.raises(UnknownPaymentSource):
+        catalog.source(7)
+
+
+def test_the_name_cash_is_reserved_for_the_cash_source_even_before_it_exists():
+    catalog = Catalog(user_id=1)
+
+    with pytest.raises(InvalidPaymentSource):
+        catalog.add_card("Cash")
+    card = catalog.add_card("Wallet")
+    with pytest.raises(InvalidPaymentSource):
+        catalog.rename_source(next(iter(catalog.payment_sources)), "CASH")
+    assert card.name == "Wallet"
+    cash = catalog.cash()
+    assert catalog.rename_source("cash", "CASH").name == "CASH"
+    assert cash.name == "CASH"
+
+
+def test_a_receipt_card_whose_name_a_hand_added_card_has_gets_a_distinct_name():
+    catalog = Catalog(user_id=1)
+    catalog.add_card("visa •0848")
+
+    card = catalog.ensure_card("VISA", "0848")
+
+    assert card.name == "VISA •0848 (receipt)"

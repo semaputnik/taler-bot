@@ -260,12 +260,11 @@ async def test_a_user_has_one_card_per_ending_and_one_cash_source(make_uow: Make
 @pytest.mark.parametrize(
     "source",
     [
-        PaymentSource(kind=PaymentSourceKind.CARD, name="No digits"),
         PaymentSource(kind=PaymentSourceKind.CASH, name="Cash with digits", last4="1234"),
         PaymentSource(kind=PaymentSourceKind.CARD, name="Short", last4="12"),
         PaymentSource(kind="wallet", name="Unknown kind"),  # type: ignore[arg-type]
     ],
-    ids=["card-without-last4", "cash-with-last4", "short-last4", "unknown-kind"],
+    ids=["cash-with-last4", "short-last4", "unknown-kind"],
 )
 async def test_the_database_refuses_a_malformed_source(make_uow: MakeUow, source) -> None:
     await add_user(make_uow)
@@ -291,3 +290,96 @@ async def test_two_users_may_use_the_same_card_ending_and_each_has_cash(make_uow
         first, second = await uow.catalog.get(1), await uow.catalog.get(2)
     assert set(first.payment_sources).isdisjoint(second.payment_sources)
     assert len(first.payment_sources) == len(second.payment_sources) == 2
+
+
+async def test_a_card_added_by_hand_is_saved_without_digits_and_gets_its_id(
+    make_uow: MakeUow,
+) -> None:
+    await add_user(make_uow)
+    catalog = Catalog(user_id=1)
+    revolut, n26 = catalog.add_card("Revolut"), catalog.add_card("N26")
+
+    async with make_uow() as uow:
+        await uow.catalog.save(catalog)
+        await uow.commit()
+
+    assert revolut.id is not None and n26.id is not None and revolut.id != n26.id
+    assert set(catalog.payment_sources) == {revolut.id, n26.id}
+    async with make_uow() as uow:
+        loaded = await uow.catalog.get(1)
+    assert loaded == catalog
+    assert (loaded.payment_sources[revolut.id].last4, loaded.payment_sources[revolut.id].brand) == (
+        None,
+        None,
+    )
+
+
+async def test_a_renamed_hand_added_card_is_saved_by_id(make_uow: MakeUow) -> None:
+    await add_user(make_uow)
+    catalog = Catalog(user_id=1)
+    card = catalog.add_card("Revolut")
+    async with make_uow() as uow:
+        await uow.catalog.save(catalog)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        loaded = await uow.catalog.get(1)
+        loaded.rename_source(card.id, "Revolut Joint")
+        await uow.catalog.save(loaded)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        assert (await uow.catalog.get(1)).payment_sources[card.id].name == "Revolut Joint"
+
+
+async def test_the_database_refuses_two_sources_of_a_user_with_the_same_name_ignoring_case(
+    make_uow: MakeUow,
+) -> None:
+    await add_user(make_uow, 1)
+    await add_user(make_uow, 2)
+    first = Catalog(user_id=1)
+    first.add_card("Revolut")
+    async with make_uow() as uow:
+        await uow.catalog.save(first)
+        await uow.commit()
+    clash = Catalog(user_id=1)
+    clash.payment_sources["x"] = PaymentSource(kind=PaymentSourceKind.CARD, name="REVOLUT")
+    other_user = Catalog(user_id=2)
+    other_user.add_card("Revolut")
+
+    async with make_uow() as uow:
+        with pytest.raises(UniqueViolationError):
+            await uow.catalog.save(clash)
+    async with make_uow() as uow:
+        await uow.catalog.save(other_user)  # another user's names are their own
+
+
+async def test_payment_sources_lists_cash_first_then_cards_by_name_for_one_user(
+    make_uow: MakeUow,
+) -> None:
+    await add_user(make_uow, 1)
+    await add_user(make_uow, 2)
+    catalog = Catalog(user_id=1)
+    catalog.add_card("revolut")
+    catalog.ensure_card("VISA", "0848")
+    catalog.add_card("Amex")
+    catalog.cash()
+    stranger = Catalog(user_id=2)
+    stranger.add_card("Other")
+    async with make_uow() as uow:
+        await uow.catalog.save(catalog)
+        await uow.catalog.save(stranger)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        options = await uow.catalog.payment_sources(1)
+
+    assert [(o.name, o.kind) for o in options] == [
+        ("Cash", "cash"),
+        ("Amex", "card"),
+        ("revolut", "card"),
+        ("VISA •0848", "card"),
+    ]
+    assert {o.id for o in options} == {s.id for s in catalog.payment_sources.values()}
+    async with make_uow() as uow:
+        assert await uow.catalog.payment_sources(3) == []

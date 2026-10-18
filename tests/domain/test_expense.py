@@ -79,7 +79,7 @@ def test_a_manual_expense_keeps_what_was_typed():
     assert (expense.id, expense.deleted_at) == (None, None)
 
 
-@pytest.mark.parametrize("amount", ["0", "0.00", "-1", "-0.01"])
+@pytest.mark.parametrize("amount", ["0", "0.00", "-1", "-0.01", "0.004"])
 def test_a_manual_expense_needs_a_positive_amount(amount):
     with pytest.raises(InvalidExpense):
         manual(amount=D(amount))
@@ -249,7 +249,7 @@ def test_set_payee_and_source_accept_none():
     assert (expense.payee_key, expense.payment_source_id) == (None, None)
 
 
-@pytest.mark.parametrize("amount", ["0", "-3"])
+@pytest.mark.parametrize("amount", ["0", "-3", "0.004"])
 def test_set_amount_needs_a_positive_amount(amount):
     expense = manual()
 
@@ -377,3 +377,31 @@ def test_restore_reopens_a_deleted_expense_and_keeps_what_the_user_set():
 def test_restoring_an_open_expense_is_refused():
     with pytest.raises(InvalidExpense):
         manual().restore()
+
+
+# --- deleting by hand -----------------------------------------------------------------------
+
+
+def test_a_manual_expense_is_deleted_by_hand():
+    expense = manual()
+
+    expense.delete_by_hand(datetime(2026, 10, 15, tzinfo=UTC))
+
+    assert expense.deleted_at == datetime(2026, 10, 15, tzinfo=UTC)
+
+
+def test_a_receipt_expense_is_not_deleted_by_hand_but_with_its_receipt():
+    expense = from_receipt()
+
+    with pytest.raises(ExpenseFollowsReceipt):
+        expense.delete_by_hand()
+
+    assert expense.deleted_at is None
+
+
+def test_an_expense_deleted_by_hand_cannot_be_deleted_again():
+    expense = manual()
+    expense.delete_by_hand()
+
+    with pytest.raises(InvalidExpense):
+        expense.delete_by_hand()

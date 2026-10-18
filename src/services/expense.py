@@ -4,7 +4,7 @@ expenses (ADR-0003).
 Every write is one Unit of Work: load the aggregate, call one aggregate method, save, commit. An
 expense of another user counts as not found (`ExpenseNotFound`). Receipt-backed expenses are
 created and kept in step by `ReceiptService`; this service changes only what the user owns
-(the category and the tags).
+(the category and the tags), and the facts of an expense the user typed.
 """
 
 from datetime import date, datetime
@@ -13,6 +13,7 @@ from typing import Literal
 from zoneinfo import ZoneInfo
 
 from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
+from src.domain.catalog import Catalog, PaymentSource
 from src.domain.enums import ExpenseCategory
 from src.domain.expense import Expense
 from src.exception import ExpenseNotFound, InvalidEdit, UserNotFound
@@ -24,7 +25,10 @@ from src.services.results import (
     ComparedBlock,
     CurrencyBlock,
     ExpenseCard,
+    ExpenseDraft,
     HistoryPage,
+    PayeeOption,
+    SourceOption,
     SpendingReport,
 )
 
@@ -53,12 +57,123 @@ class ExpenseService:
                 raise ExpenseNotFound(receipt_id)
             return await _card(uow, expense)
 
+    async def add_manual(self, user_id: int, draft: ExpenseDraft) -> ExpenseCard:
+        """Record an expense the user typed, in the user's default currency.
+
+        One Unit of Work: the payee (a known key, or a typed name that is reused when its slug
+        exists) and the source (an id, cash, or a new card) are resolved in the catalog, the
+        catalog is saved first (new parts get their ids; the expense refers to them), then the
+        expense is added. Nothing stays if any step fails.
+        """
+        category = _category(draft.category)
+        async with self._uow_factory() as uow:
+            user = await uow.users.get(user_id)
+            if user is None:
+                raise UserNotFound(user_id)
+            catalog = await uow.catalog.get(user_id)
+            payee_key = _payee_key(catalog, draft.payee_key, draft.payee_name)
+            source = _source(catalog, draft.payment_source_id, draft.cash, draft.new_card_name)
+            await uow.catalog.save(catalog)
+            expense = Expense.start_manual(
+                user_id,
+                amount=draft.amount,
+                currency=user.default_currency,
+                spent_at=draft.spent_at,
+                category=category,
+                payee_key=payee_key,
+                payment_source_id=source.id if source is not None else None,
+                tags=list(draft.tags),
+            )
+            await uow.expenses.add(expense)
+            await uow.commit()
+            return await _card(uow, expense)
+
+    async def set_amount(self, user_id: int, expense_id: int, amount: Decimal) -> ExpenseCard:
+        """Change the amount of an expense the user typed (above zero, in cents)."""
+        async with self._uow_factory() as uow:
+            expense = await _load(uow, user_id, expense_id)
+            expense.set_amount(amount)
+            await uow.expenses.save(expense)
+            await uow.commit()
+            return await _card(uow, expense)
+
+    async def set_payee(
+        self,
+        user_id: int,
+        expense_id: int,
+        *,
+        payee_key: str | None = None,
+        payee_name: str | None = None,
+    ) -> ExpenseCard:
+        """Change the payee of an expense the user typed: a known key, or a typed name (an
+        existing payee with the same slug is reused). Exactly one of the two."""
+        if (payee_key is None) == (payee_name is None):
+            raise InvalidEdit("give a payee key or a payee name")
+        async with self._uow_factory() as uow:
+            expense = await _load(uow, user_id, expense_id)
+            catalog = await uow.catalog.get(user_id)
+            key = _payee_key(catalog, payee_key, payee_name)
+            await uow.catalog.save(catalog)
+            expense.set_payee(key)
+            await uow.expenses.save(expense)
+            await uow.commit()
+            return await _card(uow, expense)
+
+    async def set_source(
+        self,
+        user_id: int,
+        expense_id: int,
+        *,
+        source_id: int | None = None,
+        cash: bool = False,
+        new_card_name: str | None = None,
+    ) -> ExpenseCard:
+        """Change the payment source of an expense the user typed: one of the user's sources
+        by id, their cash, or a new card. Exactly one of the three."""
+        if (source_id is not None) + cash + (new_card_name is not None) != 1:
+            raise InvalidEdit("give a source id, cash, or a new card name")
+        async with self._uow_factory() as uow:
+            expense = await _load(uow, user_id, expense_id)
+            catalog = await uow.catalog.get(user_id)
+            source = _source(catalog, source_id, cash, new_card_name)
+            await uow.catalog.save(catalog)
+            expense.set_source(source.id if source is not None else None)
+            await uow.expenses.save(expense)
+            await uow.commit()
+            return await _card(uow, expense)
+
+    async def set_date(self, user_id: int, expense_id: int, spent_at: date) -> ExpenseCard:
+        """Change the day of an expense the user typed (the user's local day)."""
+        async with self._uow_factory() as uow:
+            expense = await _load(uow, user_id, expense_id)
+            expense.set_date(spent_at)
+            await uow.expenses.save(expense)
+            await uow.commit()
+            return await _card(uow, expense)
+
+    async def soft_delete(self, user_id: int, expense_id: int) -> ExpenseCard:
+        """Delete an expense the user typed; it leaves lists and statistics. One with a receipt
+        is deleted with its receipt (`ExpenseFollowsReceipt`)."""
+        async with self._uow_factory() as uow:
+            expense = await _load(uow, user_id, expense_id)
+            expense.delete_by_hand()
+            await uow.expenses.save(expense)
+            await uow.commit()
+            return await _card(uow, expense)
+
+    async def recent_payees(self, user_id: int, limit: int = _PAYEES_SHOWN) -> list[PayeeOption]:
+        """The payees of the user's latest expenses, newest first, for the entry's first step."""
+        async with self._uow_factory() as uow:
+            return await uow.expenses.recent_payees(user_id, limit)
+
+    async def payment_sources(self, user_id: int) -> list[SourceOption]:
+        """The user's cash first, then their cards by name."""
+        async with self._uow_factory() as uow:
+            return await uow.catalog.payment_sources(user_id)
+
     async def set_category(self, user_id: int, expense_id: int, category: str) -> ExpenseCard:
         """Set the expense category from its name (`groceries`, `rent`, ...)."""
-        try:
-            parsed = ExpenseCategory(category)
-        except ValueError:
-            raise InvalidEdit(f"unknown expense category {category!r}") from None
+        parsed = _category(category)
         async with self._uow_factory() as uow:
             expense = await _load(uow, user_id, expense_id)
             expense.set_category(parsed)
@@ -147,6 +262,41 @@ class ExpenseService:
 # --- helpers ---------------------------------------------------------------------------
 
 
+def _category(value: str) -> ExpenseCategory:
+    try:
+        return ExpenseCategory(value)
+    except ValueError:
+        raise InvalidEdit(f"unknown expense category {value!r}") from None
+
+
+def _payee_key(catalog: Catalog, payee_key: str | None, payee_name: str | None) -> str | None:
+    """The key of the payee a key or a typed name points at (created for a new name); None for
+    neither. A key must be one of the user's payees."""
+    if payee_key is not None and payee_name is not None:
+        raise InvalidEdit("give a payee key or a payee name, not both")
+    if payee_key is not None:
+        return catalog.payee(payee_key).payee_key
+    if payee_name is not None:
+        return catalog.ensure_payee_named(payee_name).payee_key
+    return None
+
+
+def _source(
+    catalog: Catalog, source_id: int | None, cash: bool, new_card_name: str | None
+) -> PaymentSource | None:
+    """The source an id, cash or a new card name points at (created when new); None for none.
+    Its id is known once the catalog is saved."""
+    if (source_id is not None) + cash + (new_card_name is not None) > 1:
+        raise InvalidEdit("give one payment source: an id, cash, or a new card name")
+    if source_id is not None:
+        return catalog.source(source_id)
+    if cash:
+        return catalog.cash()
+    if new_card_name is not None:
+        return catalog.add_card(new_card_name)
+    return None
+
+
 async def _load(uow: UnitOfWork, user_id: int, expense_id: int) -> Expense:
     expense = await uow.expenses.get(expense_id)
     if expense is None or expense.user_id != user_id:
@@ -168,11 +318,14 @@ async def _card(uow: UnitOfWork, expense: Expense) -> ExpenseCard:
         amount=expense.amount,
         currency=expense.currency,
         spent_at=expense.spent_at,
+        payee_key=payee.payee_key if payee is not None else None,
         payee_name=payee.name if payee is not None else None,
+        payment_source_id=source.id if source is not None else None,
         payment_source_name=source.name if source is not None else None,
         category=str(expense.category),
         tags=list(expense.tags),
         receipt_id=expense.receipt_id,
+        can_edit_facts=expense.receipt_id is None,
         deleted=expense.deleted_at is not None,
     )
 

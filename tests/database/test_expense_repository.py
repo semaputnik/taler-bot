@@ -350,3 +350,86 @@ async def test_deleting_a_user_removes_expenses_tags_and_links(
         )
     ).one()
     assert tuple(left) == (0, 0, 0, 0)
+
+
+# --- the payees used most recently -----------------------------------------------------------
+
+
+async def spend(make_uow: MakeUow, payee_key: str | None, day: int, *, user_id: int = 1) -> Expense:
+    return await add(
+        make_uow,
+        Expense.start_manual(
+            user_id,
+            amount=D("5"),
+            currency="EUR",
+            spent_at=date(2026, 10, day),
+            payee_key=payee_key,
+        ),
+    )
+
+
+async def payees_seeded(make_uow: MakeUow, *names: str, user_id: int = 1) -> None:
+    await add_user(make_uow, user_id)
+    catalog = Catalog(user_id=user_id)
+    for name in names:
+        catalog.ensure_payee_named(name)
+    async with make_uow() as uow:
+        await uow.catalog.save(catalog)
+        await uow.commit()
+
+
+async def test_recent_payees_are_ordered_by_their_latest_expense_then_by_name(
+    make_uow: MakeUow,
+) -> None:
+    await payees_seeded(make_uow, "Lidl", "Aldi", "Mercadona", "Zara", "Never used")
+    await spend(make_uow, "lidl", 3)
+    await spend(make_uow, "lidl", 9)  # Lidl's latest
+    await spend(make_uow, "mercadona", 5)
+    await spend(make_uow, "aldi", 5)  # same day as Mercadona: by name
+    await spend(make_uow, "zara", 1)
+    await spend(make_uow, None, 20)  # an expense without a payee counts for nobody
+
+    async with make_uow() as uow:
+        found = await uow.expenses.recent_payees(1, 10)
+
+    assert [(p.payee_key, p.name) for p in found] == [
+        ("lidl", "Lidl"),
+        ("aldi", "Aldi"),
+        ("mercadona", "Mercadona"),
+        ("zara", "Zara"),
+    ]
+    assert all(p.payee_id > 0 for p in found)
+
+
+async def test_recent_payees_stop_at_the_limit(make_uow: MakeUow) -> None:
+    await payees_seeded(make_uow, "A", "B", "C")
+    for day, key in enumerate(("a", "b", "c"), start=1):
+        await spend(make_uow, key, day)
+
+    async with make_uow() as uow:
+        assert [p.payee_key for p in await uow.expenses.recent_payees(1, 2)] == ["c", "b"]
+        assert await uow.expenses.recent_payees(1, 0) == []
+
+
+async def test_a_deleted_expense_does_not_make_a_payee_recent(make_uow: MakeUow) -> None:
+    await payees_seeded(make_uow, "Lidl", "Aldi")
+    await spend(make_uow, "lidl", 3)
+    newer = await spend(make_uow, "aldi", 9)
+    newer.soft_delete()
+    async with make_uow() as uow:
+        await uow.expenses.save(newer)
+        await uow.commit()
+
+    async with make_uow() as uow:
+        assert [p.payee_key for p in await uow.expenses.recent_payees(1, 5)] == ["lidl"]
+
+
+async def test_recent_payees_are_per_user(make_uow: MakeUow) -> None:
+    await payees_seeded(make_uow, "Lidl", user_id=1)
+    await payees_seeded(make_uow, "Lidl", "Aldi", user_id=2)
+    await spend(make_uow, "lidl", 3)
+    await spend(make_uow, "aldi", 4, user_id=2)
+
+    async with make_uow() as uow:
+        assert [p.payee_key for p in await uow.expenses.recent_payees(1, 5)] == ["lidl"]
+        assert [p.payee_key for p in await uow.expenses.recent_payees(2, 5)] == ["aldi"]

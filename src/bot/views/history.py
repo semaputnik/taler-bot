@@ -6,6 +6,7 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from fluentogram import TranslatorRunner
 
 from src.bot import render
+from src.bot.keyboards.expense import ExpenseCallback, ExpenseWindow
 from src.bot.keyboards.history import HistoryAction, HistoryCallback
 from src.bot.keyboards.receipt import CardWindow, ReceiptCallback
 from src.services.results import PAGE_SIZE, HistoryPage, HistoryRow
@@ -69,9 +70,18 @@ def _row_label(row: HistoryRow, i18n: TranslatorRunner) -> str:
     icon = _STATUS_ICONS.get(row.status)
     if icon is not None:
         return i18n.get("history-row-status", day=day, store=store, status=icon)
-    return i18n.get(
-        "history-row", day=day, store=store, amount=render.money(row.amount, i18n, row.currency)
-    )
+    amount = render.money(row.amount, i18n, row.currency)
+    # An expense typed by hand has no receipt: its own icon instead of the plain bullet.
+    key = "history-row" if row.has_receipt else "history-row-manual"
+    return i18n.get(key, day=day, store=store, amount=amount)
+
+
+def _open_card(row: HistoryRow) -> str:
+    """The row opens a card: the receipt card, or the expense card of an expense typed by hand."""
+    if row.receipt_id is not None:
+        return ReceiptCallback(receipt_id=row.receipt_id, window=CardWindow.MAIN).pack()
+    assert row.expense_id is not None  # a row has a receipt or an expense
+    return ExpenseCallback(expense_id=row.expense_id, window=ExpenseWindow.MAIN).pack()
 
 
 def _button(text: str, data: HistoryCallback) -> InlineKeyboardButton:
@@ -88,16 +98,8 @@ def show_keyboard(
         return here.model_copy(update={"action": HistoryAction.SHOW, **fields})
 
     rows = [
-        [
-            InlineKeyboardButton(
-                text=_row_label(row, i18n),
-                callback_data=ReceiptCallback(
-                    receipt_id=row.receipt_id, window=CardWindow.MAIN
-                ).pack(),
-            )
-        ]
+        [InlineKeyboardButton(text=_row_label(row, i18n), callback_data=_open_card(row))]
         for row in page.rows
-        if row.receipt_id is not None  # an expense without a receipt has no screen yet
     ]
     nav: list[InlineKeyboardButton] = []
     if page.has_earlier:
