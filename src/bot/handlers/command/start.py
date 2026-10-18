@@ -9,10 +9,13 @@ from src.bot.handlers.command import expenses as history_command
 from src.bot.handlers.command import stats as stats_command
 from src.bot.keyboards.history import HistoryAction
 from src.bot.keyboards.stats import StatsAction
+from src.bot.screens import Screen, ScreenRegistry
 from src.services.results import CurrentUser
 
 
-async def start(message: Message, user: CurrentUser, i18n: TranslatorRunner) -> None:
+async def start(
+    message: Message, user: CurrentUser, i18n: TranslatorRunner, screens: ScreenRegistry
+) -> None:
     # The bot uses HTML parse mode, so the name must be escaped.
     expenses = InlineKeyboardButton(
         text=i18n.get("button-expenses"),
@@ -22,10 +25,11 @@ async def start(message: Message, user: CurrentUser, i18n: TranslatorRunner) -> 
         text=i18n.get("button-spending"),
         callback_data=stats_command.current_month(user, StatsAction.OPEN).pack(),
     )
-    await message.answer(
+    sent = await message.answer(
         i18n.start.greeting(first_name=escape(user.first_name or "")),
         reply_markup=InlineKeyboardMarkup(inline_keyboard=[[expenses, spending]]),
     )
+    await screens.track(Screen(sent.chat.id, sent.message_id))
 
 
 def register_start(dp: Dispatcher) -> None:
