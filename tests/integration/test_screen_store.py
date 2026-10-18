@@ -90,3 +90,10 @@ async def test_the_redis_store_uses_one_sorted_set_with_readable_members():
     finally:
         await client.delete(DUE_KEY)
         await client.aclose()
+
+
+async def test_tracked_tells_a_tracked_screen_from_an_untracked_one(store):
+    await store.add(A, 100.0)
+
+    assert await store.tracked(A)
+    assert not await store.tracked(B)

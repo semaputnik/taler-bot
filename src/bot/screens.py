@@ -35,6 +35,8 @@ class ScreenStore(Protocol):
 
     async def remove(self, screen: Screen) -> None: ...
 
+    async def tracked(self, screen: Screen) -> bool: ...
+
     async def due(self, now: float) -> list[Screen]:
         """Remove and return the screens due at `now`, the earliest first."""
         ...
@@ -53,6 +55,9 @@ class MemoryScreenStore:
 
     async def remove(self, screen: Screen) -> None:
         self._due.pop(screen, None)
+
+    async def tracked(self, screen: Screen) -> bool:
+        return screen in self._due
 
     async def due(self, now: float) -> list[Screen]:
         ready = sorted((s for s, at in self._due.items() if at <= now), key=self._due.__getitem__)
@@ -93,6 +98,12 @@ class ScreenRegistry:
     async def forget(self, screen: Screen) -> None:
         if self.enabled:
             await self._store.remove(screen)
+
+    async def move(self, old: Screen, new: Screen) -> None:
+        """The message was replaced: if `old` was tracked, `new` takes its place with a full TTL."""
+        if self.enabled and await self._store.tracked(old):
+            await self._store.remove(old)
+            await self._store.add(new, self._clock() + self._ttl)
 
     async def due(self, now: float) -> list[Screen]:
         return await self._store.due(now) if self.enabled else []

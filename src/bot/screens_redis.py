@@ -30,6 +30,9 @@ class RedisScreenStore:
     async def remove(self, screen: Screen) -> None:
         await self._redis.zrem(DUE_KEY, _member(screen))
 
+    async def tracked(self, screen: Screen) -> bool:
+        return await self._redis.zscore(DUE_KEY, _member(screen)) is not None
+
     async def due(self, now: float) -> list[Screen]:
         async with self._redis.pipeline(transaction=True) as pipe:
             pipe.zrangebyscore(DUE_KEY, "-inf", now)

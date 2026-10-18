@@ -238,7 +238,7 @@ the history dialog.
   call.
 - `SCREEN_TTL_MINUTES` (default 30, `>= 0`; 0 = expiry off: the registry is a no-op and no sweeper is spawned) and
   `SCREEN_SWEEP_SECONDS` (default 30, `>= 1`) are top-level settings. A screen is a message opened by a command or
-  a menu button; it is deleted after the TTL without a tap, a card is not a screen. Handlers reach the registry as
+  a menu button; it is deleted after the TTL without a tap. A card is a screen only when the user asked for it: one opened from a history row or copied from an older card (`open_window` with `in_place` False, under `tracking_card()`) is tracked as `ScreenKind.PLAIN`, and every later show of a card moves its time; a card the bot sent by itself (after a parse or an entry) is never tracked. Handlers reach the registry as
   handler data `screens` (`track` after sending, `touch` on a tap, `forget`); tracked: the `/start` greeting, the history, the stats and the `/reparse` question (`handlers/screens.py`: `track_sent`, `touch_tapped`); the in-place history and stats callbacks touch, the re-parse confirmation forgets; cards, "Saved, reading…", errors and the photo hint are not screens (the manual entry: a later ticket).
 - `LOG_LEVEL` (top-level setting, default `INFO`, one of CRITICAL/ERROR/WARNING/INFO/DEBUG,
   case-insensitive) sets the root log level in `src/__main__.py`.
@@ -316,7 +316,7 @@ refuses the id, and shows a notice if the bytes are unreadable.
 publishes the state group being shown in a context variable; `StoredPhotoMessageManager.show_message`
 tracks the message as `Screen(..., ScreenKind.ENTRY)` when that group is `ExpenseEntrySG` and the TTL is
 on, so every show moves the time. The entry's last step `forget`s its prompt before resetting the stack.
-Cards are never tracked. When the entry expires the sweeper deletes the message and closes the dialog.
+Cards are tracked by the same method (`_show_card`: tracked under `tracking_card()`, otherwise touched or moved when the photo window replaces the message), only when the user asked for them. When the entry expires the sweeper deletes the message and closes the dialog.
 
 ### Tests
 

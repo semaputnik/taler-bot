@@ -23,3 +23,18 @@ async def test_with_the_ttl_at_zero_the_entry_is_not_tracked(harness, allow_user
     await harness.sweep(after_minutes=600)
 
     assert harness.deleted_messages == []
+
+
+async def test_with_the_ttl_at_zero_a_history_opened_card_is_never_deleted(
+    harness, allow_user, make_uow
+):
+    from tests.helpers import add_manual_expense
+
+    await allow_user(7)
+    await add_manual_expense(make_uow, 7)
+    await harness.send_text("/expenses", user_id=7)
+    await harness.tap(7, harness.button_texts()[0])
+
+    await harness.sweep(after_minutes=600)
+
+    assert harness.deleted_messages == []
