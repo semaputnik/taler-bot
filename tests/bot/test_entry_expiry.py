@@ -65,7 +65,7 @@ async def test_after_the_sweep_the_entry_is_closed(harness, session_factory):
     assert harness.last_text() == PHOTO_PROMPT
 
     await harness.send_text("7", user_id=USER)
-    assert harness.last_text().startswith("💸 <b>7.00 €</b>")
+    assert harness.last_text().startswith("<b>7.00 €</b>")
     assert await expenses(session_factory) == []
 
 

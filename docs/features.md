@@ -150,7 +150,7 @@ category, tags, and optionally the receipt it came from.
    entry (its prompt loses its buttons) and sends the expense card:
 
    ```
-   💸 <b>Mercadona</b>
+   <b>Mercadona</b>
 
    17.10.2026
    Amount: <b>12.50 €</b>

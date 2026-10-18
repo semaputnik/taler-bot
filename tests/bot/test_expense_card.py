@@ -88,7 +88,7 @@ async def test_the_entry_ends_on_the_expense_card(harness):
     await entered(harness)
 
     assert card_lines(harness) == [
-        "💸 <b>Mercadona</b>",
+        "<b>Mercadona</b>",
         "",
         shown(today()),
         "Amount: <b>12.50 €</b>",
@@ -161,7 +161,7 @@ async def test_an_existing_payee_is_picked_from_the_list(harness, make_uow, sess
     assert harness.button_texts() == ["✓ Mercadona", "Corner Bakery", TYPE_NAME, BACK]
     await harness.tap(USER, "Corner Bakery")
 
-    assert card_lines(harness)[0] == "💸 <b>Corner Bakery</b>"
+    assert card_lines(harness)[0] == "<b>Corner Bakery</b>"
     assert card_lines(harness)[-1] == "#corner_bakery"
     assert (
         await one(
@@ -180,12 +180,12 @@ async def test_a_typed_payee_reuses_the_same_name_ignoring_case_and_creates_a_ne
     await harness.tap(USER, PAYEE)
     await harness.tap(USER, TYPE_NAME)
     await harness.send_text("MERCADONA", user_id=USER)
-    assert card_lines(harness)[0] == "💸 <b>Mercadona</b>"
+    assert card_lines(harness)[0] == "<b>Mercadona</b>"
     await harness.tap(USER, PAYEE)
     await harness.tap(USER, TYPE_NAME)
     await harness.send_text("Lidl", user_id=USER)
 
-    assert card_lines(harness)[0] == "💸 <b>Lidl</b>"
+    assert card_lines(harness)[0] == "<b>Lidl</b>"
     async with session_factory() as session:
         names = [r[0] for r in await session.execute(text("select name from payees order by name"))]
     assert names == ["Lidl", "Mercadona"]
@@ -422,7 +422,7 @@ async def test_close_does_not_end_the_card_for_a_later_number(harness):
 
     await harness.send_text("3", user_id=USER)
 
-    assert harness.last_text().startswith("💸 <b>3.00 €</b>")  # a new entry
+    assert harness.last_text().startswith("<b>3.00 €</b>")  # a new entry
 
 
 # --- older cards ------------------------------------------------------------------------------
@@ -507,7 +507,7 @@ async def test_a_history_row_of_a_manual_expense_opens_its_card_and_the_history_
     await harness.tap(USER, row)
 
     card = harness.sent_messages[-1]
-    assert card.text.startswith("💸 <b>Mercadona</b>")
+    assert card.text.startswith("<b>Mercadona</b>")
     assert [b.text for r in card.reply_markup.inline_keyboard for b in r] == CARD_BUTTONS
     assert harness.session.sent_ids[-1] != history_id
     assert not [m for mid, m in harness.keyboards() if mid == history_id and m != history_markup]
@@ -565,7 +565,7 @@ async def test_text_typed_in_a_window_that_reads_text_reaches_it(harness):
 
     await harness.send_text("hello", user_id=USER)
 
-    assert card_lines(harness)[0] == "💸 <b>hello</b>"
+    assert card_lines(harness)[0] == "<b>hello</b>"
     assert PHOTO_PROMPT not in [m.text for m in harness.sent_messages]
 
 
@@ -575,6 +575,6 @@ async def test_a_new_entry_leaves_the_buttons_of_the_open_card(harness):
 
     await harness.send_text("3", user_id=USER)
 
-    assert harness.last_text().startswith("💸 <b>3.00 €</b>")
+    assert harness.last_text().startswith("<b>3.00 €</b>")
     assert harness.last_keyboard()[0] != card_id
     assert not [m for mid, m in harness.keyboards() if mid == card_id and m != card_markup]
