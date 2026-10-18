@@ -5,6 +5,8 @@ catches it for a `StoredPhoto` and retries once with the bytes the attachment ca
 message only. If the bytes cannot be loaded either, the message shows the attachment's notice
 text instead of the photo.
 
+It also tracks the manual entry's message as an expiring screen (see `show_message`).
+
 It also keeps the keyboards of older cards (receipt and expense) when a new card is sent.
 """
 
@@ -16,11 +18,15 @@ from dataclasses import replace
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest
+from aiogram.fsm.state import StatesGroup
 from aiogram.types import BufferedInputFile, ContentType, InputFile, Message
 from aiogram_dialog.api.entities import MediaAttachment, MediaId, NewMessage, OldMessage
+from aiogram_dialog.api.protocols import MessageNotModified
 from aiogram_dialog.manager.message_manager import MessageManager
 
 from src.bot.keyboards.cards import is_card_markup
+from src.bot.screens import Screen, ScreenKind, ScreenRegistry
+from src.bot.states.expense_entry import ExpenseEntrySG
 from src.integration.storage import StorageError
 
 logger = logging.getLogger(__name__)
@@ -38,8 +44,16 @@ def keeping_previous_keyboard() -> Iterator[None]:
         _keep_previous_keyboard.reset(token)
 
 
+# The state group of the dialog being shown; set by `TrackingManager.show`, read by the message
+# manager, which is not told which dialog a message belongs to.
+showing_group: ContextVar[type[StatesGroup] | None] = ContextVar("showing_group", default=None)
+
 # Errors about the message being edited, not about the media; they are not a refused file id.
 _EDIT_ERRORS = ("message is not modified", "message can't be edited", "message to edit not found")
+
+
+def _entry_screen(message: OldMessage) -> Screen:
+    return Screen(message.chat.id, message.message_id, ScreenKind.ENTRY)
 
 
 class StoredPhoto(MediaAttachment):
@@ -63,6 +77,28 @@ class StoredPhoto(MediaAttachment):
 
 
 class StoredPhotoMessageManager(MessageManager):
+    def __init__(self, screens: ScreenRegistry | None = None) -> None:
+        self._screens = screens
+
+    async def show_message(
+        self, bot: Bot, new_message: NewMessage, old_message: OldMessage | None
+    ) -> OldMessage:
+        """The one place that sees every dialog message: the manual entry's message is tracked
+        as an expiring screen, and every show of it (a tap or a typed value) moves its time."""
+        screens = self._screens
+        if screens is None or not screens.enabled or showing_group.get() is not ExpenseEntrySG:
+            return await super().show_message(bot, new_message, old_message)
+        try:
+            sent = await super().show_message(bot, new_message, old_message)
+        except MessageNotModified:
+            if old_message is not None:
+                await screens.touch(_entry_screen(old_message))
+            raise
+        if old_message is not None and old_message.message_id != sent.message_id:
+            await screens.forget(_entry_screen(old_message))
+        await screens.track(_entry_screen(sent))
+        return sent
+
     async def _remove_kbd(
         self, bot: Bot, old_message: OldMessage | None, new_message: NewMessage | None
     ) -> Message | None:

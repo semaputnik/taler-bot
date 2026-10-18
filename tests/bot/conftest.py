@@ -176,10 +176,11 @@ class BotHarness:
         parser: StubReceiptParser,
         screens: ScreenRegistry,
         clock: FakeClock,
+        sweeper: ScreenSweeper,
     ) -> None:
         self.screens = screens
         self.clock = clock
-        self.sweeper = ScreenSweeper(bot, screens, interval_seconds=30)
+        self.sweeper = sweeper
         self.bot = bot
         self.dispatcher = dispatcher
         self.session = session
@@ -320,6 +321,7 @@ class BotHarness:
         """Move the clock on and run one sweep, as the sweeper task would."""
         self.clock.advance(minutes=after_minutes)
         await self.sweeper.sweep_once(self.clock.now)
+        await self.tasks.drain()  # a closed dialog is a background update
 
     @property
     def deleted_messages(self) -> list[int]:
@@ -365,14 +367,16 @@ async def harness(
     parser = StubReceiptParser(default=output_of(fixture("03")["raw"]))
     clock = FakeClock()
     screens = ScreenRegistry(MemoryScreenStore(), ttl_minutes=screen_ttl_minutes, clock=clock)
+    sweeper = ScreenSweeper(bot, screens, interval_seconds=30)
     dispatcher = create_dispatcher(
         storage=MemoryStorage(),
         services=Services.build(make_uow, storage=tmp_storage, parser=parser),
         translator_hub=create_translator_hub(),
         tasks=tasks,
         screens=screens,
+        sweeper=sweeper,
     )
-    yield BotHarness(bot, dispatcher, recording, tasks, parser, screens, clock)
+    yield BotHarness(bot, dispatcher, recording, tasks, parser, screens, clock, sweeper)
     await tasks.shutdown(1)
     await bot.session.close()
 

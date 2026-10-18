@@ -191,11 +191,14 @@ category, tags, and optionally the receipt it came from.
     `/stats`, the `/reparse` summary, an unfinished entry) are deleted after
     `SCREEN_TTL_MINUTES` (30) without a tap; a tap extends the time. Cards, "Saved, reading…",
     error replies and re-parse results stay. Tracked in Redis so it survives a restart.
-    **In progress** (spec #77). Done (#78): the registry, the Redis and memory stores, the
-    `screens-sweeper` task, the settings `SCREEN_TTL_MINUTES` / `SCREEN_SWEEP_SECONDS`; the `/start`
-    greeting expires. Done (#79): the plain screens (`/expenses`, `/stats`, `/reparse`, and the history
-    and stats opened from the `/start` and `/stats` buttons) expire; a tap on their buttons extends the
-    time; confirming a re-parse stops the question expiring. Pending #80: the unfinished entry.
+    **Done** (spec #77). The registry, the Redis and memory stores, the `screens-sweeper` task and
+    the settings `SCREEN_TTL_MINUTES` / `SCREEN_SWEEP_SECONDS` (`0` switches expiry off). The plain
+    screens (`/start`, `/expenses`, `/stats`, `/reparse`, and the history and stats opened from the
+    `/start` and `/stats` buttons) expire; a tap on their buttons extends the time; confirming a
+    re-parse stops the question expiring. The unfinished entry: the dialog message manager tracks
+    the entry's message and moves its time on every step (a tap or a typed value); the sweeper
+    deletes the message and closes the dialog, so a word typed afterwards gets the photo hint, a
+    number starts a fresh entry and nothing is saved. A finished entry's prompt and the card stay.
 
 **Later**
 
