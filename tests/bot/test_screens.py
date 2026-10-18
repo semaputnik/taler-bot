@@ -40,10 +40,10 @@ async def test_a_refused_delete_falls_back_to_removing_the_keyboard(
     (greeting,) = harness.session.sent_ids
     original = harness.session.make_request
 
-    async def refuse_delete(bot, method, *rest):
+    async def refuse_delete(bot, method, **kwargs):
         if isinstance(method, DeleteMessage):
             raise TelegramBadRequest(method=method, message="message can't be deleted")
-        return await original(bot, method, *rest)
+        return await original(bot, method, **kwargs)
 
     monkeypatch.setattr(harness.session, "make_request", refuse_delete)
 
@@ -63,12 +63,12 @@ async def test_two_refusals_are_logged_at_warning_and_the_sweep_goes_on(
     await harness.screens.track(second)
     original = harness.session.make_request
 
-    async def refuse_everything_for_the_first(bot, method, *rest):
+    async def refuse_everything_for_the_first(bot, method, **kwargs):
         if isinstance(method, DeleteMessage | EditMessageReplyMarkup) and (
             method.message_id == first.message_id
         ):
             raise TelegramBadRequest(method=method, message="message to delete not found")
-        return await original(bot, method, *rest)
+        return await original(bot, method, **kwargs)
 
     monkeypatch.setattr(harness.session, "make_request", refuse_everything_for_the_first)
 
