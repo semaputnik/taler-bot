@@ -83,7 +83,7 @@ A free word the user attaches to expenses to group them across categories ("holi
 **Screen**:
 A bot message with buttons that was opened by a command or a menu button (history,
 spending, the re-parse summary, an unfinished expense entry). Screens expire after a time
-without a tap; cards do not.
+without a tap (`SCREEN_TTL_MINUTES`, a tap restarts the clock); a card is not a screen and never expires.
 
 **Product**:
 A catalogue entry for one store: the printed line text, a readable name and a category.

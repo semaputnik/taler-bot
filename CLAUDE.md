@@ -65,10 +65,13 @@ src/
   config/                  # settings.py (root Settings, incl. LOG_LEVEL) + bot.py, database.py, redis.py,
                            # llm.py, storage.py (nested models); standalone DatabaseSettings for Alembic
   bot/                     # everything that knows about aiogram
-    app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, Services, lifespan
+    app.py                 # App: Bot, Dispatcher, RedisStorage, the screens Redis client, TranslatorHub, Services, lifespan
     dispatcher.py          # create_dispatcher: middlewares + handlers
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
-    middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
+    screens.py             # expiring screens: Screen(chat_id, message_id, kind plain|entry), ScreenStore Protocol, MemoryScreenStore (tests), ScreenRegistry (track, touch, forget, due; TTL and clock; no-op when SCREEN_TTL_MINUTES = 0)
+    screens_redis.py       # RedisScreenStore: sorted set `screens:due`, member `chat_id:message_id:kind`, score = due unix time
+    sweeper.py             # ScreenSweeper: task `screens-sweeper`, every SCREEN_SWEEP_SECONDS deletes due screens (fallback: remove the keyboard; then a warning)
+    middlewares/           # services, tasks and screens injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (/start, /expenses, /reparse, /stats), each exposes register_xxx(dp)
       callback/            # taps on plain buttons: cards.py is what both cards share (in place vs fresh copy, Close, the gone-card alert); receipt.py and expense.py check the card and call it; history.py edits the history message in place; stats.py edits the stats message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
@@ -194,7 +197,7 @@ the history dialog.
     (`i18n.receipt.saved()`) cannot reach keys with more than one dash segment, and a failed
     lookup leaves the translator's chain polluted.
   - `App` owns one `TaskRegistry` (handler data key `tasks`, put there by `TasksMiddleware`);
-    `lifespan` awaits pending parses for up to `TASK_SHUTDOWN_TIMEOUT`, cancels the rest, then
+    `lifespan` first spawns the `screens-sweeper` task (only with the TTL on) and cancels it on exit, then awaits pending parses for up to `TASK_SHUTDOWN_TIMEOUT`, cancels the rest, then
     closes the bot session. Handler order: commands, callbacks, the photo handler, the amount handler, the
     catch-all "send me a photo", then the dialogs. A dialog consumes every message sent while it is open
     (a card in its resting window too), so everything that must see a message first comes before the dialogs.
@@ -233,6 +236,10 @@ the history dialog.
   and file I/O goes through `asyncio.to_thread`.
 - Getters must not query in a loop (N+1). Load what a window needs in one repository
   call.
+- `SCREEN_TTL_MINUTES` (default 30, `>= 0`; 0 = expiry off: the registry is a no-op and no sweeper is spawned) and
+  `SCREEN_SWEEP_SECONDS` (default 30, `>= 1`) are top-level settings. A screen is a message opened by a command or
+  a menu button; it is deleted after the TTL without a tap, a card is not a screen. Handlers reach the registry as
+  handler data `screens` (`track` after sending, `touch` on a tap, `forget`); today only the `/start` greeting is tracked.
 - `LOG_LEVEL` (top-level setting, default `INFO`, one of CRITICAL/ERROR/WARNING/INFO/DEBUG,
   case-insensitive) sets the root log level in `src/__main__.py`.
 - Config, not code: no whitelist ids or tokens in source. Access is `users.is_allowed`
@@ -318,6 +325,9 @@ refuses the id, and shows a notice if the bytes are unreadable.
   the dev Postgres by default, or `TEST_DATABASE_URL` (its database name is only a prefix
   for the scratch databases). There is no fake UoW: it would double the code and
   could not check SQL constraints.
+- `RedisScreenStore` is tested against a real Redis: `TEST_REDIS_URL` (default `redis://localhost:6390/1`, the dev
+  Redis; CI has a `redis:8` service). The test flushes its key `screens:due` per test. The memory store runs the
+  same parametrised suite (`tests/integration/test_screen_store.py`); bot tests use `MemoryScreenStore` and a fake clock.
 - The LLM is stubbed behind the `ReceiptParser` interface (`StubReceiptParser` in `tests/stubs.py`).
   `domain` is tested with JSON fixtures. The one `llm`-marked test calls the real model; it reads
   `LLM__API_KEY` (and optionally `LLM__MODEL`) from the process environment only, never `.env`,
