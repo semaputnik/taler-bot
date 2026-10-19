@@ -166,7 +166,7 @@ class ReceiptService:
             if parse.receipt_key is not None:
                 earlier = await uow.receipts.find_by_key(user_id, parse.receipt_key)
             outcome = receipt.apply_parse(parse, same_key_as=earlier.id if earlier else None)
-            await _save_with_catalog(uow, receipt, outcome)
+            await save_with_catalog(uow, receipt, outcome)
             await uow.commit()
             return ParseResult(
                 card=await _card(uow, receipt),
@@ -226,7 +226,7 @@ class ReceiptService:
         async with self._uow_factory() as uow:
             receipt = await _load(uow, user_id, receipt_id)
             receipt.correct_issue(issue_id, value)
-            await _save_with_catalog(uow, receipt)
+            await save_with_catalog(uow, receipt)
             await uow.commit()
             return await _card(uow, receipt)
 
@@ -388,7 +388,7 @@ class ReceiptService:
             receipt = await _load(uow, user_id, receipt_id)
             receipt.record_edit(edit)
             if edit.target is EditTarget.RECEIPT:
-                await _save_with_catalog(uow, receipt)  # the header moved: so does the expense
+                await save_with_catalog(uow, receipt)  # the header moved: so does the expense
             else:
                 await uow.receipts.save(receipt)
             await uow.commit()
@@ -433,10 +433,10 @@ async def _load(uow: UnitOfWork, user_id: int, receipt_id: int) -> Receipt:
 
 async def _apply_parse(uow: UnitOfWork, receipt: Receipt, parse: Parse) -> None:
     outcome = receipt.apply_parse(parse)
-    await _save_with_catalog(uow, receipt, outcome)
+    await save_with_catalog(uow, receipt, outcome)
 
 
-async def _save_with_catalog(
+async def save_with_catalog(
     uow: UnitOfWork, receipt: Receipt, outcome: ParseOutcome | None = None
 ) -> None:
     """Save a receipt whose header or parse changed, and keep the catalog and the expense in
@@ -446,6 +446,9 @@ async def _save_with_catalog(
     payee and items and the expense's source refer to them; the expense follows the saved
     receipt; released products can only be deleted once the receipt's items stop referencing
     them.
+
+    Public because the n8n import (`tools/import_n8n.py`) stores its parses through the same
+    path; it is not an entry point for the bot.
     """
     catalog = await uow.catalog.get(receipt.user_id)
     if outcome is not None:

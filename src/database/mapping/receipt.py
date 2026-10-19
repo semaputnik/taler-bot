@@ -59,6 +59,7 @@ def receipt_values(receipt: Receipt, *, payee_id: int | None) -> dict[str, Any]:
         "payee_id": payee_id,
         "error_message": receipt.error_message,
         "deleted_at": receipt.deleted_at,
+        "source_ref": receipt.source_ref,
         **{column: getattr(receipt.header, column) for column in _HEADER_COLUMNS},
     }
 
@@ -90,6 +91,7 @@ def receipt_from_rows(
         duplicate_of_id=row.duplicate_of_id,
         deleted_at=row.deleted_at,
         error_message=row.error_message,
+        source_ref=row.source_ref,
     )
 
 
@@ -106,6 +108,8 @@ def photo_values(photo: Photo, *, receipt: Receipt) -> dict[str, Any]:
         "telegram_file_id": photo.telegram_file_id,
         "telegram_file_unique_id": photo.telegram_file_unique_id,
         "telegram_message_id": photo.telegram_message_id,
+        "drive_file_id": photo.drive_file_id,
+        "drive_url": photo.drive_url,
         "received_at": photo.received_at,
     }
 
@@ -119,6 +123,8 @@ def photo_from_row(row: ReceiptPhoto) -> Photo:
         telegram_file_id=row.telegram_file_id,
         telegram_file_unique_id=row.telegram_file_unique_id,
         telegram_message_id=row.telegram_message_id,
+        drive_file_id=row.drive_file_id,
+        drive_url=row.drive_url,
         received_at=row.received_at,
     )
 

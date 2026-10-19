@@ -1,0 +1,122 @@
+[
+ {
+  "productKey": "consum::aigua-c-g-pelegrino",
+  "storeKey": "consum",
+  "storeName": "Consum",
+  "productName": "San Pellegrino 1L",
+  "productNameRaw": "AIGUA C/G PELEGRINO",
+  "category": "drinks",
+  "unit": "pcs",
+  "id": 1,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "consum::cerv-free-limo",
+  "storeKey": "consum",
+  "storeName": "Consum",
+  "productName": "Cervesa Free Limo",
+  "productNameRaw": "CERV FREE LIMO.",
+  "category": "drinks",
+  "unit": "pcs",
+  "id": 2,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "ametller-origen::salsa-brava-230g-ametller-ori",
+  "storeKey": "ametller-origen",
+  "storeName": "Ametller Origen",
+  "productName": "Salsa brava Ametller Origen 230 g",
+  "productNameRaw": "Salsa brava 230g AMETLLER ORI",
+  "category": "pantry",
+  "unit": "pcs",
+  "id": 3,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "ametller-origen::maionesa-trufada-can-bech-110-g",
+  "storeKey": "ametller-origen",
+  "storeName": "Ametller Origen",
+  "productName": "Maionesa trufada Can Bech 110 g",
+  "productNameRaw": "Maionesa trufada Can Bech 110 g",
+  "category": "pantry",
+  "unit": "pcs",
+  "id": 4,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "ametller-origen::infusio-de-menta-eco-18g-amet",
+  "storeKey": "ametller-origen",
+  "storeName": "Ametller Origen",
+  "productName": "Infusió de menta ecològica Ametller Origen 18 g",
+  "productNameRaw": "Infusió de menta Eco 18g AMET",
+  "category": "drinks",
+  "unit": "pcs",
+  "id": 5,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "ametller-origen::ous-formatge-curat-sot",
+  "storeKey": "ametller-origen",
+  "storeName": "Ametller Origen",
+  "productName": "Formatge curat",
+  "productNameRaw": "Ous formatge curat sot",
+  "category": "dairy",
+  "unit": "kg",
+  "id": 6,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "ametller-origen::pastrami-de-vedella-80g-amet",
+  "storeKey": "ametller-origen",
+  "storeName": "Ametller Origen",
+  "productName": "Pastrami de vedella Ametller Origen 80 g",
+  "productNameRaw": "Pastrami de vedella 80g AMET",
+  "category": "meat",
+  "unit": "pcs",
+  "id": 7,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "ametller-origen::tomaquet-cor-de-bou-extra",
+  "storeKey": "ametller-origen",
+  "storeName": "Ametller Origen",
+  "productName": "Tomàquet cor de bou",
+  "productNameRaw": "Tomàquet cor de bou EXTRA",
+  "category": "produce",
+  "unit": "kg",
+  "id": 8,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "ametller-origen::nigiri-salmo-flamejat-ao-sh-185g",
+  "storeKey": "ametller-origen",
+  "storeName": "Ametller Origen",
+  "productName": "Nigiri de salmó flamejat AO-SH 185 g",
+  "productNameRaw": "Nigiri salmó flamejat AO-SH 185g",
+  "category": "fish",
+  "unit": "pcs",
+  "id": 9,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ },
+ {
+  "productKey": "ametller-origen::sushi-caixa-22-ao-sh-364g-160-ml",
+  "storeKey": "ametller-origen",
+  "storeName": "Ametller Origen",
+  "productName": "Caixa de sushi AO-SH 364 g, 160 ml",
+  "productNameRaw": "Sushi caixa 22 AO-SH 364g 160 ml",
+  "category": "fish",
+  "unit": "pcs",
+  "id": 10,
+  "createdAt": "2026-10-12T16:29:00.000Z",
+  "updatedAt": "2026-10-12T16:29:00.000Z"
+ }
+]

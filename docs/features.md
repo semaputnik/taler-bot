@@ -14,6 +14,10 @@ and dependencies, not commitments.
   and sending a new photo, or by editing values by hand. The same photo sent twice is
   refused without an LLM call; a second photo of the same receipt (same receipt key) is
   refused too.
+- **The n8n history is imported by a one-off tool** (`python -m src.tools.import_n8n`): the
+  catalog with its hand-edited names, every payment as a receipt with its expense, and a report
+  of where the Python `normalize` differs from what n8n stored. Rows carry `source_ref`, so a
+  rerun adds only the new ones.
 - Dropped: price lookup across stores (`/price`) and price-rise alerts. There is no
   canonical-product table.
 

@@ -113,6 +113,8 @@ src/
   integration/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse, prompt.md (system prompt)
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
+  tools/
+    import_n8n.py          # one-off import of the n8n history (`python -m src.tools.import_n8n <export dir> --user-id <id>`): catalog first, then each payment in its own Unit of Work through `services.receipt.save_with_catalog`; rows carry `source_ref = n8n:<id>`; prints counts and where the port differs from the n8n columns
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
@@ -212,6 +214,10 @@ the history dialog.
   - `bot/app.py` is the composition root: the only module in `bot` that may import
     `database` (to wire the SQLAlchemy Unit of Work). `tests/test_layers.py` enforces
     this and the other import rules.
+  - `tools/import_n8n.py` is a second composition root: it builds the engine and the SQLAlchemy
+    Unit of Work from `Settings` itself (no bot, Redis or LLM), so it may import `database`; it must
+    not import `bot` (`tests/test_layers.py`). It stores each parse with `save_with_catalog`, the
+    function a live parse uses, so catalog, receipt and expense stay in step.
 
 ### Code rules
 
@@ -530,6 +536,10 @@ All replies are threaded (`reply_to_message_id`). Failures to send a Telegram re
 retried and must not break the pipeline.
 
 ### n8n data tables (source for the import)
+
+The import is built: `python -m src.tools.import_n8n <export dir> --user-id <id>` reads a JSON export of
+`receipt_payments` and `store_products` (runbook: [docs/deploy.md](docs/deploy.md)). Receipt photos stay
+in Google Drive by id and link (`receipt_photos.drive_file_id`, `drive_url`).
 
 | table | purpose | taler-bot table |
 |---|---|---|

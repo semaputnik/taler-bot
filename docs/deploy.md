@@ -122,6 +122,38 @@ Restore a cold backup: `docker compose down`, replace the directory with the unp
 database: `gunzip -c taler-DATE.sql.gz | docker compose exec -T postgres psql -U taler taler`.
 Backups contain receipt photos and personal data; keep them off public storage.
 
+## Import the n8n history
+
+A one-off import of the Receipts Bot history (n8n data tables) for one user. The user must
+already exist (send `/start` to the bot first); the import never creates or allows users.
+
+1. Export the n8n tables as JSON into a directory on the server, for example `./import/`
+   (git-ignored in the repository; it never enters git):
+
+   ```
+   import/
+     receipt_payments.json   # a list of row objects with the n8n column names
+     store_products.json
+   ```
+
+   The other n8n tables (`product_prices`, `receipt_issues`, `telegram_whitelist`) may be
+   present; they are ignored.
+2. Run it in the bot container, with the Telegram id of the user:
+
+   ```bash
+   docker compose run --rm -v ./import:/import bot python -m src.tools.import_n8n /import --user-id 41512748
+   ```
+
+3. Read the summary: counts of added and skipped payees, products, receipts and expenses, then
+   one line for every field where the port's receipt key, purchase time, payee key, total or
+   status differs from the n8n columns (a column n8n left empty is not compared).
+
+Rerunning is safe: a payment or product that was imported is skipped, so after a fresh export
+only the new rows are added. The import stops at the first failing payment and names it; the
+payments before it stay committed, so fix the cause and run it again. An unknown user id exits
+with an error before anything is written. Photos stay in Google Drive (id and link are kept);
+the Photo button of an imported receipt shows the "photo could not be loaded" notice.
+
 ## Building the image locally
 
 ```bash
