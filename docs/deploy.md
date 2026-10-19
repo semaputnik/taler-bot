@@ -1,6 +1,6 @@
 # Deploying taler-bot
 
-The bot runs on a Linux x86_64 server with Docker. The image is built by GitHub Actions on a
+The bot runs on a Linux server (x86_64 or arm64) with Docker. The image is built by GitHub Actions on a
 green `main` and published to `ghcr.io/semaputnik/taler-bot` (tags `latest` and `sha-<short>`; a
 release tag `vX.Y.Z` adds `vX.Y.Z` and `X.Y`).
 The server only pulls it. The stack is `postgres`, `redis`, a one-shot `migrate` and `bot`

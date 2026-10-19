@@ -1,6 +1,6 @@
 [project]
 name = "taler-bot"
-version = "0.2.0"
+version = "0.2.1"
 description = "Telegram bot that parses household receipts"
 readme = "README.md"
 authors = [
