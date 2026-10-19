@@ -338,3 +338,60 @@ async def test_the_edit_survives_a_reparse(harness, services, session_factory):
     card = await services.receipts.card(USER, receipt_id)
     assert card.card_last4 == "1234"
     assert "1234" in (await services.expenses.for_receipt(USER, receipt_id)).payment_source_name
+
+
+# --- an edit answers the open issue on its field -------------------------------------------
+
+CARD_ISSUE = {
+    "type": "other",
+    "severity": "high",
+    "field": "payment.card_last4",
+    "item_name_raw": None,
+    "message": "Unseen card ending.",
+}
+REVIEW = "⚠️ Review (1)"
+
+
+async def parsed_with_card_issue(harness) -> None:
+    raw = fixture("03")["raw"]
+    harness.parser.default = output_of(raw | {"issues": [CARD_ISSUE]})
+    await parsed(harness)
+
+
+async def test_an_edit_of_the_field_with_an_issue_drops_the_review(harness):
+    await parsed_with_card_issue(harness)
+    assert REVIEW in harness.button_texts()
+
+    await edit_field(harness, "card ending", "4321")
+
+    assert "•4321" in harness.last_text()
+    assert not any(t.startswith("⚠️ Review") for t in harness.button_texts())
+
+
+async def test_the_review_walk_no_longer_offers_the_answered_issue(harness):
+    raw = fixture("03")["raw"]
+    other = CARD_ISSUE | {"field": "totals.total", "message": "The total looks odd."}
+    harness.parser.default = output_of(raw | {"issues": [CARD_ISSUE, other]})
+    await parsed(harness)
+
+    await edit_field(harness, "card ending", "4321")
+    await harness.tap(USER, REVIEW)
+
+    assert "The total looks odd." in harness.last_text()
+    assert "Unseen card ending." not in harness.last_text()
+
+
+async def test_clearing_the_field_with_an_issue_drops_the_review(harness):
+    await parsed_with_card_issue(harness)
+
+    await edit_field(harness, "card ending")
+
+    assert not any(t.startswith("⚠️ Review") for t in harness.button_texts())
+
+
+async def test_an_edit_of_a_field_without_an_issue_keeps_the_review(harness):
+    await parsed_with_card_issue(harness)
+
+    await edit_field(harness, "total", "9.99")
+
+    assert REVIEW in harness.button_texts()
