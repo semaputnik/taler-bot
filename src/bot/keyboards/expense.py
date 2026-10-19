@@ -19,6 +19,7 @@ class ExpenseWindow(StrEnum):
     TAGS = "tags"
     DELETE_CONFIRM = "delete_confirm"
     CLOSE = "close"  # not a window: hides the card's buttons
+    DISMISS = "dismiss"  # not a window: deletes the card (one the user opened from a list)
 
 
 class ExpenseCallback(CallbackData, prefix="expense"):
@@ -35,6 +36,7 @@ _BUTTON_KEYS = {
     ExpenseWindow.TAGS: "button-tags",
     ExpenseWindow.DELETE_CONFIRM: "button-delete",
     ExpenseWindow.CLOSE: "button-close",
+    ExpenseWindow.DISMISS: "button-close",
 }
 
 # Two buttons per row; Delete and Close each on their own row.
@@ -47,9 +49,11 @@ _LAYOUT = (
 )
 
 
-def expense_keyboard(i18n: TranslatorRunner, expense_id: int) -> InlineKeyboardMarkup:
+def expense_keyboard(
+    i18n: TranslatorRunner, expense_id: int, *, dismissible: bool = False
+) -> InlineKeyboardMarkup:
     """Buttons under an expense card: Amount, Payee / Source, Category / Date, Tags / Delete /
-    Close."""
+    Close (which deletes a card the user opened from a list, `dismissible`)."""
 
     def button(window: ExpenseWindow) -> InlineKeyboardButton:
         return InlineKeyboardButton(
@@ -57,6 +61,9 @@ def expense_keyboard(i18n: TranslatorRunner, expense_id: int) -> InlineKeyboardM
             callback_data=ExpenseCallback(expense_id=expense_id, window=window).pack(),
         )
 
-    return InlineKeyboardMarkup(
-        inline_keyboard=[[button(window) for window in row] for row in _LAYOUT]
-    )
+    close = ExpenseWindow.DISMISS if dismissible else ExpenseWindow.CLOSE
+    rows = [
+        [button(close if window is ExpenseWindow.CLOSE else window) for window in row]
+        for row in _LAYOUT
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=rows)

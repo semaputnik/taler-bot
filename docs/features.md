@@ -171,7 +171,8 @@ category, tags, and optionally the receipt it came from.
    `🏷 Category` / `📅 Date` `#️⃣ Tags` / `🗑 Delete` / `✖ Close`; no items, photo, review or
    re-parse. The card behaves like the receipt card: a tap on the current card edits it in
    place, a tap on an older one sends a fresh copy and leaves the old buttons, `✖ Close` hides
-   the buttons and keeps the text, a deleted expense alerts and shows `🗑 This expense was
+   the buttons and keeps the text (on a card opened from the history or copied from an older
+   card it deletes the message instead), a deleted expense alerts and shows `🗑 This expense was
    deleted.` with no buttons. The card never ends; every save returns to `main`, and a typed
    value edits the card where it is. Windows:
 
@@ -257,7 +258,9 @@ inside the dialog, so they work on a card however old. A tap on the current card
 dialog's last message) edits it in place. A tap on an older card sends a fresh card message
 and leaves the old card with its buttons. A tap on a deleted receipt answers with an alert
 and removes the keyboard. A photo sent while a card is open is still accepted. `✖ Close`
-hides the card's buttons and keeps its text; the resting state of a card is `main`.
+hides the card's buttons and keeps its text when the bot sent the card by itself; a card the
+user asked for (a history row, a copy of an older card) is deleted instead, so the chat does not
+fill up with copies. The resting state of a card is `main`.
 `🔄 Re-parse` first asks for a confirmation (a model call costs money); `🔄 Yes, read again` replies "🔄 Reading again…" to the card, shows the typing status while the
 receipt is read, then sends a fresh card with the new reading (or the old reading and the
 error line if the read failed); the old card keeps its buttons. A stale button on a receipt

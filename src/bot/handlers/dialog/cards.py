@@ -14,8 +14,16 @@ from aiogram_dialog.api.internal.widgets import MarkupFactory, MarkupVariant
 from aiogram_dialog.api.protocols import DialogProtocol
 from aiogram_dialog.widgets.kbd.base import Keyboard
 
+from src.bot.handlers.dialog.common import TransferKeys
+
 # Builds the card's markup from the window data; None for a card without buttons (deleted).
 CardMarkup = Callable[[dict, DialogManager], InlineKeyboardMarkup | None]
+
+
+def dismissible(manager: DialogManager) -> bool:
+    """Whether this card was asked for by the user (opened from a list or copied from an older
+    card), so that its Close deletes the message. Set in `start_data` by `open_window`."""
+    return bool((manager.start_data or {}).get(TransferKeys.DISMISSIBLE))
 
 
 class CardKeyboard(Keyboard):

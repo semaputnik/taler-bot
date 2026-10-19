@@ -8,6 +8,7 @@ from fluentogram import TranslatorRunner
 from src.bot.handlers.callback.cards import alert_gone, open_window
 from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.keyboards.expense import ExpenseCallback, ExpenseWindow
+from src.bot.screens import ScreenRegistry
 from src.bot.states.expense_card import ExpenseCardSG
 from src.exception import ExpenseNotFound
 from src.services.container import Services
@@ -22,7 +23,7 @@ _WINDOWS = {
     ExpenseWindow.DATE: ExpenseCardSG.date,
     ExpenseWindow.TAGS: ExpenseCardSG.tags,
     ExpenseWindow.DELETE_CONFIRM: ExpenseCardSG.delete_confirm,
-}  # ExpenseWindow.CLOSE is not a window
+}  # ExpenseWindow.CLOSE and ExpenseWindow.DISMISS are not windows
 
 
 async def open_expense_card(
@@ -33,6 +34,7 @@ async def open_expense_card(
     services: Services,
     i18n: TranslatorRunner,
     bot: Bot,
+    screens: ScreenRegistry,
 ) -> None:
     try:
         card = await services.expenses.card(user.id, callback_data.expense_id)
@@ -46,8 +48,10 @@ async def open_expense_card(
         query,
         dialog_manager,
         bot,
-        state=_WINDOWS.get(callback_data.window),  # Close has no window
+        screens,
+        state=_WINDOWS.get(callback_data.window),  # Close and Dismiss have no window
         data={TransferKeys.EXPENSE_ID: callback_data.expense_id},
+        dismiss=callback_data.window is ExpenseWindow.DISMISS,
     )
 
 
