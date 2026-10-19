@@ -255,3 +255,86 @@ def test_current_value_is_the_header_or_item_value_with_edits_applied():
     assert receipt.current_value(other) is None
     receipt.correct_issue(10, "50")
     assert receipt.current_value(total) == Decimal("50")
+
+
+# --- a header edit answers the awaiting issues on its field ---------------------------------
+
+
+def test_edit_header_field_carries_the_issue_id_and_corrects_the_issue():
+    receipt = receipt_with(issue(field="totals.total"))
+    receipt.edit_header_field("total", "48.10", at=WHEN)
+
+    assert receipt.header.total == Decimal("48.10")
+    [edit] = receipt.edits
+    assert (edit.target, edit.field, edit.issue_id) == (EditTarget.RECEIPT, "total", 10)
+    assert receipt.issues[0].resolution is IssueResolution.CORRECTED
+    assert receipt.issues[0].resolved_at == WHEN
+
+
+def test_edit_header_field_resolves_every_awaiting_issue_on_the_field_with_one_edit():
+    receipt = receipt_with(
+        issue(HIGH, field="totals.total"),
+        issue(MEDIUM, field="totals.total"),
+        issue(MEDIUM, field="payment.card_last4"),
+    )
+    receipt.edit_header_field("total", "48.10")
+
+    assert len(receipt.edits) == 1
+    assert receipt.edits[0].issue_id == 10
+    assert [i.resolution for i in receipt.issues] == [
+        IssueResolution.CORRECTED,
+        IssueResolution.CORRECTED,
+        IssueResolution.OPEN,
+    ]
+
+
+def test_edit_header_field_counts_a_skipped_issue_as_awaiting():
+    receipt = receipt_with(issue(field="totals.total"))
+    receipt.resolve_issue(10, IssueResolution.SKIPPED)
+    receipt.edit_header_field("total", "48.10")
+
+    assert receipt.issues[0].resolution is IssueResolution.CORRECTED
+    assert receipt.edits[0].issue_id == 10
+
+
+def test_edit_header_field_leaves_a_confirmed_issue_alone():
+    receipt = receipt_with(issue(field="totals.total"))
+    receipt.resolve_issue(10, IssueResolution.CONFIRMED)
+    receipt.edit_header_field("total", "48.10")
+
+    assert receipt.issues[0].resolution is IssueResolution.CONFIRMED
+    assert receipt.edits[0].issue_id is None
+
+
+def test_edit_header_field_without_an_issue_is_a_plain_edit():
+    receipt = receipt_with(issue(field="payment.card_last4"))
+    receipt.edit_header_field("total", "48.10")
+
+    [edit] = receipt.edits
+    assert (edit.field, edit.issue_id) == ("total", None)
+    assert receipt.issues[0].resolution is IssueResolution.OPEN
+
+
+def test_edit_header_field_leaves_an_item_issue_on_another_field_alone():
+    receipt = receipt_with(issue(field="items.line_total", item_name="LECHE"), items=[product()])
+    receipt.edit_header_field("total", "48.10")
+
+    assert receipt.issues[0].resolution is IssueResolution.OPEN
+    assert receipt.edits[0].issue_id is None
+
+
+def test_clearing_a_field_answers_its_issue_too():
+    receipt = receipt_with(issue(field="payment.card_last4"))
+    receipt.edit_header_field("card_last4", None)
+
+    assert receipt.header.card_last4 is None
+    assert receipt.issues[0].resolution is IssueResolution.CORRECTED
+
+
+def test_a_bad_value_changes_nothing():
+    receipt = receipt_with(issue(field="payment.card_last4"))
+    with pytest.raises(InvalidEdit):
+        receipt.edit_header_field("card_last4", "12")
+
+    assert receipt.edits == []
+    assert receipt.issues[0].resolution is IssueResolution.OPEN

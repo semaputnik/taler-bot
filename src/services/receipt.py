@@ -202,8 +202,13 @@ class ReceiptService:
     async def edit_header(
         self, user_id: int, receipt_id: int, field: str, value: Any
     ) -> ReceiptCard:
-        edit = Edit(target=EditTarget.RECEIPT, field=field, value=value)
-        return await self._edit(user_id, receipt_id, edit)
+        """Set (or clear, with None) a header field; an awaiting issue on it is answered."""
+        async with self._uow_factory() as uow:
+            receipt = await _load(uow, user_id, receipt_id)
+            receipt.edit_header_field(field, value)
+            await save_with_catalog(uow, receipt)  # the header moved: so does the expense
+            await uow.commit()
+            return await _card(uow, receipt)
 
     async def resolve_issue(
         self, user_id: int, receipt_id: int, issue_id: int, resolution: str
