@@ -147,6 +147,7 @@ def test_the_steps_that_read_typed_text_are_known():
         "ReceiptCardSG:tags",
         "ReceiptCardSG:issue_input",
         "ReceiptCardSG:issue_rename",
+        "ReceiptCardSG:edit_input",
     }
 
 

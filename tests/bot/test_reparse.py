@@ -43,7 +43,7 @@ async def test_the_button_is_on_a_parsed_card_before_close(harness):
     texts = harness.button_texts()
     assert REPARSE in texts
     assert texts[-2:] == [REPARSE, "✖ Close"]
-    assert [b.text for b in harness.last_keyboard()[1].inline_keyboard[-2]] == [REPARSE]
+    assert [b.text for b in harness.last_keyboard()[1].inline_keyboard[-2]] == ["✏️ Edit", REPARSE]
 
 
 async def test_the_button_is_on_a_failed_card(harness):
@@ -120,7 +120,7 @@ async def test_a_stale_button_on_a_receipt_that_became_a_duplicate_alerts(harnes
     await parsed(harness, file_id="a")
     harness.parser.default = output_of(fixture("04")["raw"])
     second_id = await parsed(harness, file_id="b")
-    stale = harness.last_keyboard()[1].inline_keyboard[-2][0].callback_data
+    stale = harness.last_keyboard()[1].inline_keyboard[-2][-1].callback_data
     harness.parser.default = output_of(fixture("03")["raw"])
     await harness.tap(USER, REPARSE)  # the second receipt now repeats the first
     await harness.tap(USER, CONFIRM)
