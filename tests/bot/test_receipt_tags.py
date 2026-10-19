@@ -54,7 +54,7 @@ async def test_the_button_sits_in_the_row_of_the_category_button(harness):
         ["📋 Items", "⚠️ Review (1)"],
         [CATEGORY, TAGS],
         ["🖼 Photo", "🗑 Delete"],
-        [REPARSE],
+        ["✏️ Edit", REPARSE],
         ["✖ Close"],
     ]
 

@@ -437,3 +437,68 @@ async def _is_deleted(services: Services, user_id: int, receipt_id: int) -> bool
         return (await services.receipts.card(user_id, receipt_id)).deleted
     except ReceiptNotFound:
         return True
+
+
+async def show_edit(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await manager.switch_to(ReceiptCardSG.edit)
+
+
+async def select_field(
+    query: CallbackQuery, widget: Select, manager: DialogManager, item_id: str
+) -> None:
+    manager.dialog_data[DialogDataKeys.HEADER_FIELD] = item_id
+    manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
+    await manager.switch_to(ReceiptCardSG.edit_input)
+
+
+async def back_to_edit(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    manager.dialog_data.pop(DialogDataKeys.INPUT_ERROR, None)
+    await manager.switch_to(ReceiptCardSG.edit)
+
+
+async def _set_header_field(
+    manager: DialogManager, query: CallbackQuery | None, message: Message | None, text: str | None
+) -> None:
+    """Write the typed value (`text`; None clears the field) and rest on the card, edited in
+    place. A value the screen or the domain refuses keeps the window with the error line."""
+    services: Services = manager.middleware_data["services"]
+    user: CurrentUser = manager.middleware_data["user"]
+    i18n: TranslatorRunner = manager.middleware_data["i18n"]
+    data = manager.dialog_data
+    receipt_id = data[DialogDataKeys.RECEIPT_ID]
+    field = data.get(DialogDataKeys.HEADER_FIELD)
+    try:
+        card = await services.receipts.card(user.id, receipt_id)
+        kind = next((f.input_kind for f in card.header_fields if f.field == field), None)
+        if kind is None:
+            raise InvalidReceiptTransition("the header cannot be edited")
+        value = None
+        if text is not None:
+            value = parse_value(kind, text, ZoneInfo(user.timezone))
+        await services.receipts.edit_header(user.id, receipt_id, field, value)
+    except InvalidValue, InvalidEdit:
+        data[DialogDataKeys.INPUT_ERROR] = True
+        manager.show_mode = ShowMode.EDIT
+        return
+    except ReceiptNotFound, InvalidReceiptTransition:
+        alert = i18n.get("card-deleted-alert")
+        if query is not None:
+            await query.answer(alert, show_alert=True)
+        elif message is not None:
+            await message.answer(alert)
+        await manager.switch_to(ReceiptCardSG.main)
+        return
+    data.pop(DialogDataKeys.INPUT_ERROR, None)
+    await manager.switch_to(ReceiptCardSG.main, show_mode=ShowMode.EDIT)
+
+
+async def on_header_value(message: Message, widget: MessageInput, manager: DialogManager) -> None:
+    if message.text is None:
+        manager.dialog_data[DialogDataKeys.INPUT_ERROR] = True
+        manager.show_mode = ShowMode.EDIT
+        return
+    await _set_header_field(manager, None, message, message.text)
+
+
+async def clear_header_field(query: CallbackQuery, button: Button, manager: DialogManager) -> None:
+    await _set_header_field(manager, query, None, None)

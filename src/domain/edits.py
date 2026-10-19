@@ -76,6 +76,20 @@ ISSUE_FIELDS: dict[str, IssueField] = {
     ]
 }
 
+# The input kind the card's Edit screen asks for, per header field (same vocabulary as
+# `IssueField.input_kind`). A field the issues know takes their kind; the rest is free text.
+RECEIPT_INPUT_KINDS: dict[str, str] = {
+    field: next(
+        (
+            mapped.input_kind
+            for mapped in ISSUE_FIELDS.values()
+            if mapped.target is EditTarget.RECEIPT and mapped.field == field
+        ),
+        "text",
+    )
+    for field in RECEIPT_FIELDS
+}
+
 
 @dataclass(kw_only=True)
 class Edit:

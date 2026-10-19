@@ -10,6 +10,7 @@ class DialogDataKeys:
     SKIPPED = "skipped"
     EDIT_FIELD = "edit_field"  # the item field being edited: name, quantity, unit_price, line_total
     PRODUCT_KEY = "product_key"  # the catalog product behind the selected item
+    HEADER_FIELD = "header_field"  # the header field being edited from the card
     INPUT_ERROR = "input_error"  # the last typed value was refused; cleared on entry and on Back
 
 
@@ -18,6 +19,9 @@ class PreviewDataKeys:
     CAN_DELETE = "can_delete"
     HAS_ITEMS = "has_items"
     CAN_REPARSE = "can_reparse"
+    CAN_EDIT = "can_edit"
+    FIELDS = "fields"
+    CAN_CLEAR = "can_clear"
     ITEMS = "items"
     PHOTO = "photo"
     REVIEW_COUNT = "review_count"

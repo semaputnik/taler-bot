@@ -179,6 +179,42 @@ async def test_edit_header_changes_the_card(service, make_uow):
     assert str(card.total) == "9.99"
 
 
+async def test_card_lists_the_editable_header_fields_with_kind_and_value(service, make_uow):
+    receipt = await parsed_receipt(
+        make_uow, parse(MILK, BREAD, payment_method="card", card_brand="VISA", card_last4="1234")
+    )
+
+    card = await service.card(1, receipt.id)
+
+    assert card.can_edit
+    assert [(f.field, f.input_kind) for f in card.header_fields] == [
+        ("purchased_at", "datetime"),
+        ("receipt_number", "text"),
+        ("currency", "currency"),
+        ("subtotal", "money"),
+        ("discount_total", "money"),
+        ("tax_total", "money"),
+        ("total", "money"),
+        ("payment_method", "text"),
+        ("card_brand", "text"),
+        ("card_last4", "last4"),
+    ]
+    values = {f.field: f.current_value for f in card.header_fields}
+    assert values["card_last4"] == "1234"
+    assert values["total"] == Decimal("47.50")
+    assert values["currency"] == "EUR"
+
+
+async def test_a_deleted_receipt_cannot_be_edited(service, make_uow):
+    receipt = await parsed_receipt(make_uow, parse(MILK))
+    await service.soft_delete(1, receipt.id)
+
+    card = await service.card(1, receipt.id)
+
+    assert not card.can_edit
+    assert card.header_fields == []
+
+
 async def test_card_shows_store_name_payment_and_counts(service, make_uow):
     receipt = await parsed_receipt(
         make_uow, parse(MILK, BREAD, payment_method="card", card_brand="VISA", card_last4="1234")
