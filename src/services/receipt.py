@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 
 from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
 from src.domain.catalog import Catalog, PaymentSource
-from src.domain.edits import Edit
+from src.domain.edits import RECEIPT_INPUT_KINDS, Edit
 from src.domain.enums import EditTarget, IssueResolution, ReceiptStatus
 from src.domain.expense import Expense
 from src.domain.normalize import PARSER_VERSION, normalize
@@ -36,6 +36,7 @@ from src.integration.llm import ParserOutput, ReceiptParser
 from src.integration.storage import PhotoStorage, StorageError
 from src.services.results import (
     BulkResult,
+    HeaderField,
     IssueCard,
     IssueLine,
     ItemRow,
@@ -548,6 +549,7 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
     source = None
     if expense is not None and expense.payment_source_id is not None:
         source = catalog.payment_sources.get(expense.payment_source_id)
+    can_edit = receipt.backs_expense
     return ReceiptCard(
         receipt_id=receipt.id,
         status=str(receipt.status),
@@ -562,6 +564,13 @@ async def _card(uow: UnitOfWork, receipt: Receipt) -> ReceiptCard:
         card_brand=header.card_brand,
         card_last4=header.card_last4,
         can_reparse=receipt.can_reparse,
+        can_edit=can_edit,
+        header_fields=[
+            HeaderField(field=field, input_kind=kind, current_value=getattr(header, field, None))
+            for field, kind in RECEIPT_INPUT_KINDS.items()
+        ]
+        if can_edit
+        else [],
         error_message=receipt.error_message,
         expense_id=expense.id if expense is not None else None,
         expense_category=str(expense.category) if expense is not None else None,
