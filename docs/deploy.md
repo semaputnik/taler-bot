@@ -157,6 +157,8 @@ already exist (send `/start` to the bot first); the import never creates or allo
    one line for every field where the port's receipt key, purchase time, payee key, total or
    status differs from the n8n columns (a column n8n left empty is not compared).
 
+Corrections the user made by hand in the n8n columns (card ending, receipt number, totals, date, currency, payment method) are carried over as receipt edits, so a card fixed in n8n is the card the expense is paid with; the summary lists each one.
+
 Rerunning is safe: a payment or product that was imported is skipped, so after a fresh export
 only the new rows are added. The import stops at the first failing payment and names it; the
 payments before it stay committed, so fix the cause and run it again. An unknown user id exits

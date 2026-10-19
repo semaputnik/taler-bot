@@ -22,6 +22,12 @@ user:
 This is a second composition root (like `bot/app.py`): it wires the Unit of Work itself and
 never touches the bot, Redis or the LLM. At the end it prints the counts and every field where
 the port disagrees with the n8n columns (a column n8n left empty is not compared).
+
+A column the user corrected by hand in n8n (the editable header fields: card ending, receipt
+number, the totals, date, currency, payment method) is carried as a receipt edit, recorded
+before the receipt and its expense are saved, so the header, the catalog's card and the
+expense follow it. A column that cannot be read as the field's value is not applied and stays
+in the differences. Only a parsed receipt takes edits.
 """
 
 import argparse
@@ -43,10 +49,11 @@ from src.database.engine import create_engine, create_sessionmaker
 from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
 from src.domain.catalog import Catalog
-from src.domain.enums import ProductCategory, ReceiptStatus
+from src.domain.edits import RECEIPT_FIELDS, Edit
+from src.domain.enums import EditTarget, ProductCategory, ReceiptStatus
 from src.domain.normalize import normalize
 from src.domain.receipt import Photo, Receipt
-from src.exception import AppException, UserNotFound
+from src.exception import AppException, InvalidEdit, UserNotFound
 from src.integration.storage import LocalPhotoStorage, PhotoStorage
 from src.services.receipt import photo_path, save_with_catalog
 from src.services.results import NewPhoto
@@ -75,6 +82,7 @@ class ImportReport:
     expenses_skipped: int = 0
     photos_stored: int = 0
     unmatched_files: list[str] = field(default_factory=list)
+    edits: list[str] = field(default_factory=list)
     differences: list[str] = field(default_factory=list)
 
     def lines(self) -> list[str]:
@@ -88,6 +96,9 @@ class ImportReport:
         if self.unmatched_files:
             counts.append(f"{len(self.unmatched_files)} photo file(s) not imported:")
             counts += [f"  {line}" for line in self.unmatched_files]
+        if self.edits:
+            counts.append(f"{len(self.edits)} n8n column correction(s) applied as edits:")
+            counts += [f"  {line}" for line in self.edits]
         if not self.differences:
             return [*counts, "no differences from the n8n columns"]
         return [*counts, f"{len(self.differences)} difference(s) from the n8n columns:"] + [
@@ -196,33 +207,104 @@ def _fill_catalog(
 # --- one payment -------------------------------------------------------------------------
 
 
+# header field -> the n8n column that holds it; n8n users corrected these straight in the table
+# the columns compared in the report (the others are only applied, then equal by construction)
+COMPARED = frozenset({"card_last4", "receipt_number", "total", "purchased_at", "currency"})
+
+_EDITABLE_COLUMNS = {
+    "card_last4": "cardLast4",
+    "receipt_number": "receiptNumber",
+    "total": "total",
+    "subtotal": "subtotal",
+    "discount_total": "discountTotal",
+    "tax_total": "taxTotal",
+    "purchased_at": "purchasedAt",
+    "currency": "currency",
+    "payment_method": "paymentMethod",
+}
+
+
+def _edit_value(field_name: str, raw: object) -> object:
+    """The n8n column as an `Edit` value of the field's kind (may raise on a bad column)."""
+    kind = RECEIPT_FIELDS[field_name][0]
+    if kind == "money":
+        return str(_money(raw))
+    if kind == "datetime":
+        moment = _moment(str(raw))
+        assert moment is not None
+        return _utc_text(moment)
+    return str(raw).strip()
+
+
+def _n8n_edit(payment: dict[str, Any], field_name: str) -> Edit | None:
+    """The edit this column stands for; None when the column is empty or cannot be read."""
+    raw = payment.get(_EDITABLE_COLUMNS[field_name])
+    if raw is None or raw == "":
+        return None
+    try:
+        return Edit(target=EditTarget.RECEIPT, field=field_name, value=_edit_value(field_name, raw))
+    except InvalidEdit, ValueError, ArithmeticError:
+        return None
+
+
+def _show(field_name: str, value: object) -> str:
+    if value is None:
+        return "none"
+    if isinstance(value, datetime):
+        return _utc_text(value)
+    if isinstance(value, Decimal):
+        return str(_money(value))
+    return str(value)
+
+
+def _apply_n8n_edits(payment: dict[str, Any], receipt: Receipt, report: ImportReport) -> None:
+    """Carry the corrections made in the n8n columns as receipt edits (like typed on the card).
+
+    Only a parsed receipt takes edits. A column that is empty or cannot be read as the field's
+    value is not applied; `_differences` then reports it.
+    """
+    if receipt.status is not ReceiptStatus.PARSED:
+        return
+    for field_name in _EDITABLE_COLUMNS:
+        edit = _n8n_edit(payment, field_name)
+        if edit is None:
+            continue
+        old, new = getattr(receipt.header, field_name), edit.coerced()
+        if isinstance(old, Decimal):
+            old = _money(old)
+        if old == new:
+            continue
+        receipt.record_edit(edit)
+        report.edits.append(
+            f"payment {payment['id']} {field_name}: {_show(field_name, old)} -> "
+            f"{_show(field_name, new)} (edit)"
+        )
+
+
 def _differences(payment: dict[str, Any], receipt: Receipt) -> list[str]:
     """Where the port's result differs from the n8n columns; an empty column is not compared."""
     header = receipt.header
-    n8n_key, n8n_store, n8n_total = (
-        payment.get("receiptKey"),
-        payment.get("storeKey"),
-        payment.get("total"),
-    )
-    n8n_time = _moment(payment.get("purchasedAt"))
-    checks = [
-        ("receipt_key", n8n_key, header.receipt_key),
-        ("purchased_at", n8n_time, header.purchased_at),
-        ("store_key", n8n_store, header.store_key),
-        ("total", None if n8n_total is None else _money(n8n_total), header.total),
+    checks: list[tuple[str, object, object]] = [
+        ("receipt_key", payment.get("receiptKey"), header.receipt_key),
+        ("store_key", payment.get("storeKey"), header.store_key),
         ("status", payment.get("status"), receipt.status.value),
     ]
+    for field_name, column in _EDITABLE_COLUMNS.items():
+        if field_name not in COMPARED:
+            continue
+        raw = payment.get(column)
+        edit = _n8n_edit(payment, field_name)
+        theirs = None if raw is None or raw == "" else (raw if edit is None else edit.coerced())
+        ours = getattr(header, field_name)
+        checks.append((field_name, theirs, _money(ours) if isinstance(ours, Decimal) else ours))
     lines = []
     for name, theirs, ours in checks:
         if theirs is None:
             continue
-        if name == "total" and ours is not None:
-            ours = _money(ours)
         if ours is None or ours != theirs:
-            show = _utc_text if name == "purchased_at" else str
             lines.append(
-                f"payment {payment['id']} {name}: n8n {show(theirs)}, "
-                f"port {'none' if ours is None else show(ours)}"
+                f"payment {payment['id']} {name}: n8n {_show(name, theirs)}, "
+                f"port {_show(name, ours)}"
             )
     return lines
 
@@ -312,6 +394,8 @@ async def _import_payment(
         # Added first, like a photo: the catalog and the expense refer to the receipt's id.
         await uow.receipts.add(receipt)
         outcome = receipt.apply_parse(parse, same_key_as=earlier.id if earlier else None)
+        # Before the save: the catalog's card and the expense follow the corrected header.
+        _apply_n8n_edits(payment, receipt, report)
         await save_with_catalog(uow, receipt, outcome)
 
     assert receipt.id is not None
