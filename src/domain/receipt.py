@@ -71,6 +71,9 @@ class Photo:
     path: str | None = None  # relative to RECEIPTS_DIR; None until the bytes are stored
     mime_type: str | None = None
     size_bytes: int | None = None
+    # Photos imported from n8n are kept in Google Drive until they are downloaded.
+    drive_file_id: str | None = None
+    drive_url: str | None = None
     received_at: datetime
     id: int | None = None
 
@@ -151,6 +154,7 @@ class Receipt:
     duplicate_of_id: int | None = None
     deleted_at: datetime | None = None
     error_message: str | None = None
+    source_ref: str | None = None  # "n8n:<id>" on imported receipts, so the import can rerun
 
     # Change tracking for the repository (see module docstring); reset by `mark_saved()`.
     parse_changed: bool = field(default=False, init=False, repr=False)

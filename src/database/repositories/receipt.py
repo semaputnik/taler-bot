@@ -261,6 +261,14 @@ class SqlAlchemyReceiptRepository:
         )
         return await self._get_or_none(receipt_id)
 
+    async def find_by_source_ref(self, user_id: int, source_ref: str) -> Receipt | None:
+        receipt_id = await self._session.scalar(
+            select(ReceiptRow.id).where(
+                ReceiptRow.user_id == user_id, ReceiptRow.source_ref == source_ref
+            )
+        )
+        return await self._get_or_none(receipt_id)
+
     async def known_card_last4(self, user_id: int) -> set[str]:
         found = await self._session.scalars(
             select(ReceiptRow.card_last4)
