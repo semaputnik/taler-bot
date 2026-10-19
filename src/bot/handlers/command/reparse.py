@@ -3,13 +3,19 @@ from aiogram.filters import Command
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from fluentogram import TranslatorRunner
 
+from src.bot.handlers.screens import track_sent
 from src.bot.keyboards.reparse import ReparseCallback
+from src.bot.screens import ScreenRegistry
 from src.services.container import Services
 from src.services.results import CurrentUser
 
 
 async def reparse(
-    message: Message, user: CurrentUser, services: Services, i18n: TranslatorRunner
+    message: Message,
+    user: CurrentUser,
+    services: Services,
+    i18n: TranslatorRunner,
+    screens: ScreenRegistry,
 ) -> None:
     summary = await services.receipts.reparse_candidates(user.id)
     if not (summary.failed_count or summary.outdated_count):
@@ -36,9 +42,10 @@ async def reparse(
         outdated=summary.outdated_count,
         version=summary.parser_version,
     )
-    await message.answer(
+    sent = await message.answer(
         text, reply_markup=InlineKeyboardMarkup(inline_keyboard=[[b] for b in buttons])
     )
+    await track_sent(screens, sent)
 
 
 def register_reparse(dp: Dispatcher) -> None:

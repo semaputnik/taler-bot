@@ -65,10 +65,13 @@ src/
   config/                  # settings.py (root Settings, incl. LOG_LEVEL) + bot.py, database.py, redis.py,
                            # llm.py, storage.py (nested models); standalone DatabaseSettings for Alembic
   bot/                     # everything that knows about aiogram
-    app.py                 # App: Bot, Dispatcher, RedisStorage, TranslatorHub, Services, lifespan
+    app.py                 # App: Bot, Dispatcher, RedisStorage, the screens Redis client, TranslatorHub, Services, lifespan
     dispatcher.py          # create_dispatcher: middlewares + handlers
     tasks.py               # TaskRegistry: spawn (reference kept, errors logged), shutdown, drain (tests)
-    middlewares/           # services and tasks injection, access (ensures the user, drops strangers), i18n
+    screens.py             # expiring screens: Screen(chat_id, message_id, kind plain|entry), ScreenStore Protocol, MemoryScreenStore (tests), ScreenRegistry (track, touch, forget, due; TTL and clock; no-op when SCREEN_TTL_MINUTES = 0)
+    screens_redis.py       # RedisScreenStore: sorted set `screens:due`, member `chat_id:message_id:kind`, score = due unix time
+    sweeper.py             # ScreenSweeper: task `screens-sweeper`, every SCREEN_SWEEP_SECONDS deletes due screens (fallback: remove the keyboard; then a warning); for kind `entry` it first closes the chat's dialog through the `BgManagerFactory` (`done`, `ShowMode.NO_UPDATE`), only if that dialog still shows the screen's message
+    middlewares/           # services, tasks and screens injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (/start, /expenses, /reparse, /stats), each exposes register_xxx(dp)
       callback/            # taps on plain buttons: cards.py is what both cards share (in place vs fresh copy, Close, the gone-card alert); receipt.py and expense.py check the card and call it; history.py edits the history message in place; stats.py edits the stats message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
@@ -194,7 +197,7 @@ the history dialog.
     (`i18n.receipt.saved()`) cannot reach keys with more than one dash segment, and a failed
     lookup leaves the translator's chain polluted.
   - `App` owns one `TaskRegistry` (handler data key `tasks`, put there by `TasksMiddleware`);
-    `lifespan` awaits pending parses for up to `TASK_SHUTDOWN_TIMEOUT`, cancels the rest, then
+    `lifespan` first spawns the `screens-sweeper` task (only with the TTL on) and cancels it on exit, then awaits pending parses for up to `TASK_SHUTDOWN_TIMEOUT`, cancels the rest, then
     closes the bot session. Handler order: commands, callbacks, the photo handler, the amount handler, the
     catch-all "send me a photo", then the dialogs. A dialog consumes every message sent while it is open
     (a card in its resting window too), so everything that must see a message first comes before the dialogs.
@@ -233,6 +236,10 @@ the history dialog.
   and file I/O goes through `asyncio.to_thread`.
 - Getters must not query in a loop (N+1). Load what a window needs in one repository
   call.
+- `SCREEN_TTL_MINUTES` (default 30, `>= 0`; 0 = expiry off: the registry is a no-op and no sweeper is spawned) and
+  `SCREEN_SWEEP_SECONDS` (default 30, `>= 1`) are top-level settings. A screen is a message opened by a command or
+  a menu button; it is deleted after the TTL without a tap. A card is a screen only when the user asked for it: one opened from a history row or copied from an older card (`open_window` with `in_place` False, under `tracking_card()`) is tracked as `ScreenKind.PLAIN`, and every later show of a card moves its time; a card the bot sent by itself (after a parse or an entry) is never tracked. Handlers reach the registry as
+  handler data `screens` (`track` after sending, `touch` on a tap, `forget`); tracked: the `/start` greeting, the history, the stats and the `/reparse` question (`handlers/screens.py`: `track_sent`, `touch_tapped`); the in-place history and stats callbacks touch, the re-parse confirmation forgets; cards, "Saved, reading…", errors and the photo hint are not screens (the manual entry: a later ticket).
 - `LOG_LEVEL` (top-level setting, default `INFO`, one of CRITICAL/ERROR/WARNING/INFO/DEBUG,
   case-insensitive) sets the root log level in `src/__main__.py`.
 - Config, not code: no whitelist ids or tokens in source. Access is `users.is_allowed`
@@ -286,7 +293,7 @@ with the entry.
 buttons must outlive any dialog stack.** `/expenses` is a plain message whose `HistoryCallback`
 buttons carry the whole view state (month, payee, page); `callback/history.py` edits the message in
 place. Its row buttons are `ReceiptCallback`s (or `ExpenseCallback`s for an expense typed by hand, shown
-with 💸), so a tap goes through `open_card` / `open_expense_card`, which send a fresh
+without the 🧾 receipt icon), so a tap goes through `open_card` / `open_expense_card`, which send a fresh
 card and leaves the history keyboard alone. The `/start` button uses `HistoryAction.OPEN`: it sends
 the list as a new message instead of editing the greeting.
 
@@ -302,8 +309,14 @@ The issue review walk lives in `ReceiptCard`'s `dialog_data`: the ordered issue 
 reviewable (domain `reviewable_issues`), so Skip does not lower the `Review (n)` count.
 
 A window that shows a stored receipt photo uses `DynamicMedia` with a `StoredPhoto` (by Telegram
-file id). `StoredPhotoMessageManager`, passed to `setup_dialogs`, uploads the bytes only when Telegram
+file id). `StoredPhotoMessageManager` (given the `ScreenRegistry`), passed to `setup_dialogs` through `TrackingManagerFactory`, uploads the bytes only when Telegram
 refuses the id, and shows a notice if the bytes are unreadable.
+
+**The manual entry expires through the message manager.** `TrackingManager` (`dialog/tracking.py`)
+publishes the state group being shown in a context variable; `StoredPhotoMessageManager.show_message`
+tracks the message as `Screen(..., ScreenKind.ENTRY)` when that group is `ExpenseEntrySG` and the TTL is
+on, so every show moves the time. The entry's last step `forget`s its prompt before resetting the stack.
+Cards are tracked by the same method (`_show_card`: tracked under `tracking_card()`, otherwise touched or moved when the photo window replaces the message), only when the user asked for them. When the entry expires the sweeper deletes the message and closes the dialog.
 
 ### Tests
 
@@ -318,6 +331,9 @@ refuses the id, and shows a notice if the bytes are unreadable.
   the dev Postgres by default, or `TEST_DATABASE_URL` (its database name is only a prefix
   for the scratch databases). There is no fake UoW: it would double the code and
   could not check SQL constraints.
+- `RedisScreenStore` is tested against a real Redis: `TEST_REDIS_URL` (default `redis://localhost:6390/1`, the dev
+  Redis; CI has a `redis:8` service). The test flushes its key `screens:due` per test. The memory store runs the
+  same parametrised suite (`tests/integration/test_screen_store.py`); bot tests use `MemoryScreenStore` and a fake clock.
 - The LLM is stubbed behind the `ReceiptParser` interface (`StubReceiptParser` in `tests/stubs.py`).
   `domain` is tested with JSON fixtures. The one `llm`-marked test calls the real model; it reads
   `LLM__API_KEY` (and optionally `LLM__MODEL`) from the process environment only, never `.env`,

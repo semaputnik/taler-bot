@@ -14,7 +14,7 @@ from aiogram.fsm.state import State
 from aiogram.types import CallbackQuery
 from aiogram_dialog import DialogManager, ShowMode, StartMode
 
-from src.bot.handlers.dialog.media import keeping_previous_keyboard
+from src.bot.handlers.dialog.media import keeping_previous_keyboard, tracking_card
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,7 @@ async def open_window(
     with ExitStack() as stack:
         if not in_place:
             stack.enter_context(keeping_previous_keyboard())  # the older card keeps its buttons
+            stack.enter_context(tracking_card())  # a copy the user asked for expires
         await dialog_manager.start(
             state,
             data=data,

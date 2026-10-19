@@ -150,7 +150,7 @@ category, tags, and optionally the receipt it came from.
    entry (its prompt loses its buttons) and sends the expense card:
 
    ```
-   💸 <b>Mercadona</b>
+   <b>Mercadona</b>
 
    17.10.2026
    Amount: <b>12.50 €</b>
@@ -185,12 +185,23 @@ category, tags, and optionally the receipt it came from.
    | `date_text` | `dd.mm` or `dd.mm.yyyy`; a future or malformed date is refused. `◀ Back` to `date` |
    | `tags` | the current tags and a text input (comma-separated, replaces them); `🧹 Clear`. `◀ Back` |
    | `delete_confirm` | "Delete this expense?" `🗑 Yes, delete` / `◀ Back` |
-10. **History `/expenses`** replaces `/receipts` (no alias): every expense of the month, a `•` on
-    those read from a photo and a `💸` on those typed by hand; filter by payee. Done.
+10. **History `/expenses`** replaces `/receipts` (no alias): every expense of the month, a `🧾` on
+    those read from a photo and none on those typed by hand; filter by payee. Done.
 11. **Expiring screens.** Screens opened by a command or a menu button (`/start`, `/expenses`,
     `/stats`, the `/reparse` summary, an unfinished entry) are deleted after
-    `SCREEN_TTL_MINUTES` (30) without a tap; a tap extends the time. Cards, "Saved, reading…",
-    error replies and re-parse results stay. Tracked in Redis so it survives a restart.
+    `SCREEN_TTL_MINUTES` (30) without a tap; a tap extends the time. A card the bot sent by itself
+    (after a parse or an entry), "Saved, reading…", error replies and re-parse results stay; a card
+    opened from a `/expenses` row or copied because the user tapped an older card expires like a screen. Tracked in Redis so it survives a restart.
+    **Done** (spec #77). The registry, the Redis and memory stores, the `screens-sweeper` task and
+    the settings `SCREEN_TTL_MINUTES` / `SCREEN_SWEEP_SECONDS` (`0` switches expiry off). The plain
+    screens (`/start`, `/expenses`, `/stats`, `/reparse`, and the history and stats opened from the
+    `/start` and `/stats` buttons) expire; a tap on their buttons extends the time; confirming a
+    re-parse stops the question expiring. The unfinished entry: the dialog message manager tracks
+    the entry's message and moves its time on every step (a tap or a typed value); the sweeper
+    deletes the message and closes the dialog, so a word typed afterwards gets the photo hint, a
+    number starts a fresh entry and nothing is saved. A finished entry's prompt and the card it ends on stay. A card opened from the list or copied
+    from an older card is tracked as a plain screen; every later show of it (a window, a typed
+    value, Back) moves its time, and Close leaves it tracked.
 
 **Later**
 
@@ -293,9 +304,9 @@ message keeps working however old it is and however many cards were opened from 
 ```
 🗓 October 2026 · Mercadona
 12 expenses · 384.20 €
-[• 14.10 Mercadona · 47.85 €]
-[• 12.10 Lidl · 23.10 €]
-[• 11.10 Consum · ❌]
+[🧾 14.10 Mercadona · 47.85 €]
+[🧾 12.10 Lidl · 23.10 €]
+[🧾 11.10 Consum · ❌]
 [◀ Sep] [Payee ▾] [Nov ▶]
 [◀] [2/3] [▶]
 ```
@@ -310,7 +321,7 @@ message keeps working however old it is and however many cards were opened from 
 - `Payee ▾` lists the payees with a row in the month, `✓` on the selected one, `All payees`
   and `◀ Back`. The filter stays while moving between months and pages.
 - A row opens the receipt's card as a new message; the history keeps its buttons. An expense
-  typed by hand has no receipt: its row starts with 💸 instead of the bullet and opens the
+  typed by hand has no receipt: its row has no receipt icon and opens the
   expense card the same way.
 
 ### Main menu (`/start`)

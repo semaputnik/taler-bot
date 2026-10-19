@@ -8,7 +8,9 @@ from aiogram.types import CallbackQuery, InlineKeyboardMarkup
 from fluentogram import TranslatorRunner
 
 from src.bot.handlers.command.expenses import send_history
+from src.bot.handlers.screens import touch_tapped
 from src.bot.keyboards.history import HistoryAction, HistoryCallback
+from src.bot.screens import ScreenRegistry
 from src.bot.views import history as view
 from src.services.container import Services
 from src.services.results import CurrentUser
@@ -25,6 +27,7 @@ async def show_history(
     services: Services,
     i18n: TranslatorRunner,
     bot: Bot,
+    screens: ScreenRegistry,
 ) -> None:
     await query.answer()
     if query.message is None:
@@ -32,8 +35,9 @@ async def show_history(
     if callback_data.action is HistoryAction.OPEN:
         # The /start button: the greeting stays, the list is a new message.
         shown = callback_data.model_copy(update={"action": HistoryAction.SHOW})
-        await send_history(query.message, shown, user, services, i18n)
+        await send_history(query.message, shown, user, services, i18n, screens)
         return
+    await touch_tapped(screens, query.message)
     page = await services.expenses.history(
         user.id,
         callback_data.year,

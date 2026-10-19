@@ -6,7 +6,9 @@ from aiogram.types import CallbackQuery
 from fluentogram import TranslatorRunner
 
 from src.bot.handlers.command.stats import send_stats
+from src.bot.handlers.screens import touch_tapped
 from src.bot.keyboards.stats import StatsAction, StatsCallback
+from src.bot.screens import ScreenRegistry
 from src.bot.views import stats as view
 from src.services.container import Services
 from src.services.results import CurrentUser
@@ -21,6 +23,7 @@ async def show_stats(
     services: Services,
     i18n: TranslatorRunner,
     bot: Bot,
+    screens: ScreenRegistry,
 ) -> None:
     await query.answer()
     if query.message is None:
@@ -28,8 +31,9 @@ async def show_stats(
     if callback_data.action is StatsAction.OPEN:
         # The /start button: the greeting stays, the stats are a new message.
         shown = callback_data.model_copy(update={"action": StatsAction.SHOW})
-        await send_stats(query.message, shown, user, services, i18n)
+        await send_stats(query.message, shown, user, services, i18n, screens)
         return
+    await touch_tapped(screens, query.message)
     report = await services.expenses.spending(
         user.id, callback_data.kind.value, callback_data.anchor
     )

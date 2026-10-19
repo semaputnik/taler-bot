@@ -6,7 +6,9 @@ from aiogram.filters import Command
 from aiogram.types import Message
 from fluentogram import TranslatorRunner
 
+from src.bot.handlers.screens import track_sent
 from src.bot.keyboards.stats import StatsAction, StatsCallback, StatsKind
+from src.bot.screens import ScreenRegistry
 from src.bot.views import stats as view
 from src.services.container import Services
 from src.services.results import CurrentUser
@@ -24,18 +26,24 @@ async def send_stats(
     user: CurrentUser,
     services: Services,
     i18n: TranslatorRunner,
+    screens: ScreenRegistry,
 ) -> None:
     """A new stats message for the period of `shown`."""
     report = await services.expenses.spending(user.id, shown.kind.value, shown.anchor)
-    await message.answer(
+    sent = await message.answer(
         view.show_text(report, i18n), reply_markup=view.show_keyboard(report, i18n)
     )
+    await track_sent(screens, sent)
 
 
 async def stats(
-    message: Message, user: CurrentUser, services: Services, i18n: TranslatorRunner
+    message: Message,
+    user: CurrentUser,
+    services: Services,
+    i18n: TranslatorRunner,
+    screens: ScreenRegistry,
 ) -> None:
-    await send_stats(message, current_month(user), user, services, i18n)
+    await send_stats(message, current_month(user), user, services, i18n, screens)
 
 
 def register_stats(dp: Dispatcher) -> None:

@@ -31,7 +31,7 @@ def card(**fields) -> ExpenseCard:
 
 def test_the_text_has_the_payee_the_facts_the_tags_and_the_hashtag():
     assert render.expense_text(card(), i18n).splitlines() == [
-        "💸 <b>Mercadona</b>",
+        "<b>Mercadona</b>",
         "",
         "17.10.2026",
         "Amount: <b>12.50 €</b>",
@@ -52,7 +52,7 @@ def test_names_are_escaped_and_a_missing_payee_and_source_are_named():
         card(payee_key=None, payee_name=None, payment_source_name=None, tags=[]), i18n
     )
 
-    assert text.startswith("💸 <b>Unknown payee</b>")
+    assert text.startswith("<b>Unknown payee</b>")
     assert "Paid with: not specified" in text
     assert "#" not in text
     escaped = render.expense_text(card(payee_name="A<b>&Co", payment_source_name="<i>"), i18n)

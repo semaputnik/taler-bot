@@ -39,6 +39,8 @@ from aiogram_dialog.manager.updater import Updater
 
 from src.bot.dispatcher import create_dispatcher
 from src.bot.i18n import create_translator_hub
+from src.bot.screens import MemoryScreenStore, ScreenRegistry
+from src.bot.sweeper import ScreenSweeper
 from src.bot.tasks import TaskRegistry
 from src.services.container import Services
 from tests.helpers import add_allowed_user
@@ -151,6 +153,19 @@ class RecordingSession(BaseSession):
         pass
 
 
+class FakeClock:
+    """The registry's clock in tests: starts at a fixed time and moves only when told."""
+
+    def __init__(self) -> None:
+        self.now = 1_800_000_000.0
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, *, minutes: float) -> None:
+        self.now += minutes * 60
+
+
 class BotHarness:
     def __init__(
         self,
@@ -159,7 +174,13 @@ class BotHarness:
         session: RecordingSession,
         tasks: TaskRegistry,
         parser: StubReceiptParser,
+        screens: ScreenRegistry,
+        clock: FakeClock,
+        sweeper: ScreenSweeper,
     ) -> None:
+        self.screens = screens
+        self.clock = clock
+        self.sweeper = sweeper
         self.bot = bot
         self.dispatcher = dispatcher
         self.session = session
@@ -296,6 +317,16 @@ class BotHarness:
         )
         await self.press(user_id, data, message_id)
 
+    async def sweep(self, *, after_minutes: float) -> None:
+        """Move the clock on and run one sweep, as the sweeper task would."""
+        self.clock.advance(minutes=after_minutes)
+        await self.sweeper.sweep_once(self.clock.now)
+        await self.tasks.drain()  # a closed dialog is a background update
+
+    @property
+    def deleted_messages(self) -> list[int]:
+        return [int(c.message_id) for c in self.session.calls if isinstance(c, DeleteMessage)]
+
     @property
     def sent_messages(self) -> list[SendMessage]:
         return [call for call in self.session.calls if isinstance(call, SendMessage)]
@@ -314,7 +345,15 @@ class BotHarness:
 
 
 @pytest.fixture
-async def harness(make_uow, tmp_storage, monkeypatch) -> AsyncIterator[BotHarness]:
+def screen_ttl_minutes() -> int:
+    """Override in a module to change the TTL the harness' registry runs with."""
+    return 30
+
+
+@pytest.fixture
+async def harness(
+    make_uow, tmp_storage, monkeypatch, screen_ttl_minutes
+) -> AsyncIterator[BotHarness]:
     recording = RecordingSession()
     bot = Bot("123456:TEST", session=recording)
     tasks = TaskRegistry()
@@ -326,13 +365,18 @@ async def harness(make_uow, tmp_storage, monkeypatch) -> AsyncIterator[BotHarnes
 
     monkeypatch.setattr(Updater, "notify", tracked_notify)
     parser = StubReceiptParser(default=output_of(fixture("03")["raw"]))
+    clock = FakeClock()
+    screens = ScreenRegistry(MemoryScreenStore(), ttl_minutes=screen_ttl_minutes, clock=clock)
+    sweeper = ScreenSweeper(bot, screens, interval_seconds=30)
     dispatcher = create_dispatcher(
         storage=MemoryStorage(),
         services=Services.build(make_uow, storage=tmp_storage, parser=parser),
         translator_hub=create_translator_hub(),
         tasks=tasks,
+        screens=screens,
+        sweeper=sweeper,
     )
-    yield BotHarness(bot, dispatcher, recording, tasks, parser)
+    yield BotHarness(bot, dispatcher, recording, tasks, parser, screens, clock, sweeper)
     await tasks.shutdown(1)
     await bot.session.close()
 

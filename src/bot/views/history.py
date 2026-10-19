@@ -71,7 +71,7 @@ def _row_label(row: HistoryRow, i18n: TranslatorRunner) -> str:
     if icon is not None:
         return i18n.get("history-row-status", day=day, payee=payee, status=icon)
     amount = render.money(row.amount, i18n, row.currency)
-    # An expense typed by hand has no receipt: its own icon instead of the plain bullet.
+    # An expense typed by hand has no receipt, so its row has no receipt icon.
     key = "history-row" if row.has_receipt else "history-row-manual"
     return i18n.get(key, day=day, payee=payee, amount=amount)
 

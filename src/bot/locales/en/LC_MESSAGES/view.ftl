@@ -26,14 +26,14 @@ receipt-summary =
     Payment: { $payment }
 receipt-category = Category: { $category }
 
-expense-title = 💸 <b>{ $payee }</b>
+expense-title = <b>{ $payee }</b>
 expense-unknown-payee = Unknown payee
 expense-amount = Amount: <b>{ $amount }</b>
 expense-source = Paid with: { $source }
 expense-tags = Tags: { $tags }
 expense-payee-tag = #{ $tag }
 
-entry-amount = 💸 <b>{ $amount }</b>
+entry-amount = <b>{ $amount }</b>
 entry-payee = Who did you pay? Pick a recent payee or type a name.
 entry-payee-name = Type the name of the payee.
 entry-payee-name-error = ❌ The name needs letters or digits. Type it again.
@@ -176,9 +176,9 @@ history-summary = { $count ->
   } · { $totals }
 history-summary-none = No expenses yet
 history-empty = No expenses this month.
-history-row = • { $day } { $payee } · { $amount }
-history-row-manual = 💸 { $day } { $payee } · { $amount }
-history-row-status = • { $day } { $payee } · { $status }
+history-row = 🧾 { $day } { $payee } · { $amount }
+history-row-manual = { $day } { $payee } · { $amount }
+history-row-status = 🧾 { $day } { $payee } · { $status }
 history-page = { $page }/{ $pages }
 
 month-1 = January

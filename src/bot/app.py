@@ -7,9 +7,13 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.base import BaseSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.redis import DefaultKeyBuilder, RedisStorage
+from redis.asyncio import Redis
 
 from src.bot.dispatcher import create_dispatcher
 from src.bot.i18n import create_translator_hub
+from src.bot.screens import ScreenRegistry
+from src.bot.screens_redis import RedisScreenStore
+from src.bot.sweeper import SWEEPER_TASK_NAME, ScreenSweeper
 from src.bot.tasks import TaskRegistry
 from src.config.settings import Settings
 from src.database.engine import create_engine, create_sessionmaker
@@ -38,6 +42,13 @@ class App:
         self.storage = RedisStorage.from_url(
             str(settings.redis.url), key_builder=DefaultKeyBuilder(with_destiny=True)
         )
+        self.redis = Redis.from_url(str(settings.redis.url))
+        self.screens = ScreenRegistry(
+            RedisScreenStore(self.redis), ttl_minutes=settings.screen_ttl_minutes
+        )
+        self.screen_sweeper = ScreenSweeper(
+            self.bot, self.screens, interval_seconds=settings.screen_sweep_seconds
+        )
         self.translator_hub = create_translator_hub()
         self.photo_storage = LocalPhotoStorage(settings.storage.receipts_dir)
         self.receipt_parser = OpenAIReceiptParser(settings.llm)
@@ -52,20 +63,28 @@ class App:
             services=self.services,
             translator_hub=self.translator_hub,
             tasks=self.tasks,
+            screens=self.screens,
+            sweeper=self.screen_sweeper,
         )
 
     @asynccontextmanager
     async def lifespan(self) -> AsyncIterator[None]:
+        sweeper = None
+        if self.screens.enabled:
+            sweeper = self.tasks.spawn(self.screen_sweeper.run(), name=SWEEPER_TASK_NAME)
         try:
             yield
         finally:
             logger.info("Shutting down")
             # Each resource is closed even if an earlier close fails.
+            if sweeper is not None:  # it never finishes by itself: do not wait out the timeout
+                sweeper.cancel()
             for name, close in (
                 ("background tasks", lambda: self.tasks.shutdown(TASK_SHUTDOWN_TIMEOUT)),
                 ("bot session", self.bot.session.close),
                 ("receipt parser", self.receipt_parser.close),
                 ("storage", self.storage.close),
+                ("screens redis", self.redis.aclose),
                 ("engine", self.engine.dispose),
             ):
                 try:

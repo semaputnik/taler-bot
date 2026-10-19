@@ -78,7 +78,7 @@ async def to_tags(harness, day: str = "Today") -> None:
 async def test_an_amount_starts_the_entry(harness, typed, shown):
     await harness.send_text(typed, user_id=USER)
 
-    assert harness.last_text() == f"💸 <b>{shown}</b>\n\n{i18n.get('entry-payee')}"
+    assert harness.last_text() == f"<b>{shown}</b>\n\n{i18n.get('entry-payee')}"
 
 
 @pytest.mark.parametrize("typed", ["hello", "12.345", "0", "0.00", "-5", "12.50 eur", "123456789"])
@@ -101,7 +101,7 @@ async def test_a_number_starts_an_entry_while_a_receipt_card_is_open(harness, se
 
     await harness.send_text("15", user_id=USER)
 
-    assert harness.last_text().startswith("💸 <b>15.00 €</b>")
+    assert harness.last_text().startswith("<b>15.00 €</b>")
 
 
 async def test_a_number_typed_in_an_input_step_is_its_input_not_a_new_entry(harness):
@@ -110,7 +110,7 @@ async def test_a_number_typed_in_an_input_step_is_its_input_not_a_new_entry(harn
     await harness.send_text("2026", user_id=USER)
 
     assert "#2026" in harness.sent_messages[-1].text
-    assert harness.sent_messages[-1].text.startswith("💸 <b>Mercadona</b>")
+    assert harness.sent_messages[-1].text.startswith("<b>Mercadona</b>")
 
 
 async def test_a_number_in_a_choice_step_restarts_the_entry_with_the_new_amount(harness):
@@ -118,7 +118,7 @@ async def test_a_number_in_a_choice_step_restarts_the_entry_with_the_new_amount(
 
     await harness.send_text("3", user_id=USER)
 
-    assert harness.last_text() == f"💸 <b>3.00 €</b>\n\n{i18n.get('entry-payee')}"
+    assert harness.last_text() == f"<b>3.00 €</b>\n\n{i18n.get('entry-payee')}"
 
 
 async def test_a_stray_word_in_the_payee_name_step_is_the_name(harness):
@@ -355,7 +355,7 @@ async def test_typed_tags_are_saved_normalised_and_the_expense_card_is_sent(
         "✖ Close",
     ]
     assert sent.text.splitlines() == [
-        "💸 <b>Mercadona</b>",
+        "<b>Mercadona</b>",
         "",
         today().strftime("%d.%m.%Y"),
         "Amount: <b>12.50 €</b>",
@@ -407,7 +407,7 @@ async def test_the_entry_ends_and_a_second_number_starts_a_new_one(harness):
 
     await harness.send_text("3", user_id=USER)
 
-    assert harness.last_text().startswith("💸 <b>3.00 €</b>")
+    assert harness.last_text().startswith("<b>3.00 €</b>")
 
 
 # --- back and abandoning --------------------------------------------------------------------

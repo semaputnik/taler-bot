@@ -135,3 +135,46 @@ async def test_run_recovers_receipts_left_parsing_before_polling_starts(make_uow
     await app.run()
 
     assert seen == [("failed", "interrupted")]
+
+
+def _settings(**extra) -> Settings:
+    return Settings(
+        _env_file=None,
+        bot=BotConfig(token="123456:TEST"),
+        database=DatabaseConfig(url="postgresql+asyncpg://u:p@localhost:1/db"),
+        llm=LLMConfig(api_key="x"),
+        **extra,
+    )
+
+
+async def test_lifespan_spawns_the_screen_sweeper_and_cancels_it_on_exit():
+    app = App(_settings(screen_ttl_minutes=30), bot_session=RecordingSession())
+
+    async with app.lifespan():
+        assert app.tasks.is_running("screens-sweeper")
+        (task,) = [t for t in app.tasks._tasks if t.get_name() == "screens-sweeper"]
+
+    assert task.cancelled()
+    assert not app.tasks.is_running("screens-sweeper")
+
+
+async def test_lifespan_spawns_no_sweeper_when_the_ttl_is_zero():
+    app = App(_settings(screen_ttl_minutes=0), bot_session=RecordingSession())
+
+    async with app.lifespan():
+        assert not app.tasks.is_running("screens-sweeper")
+
+
+async def test_lifespan_closes_the_screens_redis_client():
+    app = App(_settings(), bot_session=RecordingSession())
+    closed = []
+
+    async def close() -> None:
+        closed.append(True)
+
+    app.redis.aclose = close
+
+    async with app.lifespan():
+        pass
+
+    assert closed == [True]
