@@ -703,3 +703,32 @@ async def test_a_reparse_rewrites_the_issues_with_the_carried_resolutions(make_u
     assert [(i.message, i.resolution, i.resolved_at) for i in stored.issues] == [
         ("Check it", IssueResolution.SKIPPED, WHEN)
     ]
+
+
+async def test_a_parse_stored_with_the_old_produce_name_loads_as_fruit_and_vegetables(
+    make_uow, session_factory
+):
+    """Parses written before 2026-10-19 say `produce` in `normalized`; nothing rewrites them."""
+    from src.domain.enums import ProductCategory
+
+    await add_user(make_uow)
+    one = parse(product("lidl::pera", category=ProductCategory.FRUIT_AND_VEGETABLES))
+    await seed_catalog(make_uow, one)
+    receipt = Receipt.start(1, photo())
+    receipt.apply_parse(one)
+    saved = await persist(make_uow, receipt)
+    async with session_factory() as session:
+        await session.execute(
+            text(
+                "UPDATE receipt_parses SET normalized = replace(normalized::text, "
+                "'\"fruit_and_vegetables\"', '\"produce\"')::jsonb WHERE receipt_id = :id"
+            ),
+            {"id": saved.id},
+        )
+        await session.commit()
+
+    async with make_uow() as uow:
+        loaded = await uow.receipts.get(saved.id)
+
+    assert loaded is not None and loaded.parse is not None
+    assert [i.category for i in loaded.parse.items] == [ProductCategory.FRUIT_AND_VEGETABLES]

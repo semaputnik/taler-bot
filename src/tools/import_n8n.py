@@ -50,8 +50,8 @@ from src.database.interfaces.uow import UnitOfWork, UnitOfWorkFactory
 from src.database.uow.sqlalchemy import SqlAlchemyUnitOfWork
 from src.domain.catalog import Catalog
 from src.domain.edits import RECEIPT_FIELDS, Edit
-from src.domain.enums import EditTarget, ProductCategory, ReceiptStatus
-from src.domain.normalize import normalize
+from src.domain.enums import EditTarget, ReceiptStatus
+from src.domain.normalize import category_of, normalize
 from src.domain.receipt import Photo, Receipt
 from src.exception import AppException, InvalidEdit, UserNotFound
 from src.integration.storage import LocalPhotoStorage, PhotoStorage
@@ -198,7 +198,7 @@ def _fill_catalog(
             row["productKey"],
             row["productNameRaw"],
             row["productName"],
-            ProductCategory(row["category"]),
+            category_of(row["category"]),  # n8n rows may carry a renamed category
             row["unit"],
             source_ref=f"n8n:{row['id']}",
         )

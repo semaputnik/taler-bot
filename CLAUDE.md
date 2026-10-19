@@ -549,7 +549,7 @@ their Google Drive id and link (`receipt_photos.drive_file_id`, `drive_url`); th
 | `product_prices` | price history, one row per receipt line | `receipt_items` |
 | `receipt_issues` | model and workflow notes, used to improve the prompt | `receipt_issues` |
 
-Category enum: produce, greens, meat, fish, dairy, bakery, drinks, alcohol, snacks, frozen,
+Category enum: fruit_and_vegetables (was `produce` until 2026-10-19; `normalize` still maps the old name), greens, meat, fish, dairy, bakery, drinks, alcohol, snacks, frozen,
 pantry, household, personal_care, baby, pet, other.
 
 ### Reference files

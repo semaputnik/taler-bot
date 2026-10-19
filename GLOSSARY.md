@@ -73,7 +73,7 @@ expense. An expense read from a receipt starts as groceries. Not the product cat
 _Avoid_: category alone when the product category could be meant
 
 **Product category**:
-One of a fixed list of kinds of goods (produce, dairy, …) set on a product in the
+One of a fixed list of kinds of goods (fruit and vegetables, dairy, …) set on a product in the
 catalog; the breakdown inside groceries.
 
 **Tag**:

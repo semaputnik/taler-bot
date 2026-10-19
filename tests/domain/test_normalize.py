@@ -444,3 +444,12 @@ def test_a_reading_that_cannot_be_normalized_raises_invalid_receipt_data():
             parser_version="v",
             model="m",
         )
+
+
+def test_the_old_produce_category_name_maps_to_fruit_and_vegetables():
+    from src.domain.enums import ProductCategory
+    from src.domain.normalize import category_of
+
+    assert category_of("produce") is ProductCategory.FRUIT_AND_VEGETABLES
+    assert category_of("Fruit_And_Vegetables") is ProductCategory.FRUIT_AND_VEGETABLES
+    assert category_of("nonsense") is ProductCategory.OTHER

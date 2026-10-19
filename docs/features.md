@@ -60,7 +60,7 @@ failures, the same photo sent twice and the same receipt photographed twice.
    • Restaurants 4.20 € · 1%
 
    Groceries by product
-   • Produce 146.00 € · 49% · ▲ 12%
+   • Fruit and vegetables 146.00 € · 49% · ▲ 12%
    • Dairy 73.00 € · 24% · ▼ 5%
    • Not itemised 81.00 € · 27%
 

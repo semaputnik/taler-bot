@@ -195,7 +195,7 @@ async def test_a_failure_while_storing_the_expense_rolls_the_catalog_back(
 
 async def test_add_manual_refuses_an_unknown_category_payee_or_source(service, make_uow):
     with pytest.raises(InvalidEdit):
-        await service.add_manual(1, draft(category="produce"))
+        await service.add_manual(1, draft(category="fruit_and_vegetables"))
     with pytest.raises(UnknownPayee):
         await service.add_manual(1, draft(payee_key="nobody"))
     with pytest.raises(UnknownPaymentSource):
