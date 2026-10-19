@@ -97,12 +97,17 @@ async def test_one_run_writes_catalog_receipts_and_expenses(
     assert [r.receipt_id for r in page.rows if r.status == "duplicate"] == [ids[6]]
 
 
-async def test_report_is_empty_on_the_fixture(
+async def test_report_has_only_the_applied_edit_on_the_fixture(
     make_uow: MakeUow, export: Path, user: int, tmp_storage: LocalPhotoStorage
 ):
     report = await run_import(export, user, make_uow, tmp_storage)
     assert report.differences == []
-    assert report.lines()[-1] == "no differences from the n8n columns"
+    assert report.edits == ["payment 4 card_last4: 0848 -> 0849 (edit)"]
+    assert report.lines()[-3:] == [
+        "1 n8n column correction(s) applied as edits:",
+        "  payment 4 card_last4: 0848 -> 0849 (edit)",
+        "no differences from the n8n columns",
+    ]
 
 
 async def test_a_second_run_adds_nothing(
@@ -117,8 +122,11 @@ async def test_a_second_run_adds_nothing(
     assert (report.products_added, report.products_skipped) == (0, 10)
     assert (report.receipts_added, report.receipts_skipped) == (0, 3)
     assert (report.expenses_added, report.expenses_skipped) == (0, 2)
-    assert report.differences == []
+    assert report.differences == [] and report.edits == []
     assert await imported_ids(make_uow) == before
+    async with make_uow() as uow:
+        receipt = await uow.receipts.get(before[4])
+    assert receipt is not None and [e.field for e in receipt.edits] == ["card_last4"]
 
 
 async def test_a_rerun_adds_only_the_new_payment(
@@ -177,13 +185,10 @@ async def test_a_receipt_with_the_same_key_after_the_import_is_a_duplicate(
     ("column", "value", "expected"),
     [
         ("receiptKey", "consum|other|2026-10-10|7.58", "payment 3 receipt_key: n8n consum|other"),
-        (
-            "purchasedAt",
-            "2026-10-09T18:06:00.000Z",
-            "payment 3 purchased_at: n8n 2026-10-09T18:06:00Z, port 2026-10-10T18:06:00Z",
-        ),
         ("storeKey", "mercadona", "payment 3 store_key: n8n mercadona, port consum"),
-        ("total", 7.59, "payment 3 total: n8n 7.59, port 7.58"),
+        ("total", "7,59", "payment 3 total: n8n 7,59, port 7.58"),
+        ("purchasedAt", "10 Oct", "payment 3 purchased_at: n8n 10 Oct, port 2026-10-10T18:06:00Z"),
+        ("cardLast4", "84", "payment 3 card_last4: n8n 84, port 0848"),
         ("status", "failed", "payment 3 status: n8n failed, port parsed"),
     ],
 )
@@ -202,7 +207,7 @@ async def test_the_report_names_the_field_that_differs(
 
     [line] = [d for d in report.differences if d.startswith("payment 3 ")]
     assert line.startswith(expected)
-    assert expected.split(":")[0].split()[-1] in report.lines()[-1]
+    assert expected.split(":")[0].split()[-1] in " ".join(report.lines())
 
 
 async def test_an_unknown_user_writes_nothing(
@@ -262,6 +267,9 @@ async def test_a_payment_without_raw_json_becomes_a_failed_receipt(
         purchasedAt=None,
         storeKey=None,
         total=None,
+        cardLast4=None,
+        currency=None,
+        receiptNumber=None,
     )
 
     report = await run_import(export, user, make_uow, tmp_storage)
@@ -386,3 +394,92 @@ def test_report_lines_list_the_counts_first():
     assert report.lines()[2] == "receipts: 3 added, 0 skipped"
     assert report.lines()[4] == "photos: 0 stored"
     assert report.lines()[-1] == "  payment 1 total: n8n 1.00, port 2.00"
+
+
+async def card_and_expense(make_uow: MakeUow, receipt_id: int):
+    """The receipt, its expense and the card number the expense is paid with."""
+    async with make_uow() as uow:
+        receipt = await uow.receipts.get(receipt_id)
+        assert receipt is not None
+        expense = await uow.expenses.find_by_receipt(receipt_id)
+        catalog = await uow.catalog.get(USER)
+    assert expense is not None and expense.payment_source_id is not None
+    return receipt, expense, catalog.payment_sources[expense.payment_source_id], catalog
+
+
+async def test_a_corrected_card_column_becomes_an_edit(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
+):
+    edit_payment(export, 3, cardLast4="0849")
+
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert "payment 3 card_last4: 0848 -> 0849 (edit)" in report.edits
+    receipt, expense, source, catalog = await card_and_expense(
+        make_uow, (await imported_ids(make_uow))[3]
+    )
+    assert receipt.header.card_last4 == "0849" and receipt.parse.card_last4 == "0848"  # type: ignore[union-attr]
+    assert [(e.field, e.value) for e in receipt.edits] == [("card_last4", "0849")]
+    assert source.last4 == "0849"
+    assert {s.last4 for s in catalog.payment_sources.values()} == {"0849"}
+
+
+async def test_a_corrected_total_and_receipt_number_follow_into_the_expense(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
+):
+    edit_payment(export, 3, total=7.9, receiptNumber="02/000010")
+
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert "payment 3 total: 7.58 -> 7.90 (edit)" in report.edits
+    assert "payment 3 receipt_number: 02/000009 -> 02/000010 (edit)" in report.edits
+    receipt, expense, _, _ = await card_and_expense(make_uow, (await imported_ids(make_uow))[3])
+    assert receipt.header.total == Decimal("7.90")
+    assert receipt.header.receipt_number == "02/000010"
+    assert expense.amount == Decimal("7.90")
+    assert sorted(e.field for e in receipt.edits) == ["receipt_number", "total"]
+    assert not [d for d in report.differences if d.startswith("payment 3 ")]
+
+
+async def test_a_corrected_purchase_time_moves_the_expense_day(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
+):
+    edit_payment(export, 3, purchasedAt="2026-10-08T10:00:00.000Z")
+
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert "payment 3 purchased_at: 2026-10-10T18:06:00Z -> 2026-10-08T10:00:00Z (edit)" in (
+        report.edits
+    )
+    receipt, expense, _, _ = await card_and_expense(make_uow, (await imported_ids(make_uow))[3])
+    assert receipt.header.purchased_at is not None
+    assert receipt.header.purchased_at.isoformat() == "2026-10-08T10:00:00+00:00"
+    assert str(expense.spent_at) == "2026-10-08"
+
+
+async def test_an_unreadable_column_is_reported_and_not_applied(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
+):
+    edit_payment(export, 3, cardLast4="84x8", total="seven")
+
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert report.edits == ["payment 4 card_last4: 0848 -> 0849 (edit)"]
+    assert "payment 3 card_last4: n8n 84x8, port 0848" in report.differences
+    assert "payment 3 total: n8n seven, port 7.58" in report.differences
+    receipt, expense, _, _ = await card_and_expense(make_uow, (await imported_ids(make_uow))[3])
+    assert receipt.edits == [] and expense.amount == Decimal("7.58")
+
+
+async def test_a_duplicate_payment_is_never_edited(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
+):
+    edit_payment(export, 6, cardLast4="1111", total=9.99)
+
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert not [e for e in report.edits if e.startswith("payment 6 ")]
+    assert "payment 6 card_last4: n8n 1111, port 0848" in report.differences
+    async with make_uow() as uow:
+        repeat = await uow.receipts.find_by_source_ref(user, "n8n:6")
+    assert repeat is not None and repeat.edits == []

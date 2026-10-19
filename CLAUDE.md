@@ -114,7 +114,7 @@ src/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse, prompt.md (system prompt)
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
   tools/
-    import_n8n.py          # one-off import of the n8n history (`python -m src.tools.import_n8n <export dir> --user-id <id>`): catalog first, then each payment in its own Unit of Work through `services.receipt.save_with_catalog`; rows carry `source_ref = n8n:<id>`; files of an optional `photos/` folder (the downloaded Drive folder) are matched by the message id in their name and stored through `PhotoStorage` under the live layout (`services.receipt.photo_path`); prints counts and where the port differs from the n8n columns
+    import_n8n.py          # one-off import of the n8n history (`python -m src.tools.import_n8n <export dir> --user-id <id>`): catalog first, then each payment in its own Unit of Work through `services.receipt.save_with_catalog`; rows carry `source_ref = n8n:<id>`; files of an optional `photos/` folder (the downloaded Drive folder) are matched by the message id in their name and stored through `PhotoStorage` under the live layout (`services.receipt.photo_path`); a non-empty n8n header column that differs from the recomputed header (card ending, receipt number, totals, date, currency, payment method) is recorded as a receipt edit before the save (parsed receipts only; an unreadable column is only reported); prints counts, the applied edits and where the port differs from the n8n columns
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
