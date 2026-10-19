@@ -5,6 +5,8 @@ message sent while it is open, so a photo would never get through); the catch-al
 photo" is included after them, so it never swallows a dialog's text input.
 """
 
+import logging
+
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.types import Message
@@ -17,6 +19,8 @@ from src.bot.tasks import TaskRegistry
 from src.exception import DuplicatePhoto
 from src.services.container import Services
 from src.services.results import CurrentUser, NewPhoto
+
+logger = logging.getLogger(__name__)
 
 MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024  # the Bot API cannot serve bigger files
 
@@ -68,6 +72,12 @@ async def photo_intake(
         card = await services.receipts.save_photo(user.id, data, new_photo)
     except DuplicatePhoto:
         await message.reply(i18n.get("photo-already-have"))
+        return
+    except Exception:
+        # Storage (disk full, permissions), the database or the user lookup failed: nothing
+        # is recorded, so the user must hear it, and the traceback goes to the log once.
+        logger.exception("Photo of message %s was not saved", message.message_id)
+        await message.reply(i18n.get("photo-not-saved"))
         return
 
     await send_reply(bot, message.chat.id, message.message_id, i18n.get("receipt-saved"))
