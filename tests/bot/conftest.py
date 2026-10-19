@@ -58,6 +58,7 @@ class RecordingSession(BaseSession):
         self._next_message_id = 1000
         self.chat_action_fails = False  # make every `sendChatAction` raise
         self.rejected_file_ids: set[str] = set()  # file ids Telegram refuses to send as media
+        self.undeletable_message_ids: set[int] = set()  # deleteMessage fails on these (48 h)
         self.rejected_calls: list[TelegramMethod[Any]] = []  # the media calls it refused
         self._uploads = 0
         self.photo_message_ids: set[int] = set()  # messages that currently hold a photo
@@ -122,6 +123,8 @@ class RecordingSession(BaseSession):
                 chat=Chat(id=int(method.chat_id or 0), type="private"),
             )
         if isinstance(method, DeleteMessage):
+            if int(method.message_id) in self.undeletable_message_ids:
+                raise TelegramBadRequest(method=method, message="message can't be deleted")
             self.photo_message_ids.discard(int(method.message_id))
             return True
         if isinstance(method, AnswerCallbackQuery):

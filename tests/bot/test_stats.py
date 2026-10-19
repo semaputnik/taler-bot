@@ -117,14 +117,18 @@ async def seed_two_months(make_uow: MakeUow) -> None:
     await bought(
         make_uow,
         in_month(0),
-        (ProductCategory.PRODUCE, "30.00"),
+        (ProductCategory.FRUIT_AND_VEGETABLES, "30.00"),
         (ProductCategory.DAIRY, "10.00"),
         card=visa,
     )
     await bought(
-        make_uow, in_month(0), (ProductCategory.PRODUCE, "5.00"), store="Lidl", total="8.00"
+        make_uow,
+        in_month(0),
+        (ProductCategory.FRUIT_AND_VEGETABLES, "5.00"),
+        store="Lidl",
+        total="8.00",
     )
-    await bought(make_uow, in_month(-1), (ProductCategory.PRODUCE, "20.00"), card=visa)
+    await bought(make_uow, in_month(-1), (ProductCategory.FRUIT_AND_VEGETABLES, "20.00"), card=visa)
 
 
 async def test_stats_renders_the_month_with_the_comparison(harness, make_uow):
@@ -140,7 +144,7 @@ async def test_stats_renders_the_month_with_the_comparison(harness, make_uow):
         "• Groceries 48.00 € · 100% · ▲ 140%\n"
         "\n"
         "<b>Groceries by product</b>\n"
-        "• Produce 35.00 € · 73% · ▲ 75%\n"
+        "• Fruit and vegetables 35.00 € · 73% · ▲ 75%\n"
         "• Dairy 10.00 € · 21% · new\n"
         "• Not itemised 3.00 € · 6%\n"
         "\n"
@@ -157,7 +161,7 @@ async def test_stats_renders_the_month_with_the_comparison(harness, make_uow):
 async def test_a_changed_expense_category_moves_its_amount_between_category_lines(
     harness, make_uow
 ):
-    await bought(make_uow, in_month(0), (ProductCategory.PRODUCE, "30.00"))
+    await bought(make_uow, in_month(0), (ProductCategory.FRUIT_AND_VEGETABLES, "30.00"))
     pharmacy = await bought(
         make_uow, in_month(0), (ProductCategory.PERSONAL_CARE, "10.00"), store="Farmacia"
     )
@@ -239,7 +243,7 @@ async def test_prev_edits_to_the_previous_month_and_next_is_only_in_a_past_one(h
 
 async def test_week_switches_to_the_week_of_the_first_and_prev_moves_one_week(harness, make_uow):
     first = in_month(0, 1)
-    await bought(make_uow, first, (ProductCategory.PRODUCE, "10.00"))
+    await bought(make_uow, first, (ProductCategory.FRUIT_AND_VEGETABLES, "10.00"))
     await bought(make_uow, first - timedelta(days=7), (ProductCategory.DAIRY, "4.00"))
     await bought(make_uow, first - timedelta(days=30), (ProductCategory.MEAT, "1.00"))
     await harness.send_text("/stats", user_id=USER)
@@ -263,7 +267,7 @@ async def test_week_switches_to_the_week_of_the_first_and_prev_moves_one_week(ha
 
 
 async def test_the_week_header_uses_iso_week_numbers_across_a_year_boundary(harness, make_uow):
-    await bought(make_uow, date(2025, 12, 31), (ProductCategory.PRODUCE, "10.00"))
+    await bought(make_uow, date(2025, 12, 31), (ProductCategory.FRUIT_AND_VEGETABLES, "10.00"))
     await harness.send_text("/stats", user_id=USER)
     # Walk back to the old week: the arrows carry the anchor, so press a hand-made callback.
     message_id = harness.last_keyboard()[0]
@@ -276,7 +280,7 @@ async def test_the_week_header_uses_iso_week_numbers_across_a_year_boundary(harn
 
 
 async def test_an_empty_period_says_so_and_still_offers_the_arrow(harness, make_uow):
-    await bought(make_uow, in_month(-2), (ProductCategory.PRODUCE, "10.00"))
+    await bought(make_uow, in_month(-2), (ProductCategory.FRUIT_AND_VEGETABLES, "10.00"))
 
     await harness.send_text("/stats", user_id=USER)
 
@@ -287,9 +291,13 @@ async def test_an_empty_period_says_so_and_still_offers_the_arrow(harness, make_
 
 
 async def test_two_currencies_give_two_headed_blocks(harness, make_uow):
-    await bought(make_uow, in_month(0), (ProductCategory.PRODUCE, "10.00"))
+    await bought(make_uow, in_month(0), (ProductCategory.FRUIT_AND_VEGETABLES, "10.00"))
     await bought(
-        make_uow, in_month(0), (ProductCategory.PRODUCE, "5.00"), currency="USD", store="Shop"
+        make_uow,
+        in_month(0),
+        (ProductCategory.FRUIT_AND_VEGETABLES, "5.00"),
+        currency="USD",
+        store="Shop",
     )
 
     await harness.send_text("/stats", user_id=USER)
@@ -334,7 +342,7 @@ async def test_store_and_card_names_are_escaped(harness, make_uow):
     await bought(
         make_uow,
         in_month(0),
-        (ProductCategory.PRODUCE, "10.00"),
+        (ProductCategory.FRUIT_AND_VEGETABLES, "10.00"),
         store="<b>Shop",
         card=("<i>X", "1234"),
     )

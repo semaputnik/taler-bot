@@ -19,7 +19,7 @@ from src.domain.slug import slug, strip
 from src.exception import InvalidReceiptData
 
 # Bump whenever the prompt, the schema, the model or this module changes (n8n was 2026-10-15.1).
-PARSER_VERSION = "2026-10-17.3"  # product category `greens`; the model schema lists the categories
+PARSER_VERSION = "2026-10-19.1"  # product category `produce` renamed `fruit_and_vegetables`
 
 TOLERANCE = Decimal("0.02")
 
@@ -137,9 +137,16 @@ def jsonable(value: Any) -> Any:
     return value
 
 
+# Category names the model or n8n used before a rename; old raw readings still carry them.
+LEGACY_CATEGORIES = {"produce": ProductCategory.FRUIT_AND_VEGETABLES}
+
+
 def category_of(value: Any) -> ProductCategory:
+    name = str(value).lower()
+    if name in LEGACY_CATEGORIES:
+        return LEGACY_CATEGORIES[name]
     try:
-        return ProductCategory(str(value).lower())
+        return ProductCategory(name)
     except ValueError:
         return ProductCategory.OTHER
 

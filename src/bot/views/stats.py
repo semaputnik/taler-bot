@@ -88,7 +88,7 @@ def _category_label(line: Compared, i18n: TranslatorRunner) -> str:
 
 
 def _product_label(line: Compared, i18n: TranslatorRunner) -> str:
-    """A product category (`produce`, `dairy`, ...), or the not-itemised remainder."""
+    """A product category (`fruit_and_vegetables`, `dairy`, ...), or the not-itemised remainder."""
     if line.key == NOT_ITEMISED:
         return i18n.get("stats-not-itemised")
     return i18n.get(f"category-{line.key.replace('_', '-')}")

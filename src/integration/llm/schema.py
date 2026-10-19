@@ -9,13 +9,13 @@ import warnings
 from decimal import Decimal
 from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ItemCategory(StrEnum):
     """The product categories the model may assign; kept equal to `ProductCategory` by a test."""
 
-    PRODUCE = "produce"
+    FRUIT_AND_VEGETABLES = "fruit_and_vegetables"
     GREENS = "greens"
     MEAT = "meat"
     FISH = "fish"
@@ -72,10 +72,21 @@ with warnings.catch_warnings():
         register: str | None = Field(...)
 
 
+LEGACY_ITEM_CATEGORIES = {"produce": "fruit_and_vegetables"}
+
+
 class RawItem(BaseModel):
     name_raw: str  # line text exactly as printed
     name_normalized: str  # clean readable name, no prices or codes
     category: ItemCategory | None
+
+    @field_validator("category", mode="before")
+    @classmethod
+    def _legacy_category(cls, value: object) -> object:
+        """Readings stored before 2026-10-19 say `produce`; the schema sent to the model does
+        not list it (the enum above is the schema), so only parsing accepts the old name."""
+        return LEGACY_ITEM_CATEGORIES.get(value, value) if isinstance(value, str) else value
+
     quantity: Decimal | None
     unit: str | None  # pcs, kg, g, l or ml
     unit_price: Decimal | None

@@ -74,7 +74,7 @@ src/
     middlewares/           # services, tasks and screens injection, access (ensures the user, drops strangers), i18n
     handlers/
       command/             # one module per command (/start, /expenses, /reparse, /stats), each exposes register_xxx(dp)
-      callback/            # taps on plain buttons: cards.py is what both cards share (in place vs fresh copy, Close, the gone-card alert); receipt.py and expense.py check the card and call it; history.py edits the history message in place; stats.py edits the stats message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
+      callback/            # taps on plain buttons: cards.py is what both cards share (in place vs fresh copy, Close: hide the buttons or delete a card the user asked for, the gone-card alert); receipt.py and expense.py check the card and call it; history.py edits the history message in place; stats.py edits the stats message in place; reparse.py starts the bulk re-parse (task `reparse-<user_id>`, one run per user at a time)
       message/photo.py     # photo intake: save, reply "Saved", parse in the background, then start the card (a save that fails in storage or the database is logged and answered "Could not save this photo"); catch-all "send me a photo" (steps aside when the open window reads typed text)
       message/amount.py    # a message that is only an amount starts the ExpenseEntry dialog (unless the open window reads typed text)
       parse_task.py        # read_and_show_card: the background read (typing, parse, fresh card) shared by photo intake and the card's Re-parse
@@ -284,7 +284,7 @@ card, however old: a tap on the dialog's last message restarts the dialog with `
 (in place), a tap on an older card with `ShowMode.SEND` and leaves that card's keyboard alone
 (`StoredPhotoMessageManager` skips aiogram-dialog's keyboard removal for those sends). **The card
 never calls `done()`**: it would strip the buttons. Every exit goes `switch_to(ReceiptCardSG.main)`,
-which is also where a deleted receipt ends. `ReceiptCard.tags` (the expense's tags, read with the expense `card` already loads for `expense_id`) feeds the `Tags:` line; the `#️⃣ Tags` button sits beside `🏷 Category` under the same condition (a live expense), and the `tags` window is the shared `dialog/tags.py` window: a typed line edits the card in place. `✖ Close` (a plain card button) hides the buttons and keeps the text.
+which is also where a deleted receipt ends. `ReceiptCard.tags` (the expense's tags, read with the expense `card` already loads for `expense_id`) feeds the `Tags:` line; the `#️⃣ Tags` button sits beside `🏷 Category` under the same condition (a live expense), and the `tags` window is the shared `dialog/tags.py` window: a typed line edits the card in place. `✖ Close` (a plain card button) hides the buttons and keeps the text on a card the bot sent by itself; on a card the user asked for (a history row, a copy of an older card: `open_window` puts `TransferKeys.DISMISSIBLE` into the start data, and the keyboard renders Close as `DISMISS`) it deletes the message, with the keyboard removal as the fallback after 48 hours.
 
 The expense card (`ExpenseCardSG`, `bot/handlers/dialog/expense_card/`) is the same kind of card for an
 expense without a receipt: plain `ExpenseCallback` buttons, handled by `callback/expense.py`. What both
@@ -549,7 +549,7 @@ their Google Drive id and link (`receipt_photos.drive_file_id`, `drive_url`); th
 | `product_prices` | price history, one row per receipt line | `receipt_items` |
 | `receipt_issues` | model and workflow notes, used to improve the prompt | `receipt_issues` |
 
-Category enum: produce, greens, meat, fish, dairy, bakery, drinks, alcohol, snacks, frozen,
+Category enum: fruit_and_vegetables (was `produce` until 2026-10-19; `normalize` still maps the old name), greens, meat, fish, dairy, bakery, drinks, alcohol, snacks, frozen,
 pantry, household, personal_care, baby, pet, other.
 
 ### Reference files

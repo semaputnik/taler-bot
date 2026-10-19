@@ -17,7 +17,7 @@ class ParseStatus(StrEnum):
 
 
 class ProductCategory(StrEnum):
-    PRODUCE = "produce"
+    FRUIT_AND_VEGETABLES = "fruit_and_vegetables"  # was `produce` until 2026-10-19
     GREENS = "greens"  # herbs and leafy greens; added 2026-10-17 at the user's request
     MEAT = "meat"
     FISH = "fish"

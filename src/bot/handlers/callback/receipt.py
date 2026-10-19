@@ -8,6 +8,7 @@ from fluentogram import TranslatorRunner
 from src.bot.handlers.callback.cards import alert_gone, open_window
 from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.keyboards.receipt import CardWindow, ReceiptCallback
+from src.bot.screens import ScreenRegistry
 from src.bot.states.receipt_card import ReceiptCardSG
 from src.exception import ReceiptNotFound
 from src.services.container import Services
@@ -22,7 +23,7 @@ _WINDOWS = {
     CardWindow.PHOTO: ReceiptCardSG.photo,
     CardWindow.DELETE_CONFIRM: ReceiptCardSG.delete_confirm,
     CardWindow.REPARSE: ReceiptCardSG.reparse_confirm,
-}  # CardWindow.CLOSE is not a window
+}  # CardWindow.CLOSE and CardWindow.DISMISS are not windows
 
 
 async def open_card(
@@ -33,6 +34,7 @@ async def open_card(
     services: Services,
     i18n: TranslatorRunner,
     bot: Bot,
+    screens: ScreenRegistry,
 ) -> None:
     try:
         card = await services.receipts.card(user.id, callback_data.receipt_id)
@@ -55,8 +57,10 @@ async def open_card(
         query,
         dialog_manager,
         bot,
-        state=_WINDOWS.get(callback_data.window),  # Close has no window
+        screens,
+        state=_WINDOWS.get(callback_data.window),  # Close and Dismiss have no window
         data={TransferKeys.RECEIPT_ID: callback_data.receipt_id},
+        dismiss=callback_data.window is CardWindow.DISMISS,
     )
 
 

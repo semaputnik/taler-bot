@@ -33,7 +33,7 @@ class PreviewDataKeys:
 # The categories offered for a product, in the order of the list. The service refuses any
 # other string; `tests/bot/test_item_edit.py` keeps this list equal to the domain's.
 CATEGORIES = (
-    "produce",
+    "fruit_and_vegetables",
     "greens",
     "meat",
     "fish",

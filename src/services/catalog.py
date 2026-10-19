@@ -25,7 +25,7 @@ class CatalogService:
             return _card(product)
 
     async def set_category(self, user_id: int, product_key: str, category: str) -> ProductCard:
-        """Set the product's category from its name (`produce`, `dairy`, ...)."""
+        """Set the product's category from its name (`fruit_and_vegetables`, `dairy`, ...)."""
         try:
             parsed = ProductCategory(category)
         except ValueError:

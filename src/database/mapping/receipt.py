@@ -30,6 +30,7 @@ from src.domain.enums import (
     ProductCategory,
     ReceiptStatus,
 )
+from src.domain.normalize import category_of
 from src.domain.parse import Parse, ParsedIssue, ParsedItem
 from src.domain.receipt import Header, Issue, Item, Photo, Receipt
 
@@ -242,7 +243,7 @@ def _load_item(name: str, value: Any) -> Any:
     if name in _ITEM_NUMBERS:
         return Decimal(value)
     if name == "category":
-        return ProductCategory(value)
+        return category_of(value)  # a parse stored before a category rename keeps the old name
     return value
 
 

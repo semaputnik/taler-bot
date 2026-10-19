@@ -95,7 +95,7 @@ item-not-specified = not specified
 item-gone = This item is no longer on the receipt.
 item-row = { $name } · { $quantity } { $unit } · { $total }
 
-category-produce = Produce
+category-fruit-and-vegetables = Fruit and vegetables
 category-greens = Greens
 category-meat = Meat
 category-fish = Fish

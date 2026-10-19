@@ -112,7 +112,7 @@ async def test_set_category_refuses_an_unknown_category_and_changes_nothing(serv
     expense_id = await typed(make_uow, date(2026, 10, 1))
 
     with pytest.raises(InvalidEdit):
-        await service.set_category(1, expense_id, "produce")  # a product category
+        await service.set_category(1, expense_id, "fruit_and_vegetables")  # a product category
 
     assert (await service.card(1, expense_id)).category == "other"
 
