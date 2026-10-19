@@ -56,3 +56,10 @@ def test_integration_imports_no_bot_services_or_database():
     forbidden = ("src.bot", "src.services", "src.database")
     offenders = {m for m in imports_of("integration") if m.startswith(forbidden)}
     assert not offenders
+
+
+def test_tools_are_a_composition_root_that_never_import_the_bot():
+    # `tools/` wires the SQLAlchemy Unit of Work itself, like `bot/app.py`, so it may import
+    # `database`; it still must not reach into the bot or aiogram.
+    offenders = {m for m in imports_of("tools") if m.startswith("src.bot") or m == "aiogram"}
+    assert not offenders

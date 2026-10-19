@@ -122,6 +122,50 @@ Restore a cold backup: `docker compose down`, replace the directory with the unp
 database: `gunzip -c taler-DATE.sql.gz | docker compose exec -T postgres psql -U taler taler`.
 Backups contain receipt photos and personal data; keep them off public storage.
 
+## Import the n8n history
+
+A one-off import of the Receipts Bot history (n8n data tables) for one user. The user must
+already exist (send `/start` to the bot first); the import never creates or allows users.
+
+1. Export the n8n tables as JSON into a directory on the server, for example `./import/`
+   (git-ignored in the repository; it never enters git):
+
+   ```
+   import/
+     receipt_payments.json   # a list of row objects with the n8n column names
+     store_products.json
+   ```
+
+   The other n8n tables (`product_prices`, `receipt_issues`, `telegram_whitelist`) may be
+   present; they are ignored.
+
+   To bring the photos too, download the Google Drive folder `receipts` by hand and put its
+   files into `import/photos/`, next to the JSON files (no sub-folders; the files keep their
+   names, `receipt_<date>_<message id>.<ext>`). Each file is matched to its payment by the
+   message id at the end of the name; the date in the name is ignored. Without `photos/` the
+   import works as before.
+2. Run it in the bot container, with the Telegram id of the user:
+
+   ```bash
+   docker compose run --rm -v ./import:/import bot python -m src.tools.import_n8n /import --user-id 41512748
+   ```
+
+3. Read the summary: counts of added and skipped payees, products, receipts and expenses, the
+   number of photos stored (the bot container already mounts the receipts volume, so the
+   command is the same), the photo files that were not imported (no payment has their message
+   id, an unknown file type, or the payment was imported by an earlier run), then
+   one line for every field where the port's receipt key, purchase time, payee key, total or
+   status differs from the n8n columns (a column n8n left empty is not compared).
+
+Corrections the user made by hand in the n8n columns (card ending, receipt number, totals, date, currency, payment method) are carried over as receipt edits, so a card fixed in n8n is the card the expense is paid with; the summary lists each one.
+
+Rerunning is safe: a payment or product that was imported is skipped, so after a fresh export
+only the new rows are added. The import stops at the first failing payment and names it; the
+payments before it stay committed, so fix the cause and run it again. An unknown user id exits
+with an error before anything is written. A photo file is stored together with its new receipt only, so a rerun
+never stores a photo twice. The Drive id and link are always kept; a receipt without a file in
+`photos/` has no stored photo, and its Photo button shows the "photo could not be loaded" notice.
+
 ## Building the image locally
 
 ```bash

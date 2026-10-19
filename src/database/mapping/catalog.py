@@ -45,6 +45,7 @@ def to_catalog(
             category=ProductCategory(row.category),
             unit=row.unit,
             created_by_receipt_id=row.created_by_receipt_id,
+            source_ref=row.source_ref,
         )
     return catalog
 
@@ -80,4 +81,5 @@ def to_product_row(user_id: int, payee_id: int, product: Product) -> ProductRow:
         category=str(product.category),  # the database CHECK decides what is valid
         unit=product.unit,
         created_by_receipt_id=product.created_by_receipt_id,
+        source_ref=product.source_ref,
     )

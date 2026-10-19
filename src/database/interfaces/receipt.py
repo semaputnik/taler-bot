@@ -23,6 +23,10 @@ class ReceiptRepository(Protocol):
         """The user's parsed, not deleted receipt with this key."""
         ...
 
+    async def find_by_source_ref(self, user_id: int, source_ref: str) -> Receipt | None:
+        """The user's receipt imported under this reference (`n8n:<id>`), deleted or not."""
+        ...
+
     async def known_card_last4(self, user_id: int) -> set[str]:
         """Card endings of the user's parsed, not deleted receipts."""
         ...

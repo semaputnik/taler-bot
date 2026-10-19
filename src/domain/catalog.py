@@ -74,6 +74,7 @@ class Product:
     unit: str = "pcs"
     # Lets a re-parse remove products that only a misread of this receipt created.
     created_by_receipt_id: int | None = None
+    source_ref: str | None = None  # "n8n:<id>" on imported products
     id: int | None = None
 
 
@@ -233,6 +234,7 @@ class Catalog:
         category: ProductCategory,
         unit: str,
         created_by_receipt_id: int | None = None,
+        source_ref: str | None = None,
     ) -> Product:
         product = self.products.get(product_key)
         if product is not None:
@@ -249,6 +251,7 @@ class Catalog:
             category=category,
             unit=unit,
             created_by_receipt_id=created_by_receipt_id,
+            source_ref=source_ref,
         )
         self.products[product_key] = product
         return product
