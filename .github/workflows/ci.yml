@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches: [main]
+    tags: ["v*"]
 
 # A newer run on the same ref supersedes the older one.
 concurrency:
@@ -71,7 +72,9 @@ jobs:
 
   publish:
     needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # A green main publishes `latest` and `sha-<short>`; a release tag `vX.Y.Z` publishes
+    # `vX.Y.Z` and `X.Y` on top, so a deploy can pin a version.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -91,8 +94,10 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
+            type=semver,pattern=v{{version}}
+            type=semver,pattern={{major}}.{{minor}}
       - uses: docker/build-push-action@v7
         with:
           context: .
