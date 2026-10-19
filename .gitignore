@@ -14,3 +14,6 @@ wheels/
 
 # Local receipt photos (RECEIPTS_DIR)
 data/
+
+# n8n export for src.tools.import_n8n (private data, never committed)
+import/
