@@ -6,7 +6,10 @@ import pytest
 from sqlalchemy import text
 
 from src.bot.i18n import DEFAULT_LOCALE, create_translator_hub
+from src.database.repositories.receipt import SqlAlchemyReceiptRepository
+from src.exception import DatabaseException
 from src.integration.llm import LLMError
+from src.integration.storage import StorageError
 from tests.stubs import fixture, output_of
 
 USER = 7
@@ -225,3 +228,50 @@ async def test_a_failing_chat_action_does_not_affect_the_summary(harness):
 
     saved, summary = harness.sent_messages
     assert "Consum" in summary.text
+
+
+class FailingStorage:
+    """A photo storage whose disk is full."""
+
+    async def save(self, relative_path: str, data: bytes) -> None:
+        raise StorageError(f"could not save {relative_path}")
+
+    async def read(self, relative_path: str) -> bytes:
+        raise StorageError(f"could not read {relative_path}")
+
+    async def trash(self, relative_path: str) -> None:
+        raise StorageError(f"could not trash {relative_path}")
+
+
+class TestSavingFails:
+    @pytest.fixture
+    def tmp_storage(self):
+        return FailingStorage()
+
+    async def test_a_storage_error_is_reported_and_nothing_is_recorded(
+        self, harness, session_factory, caplog
+    ):
+        message_id = await harness.send_photo(user_id=USER)
+        await harness.tasks.drain()
+
+        (sent,) = harness.sent_messages
+        assert sent.text == i18n.get("photo-not-saved")
+        assert replied_to(sent) == message_id
+        assert await statuses(session_factory) == []
+        assert any(r.exc_info and r.levelname == "ERROR" for r in caplog.records)
+
+
+async def test_a_database_error_is_reported_and_nothing_is_recorded(
+    harness, session_factory, monkeypatch
+):
+    async def add(self, receipt):
+        raise DatabaseException("connection lost")
+
+    monkeypatch.setattr(SqlAlchemyReceiptRepository, "add", add)
+
+    await harness.send_photo(user_id=USER)
+    await harness.tasks.drain()
+
+    (sent,) = harness.sent_messages
+    assert sent.text == i18n.get("photo-not-saved")
+    assert await statuses(session_factory) == []
