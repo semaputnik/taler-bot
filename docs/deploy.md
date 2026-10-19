@@ -1,7 +1,8 @@
 # Deploying taler-bot
 
 The bot runs on a Linux x86_64 server with Docker. The image is built by GitHub Actions on a
-green `main` and published to `ghcr.io/semaputnik/taler-bot` (tags `latest` and `sha-<short>`).
+green `main` and published to `ghcr.io/semaputnik/taler-bot` (tags `latest` and `sha-<short>`; a
+release tag `vX.Y.Z` adds `vX.Y.Z` and `X.Y`).
 The server only pulls it. The stack is `postgres`, `redis`, a one-shot `migrate` and `bot`
 (`docker-compose.prod.yml`). Nothing is published on the server's network interfaces, and all
 data lives in directories under one `DATA_DIR`.
@@ -37,7 +38,8 @@ chmod 600 .env
 ```
 
 Edit `.env`: set `BOT__TOKEN`, `LLM__API_KEY`, `POSTGRES_PASSWORD` (letters and digits only) and
-`DATA_DIR` (an absolute path, `/srv/taler-bot` above). `TALER_TAG` stays `latest` for now.
+`DATA_DIR` (an absolute path, `/srv/taler-bot` above). `TALER_TAG` is `latest` or a release
+tag such as `v0.2.0`.
 
 Compose reads this `.env` twice: to fill `${...}` in the compose file, and as the bot's
 environment (`env_file`). Compose does **not** interpolate `${POSTGRES_PASSWORD}` inside
@@ -77,8 +79,8 @@ container keeps running until the new one replaces it.
 
 ## Roll back
 
-Pin an older image in `.env` (`TALER_TAG=sha-abc1234`, the tags are listed on the GitHub package
-page) and run the same command. Migrations are not reversed automatically; a rollback across a
+Pin an older image in `.env` (`TALER_TAG=v0.2.0` or `TALER_TAG=sha-abc1234`; the tags are listed
+on the GitHub package page) and run the same command. Migrations are not reversed automatically; a rollback across a
 schema change needs `docker compose run --rm migrate alembic downgrade <revision>` first.
 
 ```bash

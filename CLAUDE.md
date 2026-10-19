@@ -458,7 +458,7 @@ Full runbook: [docs/deploy.md](docs/deploy.md).
   `DATABASE__URL` from `${POSTGRES_PASSWORD}` in `environment:`, and also fixes `REDIS__URL` and
   `STORAGE__RECEIPTS_DIR`.
 - The image is built by CI on a green `main` and published to `ghcr.io/semaputnik/taler-bot`
-  (`latest`, `sha-<short>`). A deploy is `docker compose pull && docker compose up -d`; a rollback
+  (`latest`, `sha-<short>`); a release tag `vX.Y.Z` (the version in `pyproject.toml`) adds `vX.Y.Z` and `X.Y`. A deploy is `docker compose pull && docker compose up -d`; a rollback
   pins `TALER_TAG`.
 - Production and development use different bots: one token has one polling consumer.
 
