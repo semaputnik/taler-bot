@@ -12,6 +12,12 @@ user:
    recomputed by `normalize` with the context n8n had at the time, stored by the same service
    function a live parse uses (catalog, receipt, expense). A payment that has a receipt with
    `source_ref = n8n:<id>` is skipped, so a rerun adds only the new rows.
+3. the photos, when the export directory has a `photos/` folder (the Drive folder `receipts`
+   downloaded by hand): a file `receipt_<date>_<message id>.<ext>` belongs to the payment whose
+   `telegramMessageId` is that id (the date in the name is ignored). Its bytes go through
+   `PhotoStorage` under the live layout (`services.receipt.photo_path`), together with the new
+   receipt; a skipped payment never touches the storage. A file that matches no payment, has an
+   unknown extension or repeats a message id is reported and skipped.
 
 This is a second composition root (like `bot/app.py`): it wires the Unit of Work itself and
 never touches the bot, Redis or the LLM. At the end it prints the counts and every field where
@@ -41,12 +47,16 @@ from src.domain.enums import ProductCategory, ReceiptStatus
 from src.domain.normalize import normalize
 from src.domain.receipt import Photo, Receipt
 from src.exception import AppException, UserNotFound
-from src.services.receipt import save_with_catalog
+from src.integration.storage import LocalPhotoStorage, PhotoStorage
+from src.services.receipt import photo_path, save_with_catalog
+from src.services.results import NewPhoto
 
 logger = logging.getLogger(__name__)
 
 PAYMENTS_FILE = "receipt_payments.json"
 PRODUCTS_FILE = "store_products.json"
+PHOTOS_DIR = "photos"
+_MIME_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png"}
 
 
 class ImportAborted(AppException):
@@ -63,6 +73,8 @@ class ImportReport:
     receipts_skipped: int = 0
     expenses_added: int = 0
     expenses_skipped: int = 0
+    photos_stored: int = 0
+    unmatched_files: list[str] = field(default_factory=list)
     differences: list[str] = field(default_factory=list)
 
     def lines(self) -> list[str]:
@@ -71,7 +83,11 @@ class ImportReport:
             f"products: {self.products_added} added, {self.products_skipped} skipped",
             f"receipts: {self.receipts_added} added, {self.receipts_skipped} skipped",
             f"expenses: {self.expenses_added} added, {self.expenses_skipped} skipped",
+            f"photos: {self.photos_stored} stored",
         ]
+        if self.unmatched_files:
+            counts.append(f"{len(self.unmatched_files)} photo file(s) not imported:")
+            counts += [f"  {line}" for line in self.unmatched_files]
         if not self.differences:
             return [*counts, "no differences from the n8n columns"]
         return [*counts, f"{len(self.differences)} difference(s) from the n8n columns:"] + [
@@ -106,6 +122,32 @@ def _utc_text(moment: datetime) -> str:
 
 def _money(value: object) -> Decimal:
     return Decimal(str(value)).quantize(Decimal("0.01"))
+
+
+# --- the photo files ---------------------------------------------------------------------
+
+
+def _scan_photos(export_dir: Path, report: ImportReport) -> dict[int, Path]:
+    """The files of `photos/` by the message id at the end of their name (`..._<id>.<ext>`)."""
+    folder = export_dir / PHOTOS_DIR
+    if not folder.is_dir():
+        return {}
+    found: dict[int, Path] = {}
+    for path in sorted(folder.iterdir()):
+        if not path.is_file() or path.name.startswith("."):
+            continue
+        message_id = path.stem.rsplit("_", 1)[-1]
+        if path.suffix.lower() not in _MIME_TYPES:
+            report.unmatched_files.append(f"{path.name}: unknown file type")
+        elif not message_id.isdigit():
+            report.unmatched_files.append(f"{path.name}: no message id in the name")
+        elif int(message_id) in found:
+            report.unmatched_files.append(
+                f"{path.name}: same message id as {found[int(message_id)].name}"
+            )
+        else:
+            found[int(message_id)] = path
+    return found
 
 
 # --- the catalog -------------------------------------------------------------------------
@@ -205,6 +247,8 @@ async def _import_payment(
     payment: dict[str, Any],
     context: _Context,
     report: ImportReport,
+    photos: dict[int, Path],
+    storage: PhotoStorage,
 ) -> None:
     ref = f"n8n:{payment['id']}"
     existing = await uow.receipts.find_by_source_ref(user_id, ref)
@@ -219,12 +263,26 @@ async def _import_payment(
     received_at = _moment(payment.get("receivedAt") or payment.get("createdAt"))
     if received_at is None:
         raise ImportAborted("the payment has no receivedAt")
+    message_id = payment.get("telegramMessageId")
     photo = Photo(
         received_at=received_at,
-        telegram_message_id=payment.get("telegramMessageId"),
+        telegram_message_id=message_id,
         drive_file_id=payment.get("driveFileId"),
         drive_url=payment.get("driveUrl"),
     )
+    source = photos.pop(int(message_id), None) if message_id is not None else None
+    if source is not None:
+        data = await asyncio.to_thread(source.read_bytes)
+        mime_type = _MIME_TYPES[source.suffix.lower()]
+        # Stored before the commit: a failed commit leaves a file that the rerun overwrites.
+        photo.path = photo_path(
+            NewPhoto(received_at=received_at, telegram_message_id=message_id, mime_type=mime_type),
+            context.timezone,
+        )
+        photo.mime_type = mime_type
+        photo.size_bytes = len(data)
+        await storage.save(photo.path, data)
+        report.photos_stored += 1
     receipt = Receipt.start(user_id, photo)
     receipt.source_ref = ref
     status = payment.get("status")
@@ -269,13 +327,14 @@ async def _import_payment(
 
 
 async def run_import(
-    export_dir: Path, user_id: int, uow_factory: UnitOfWorkFactory
+    export_dir: Path, user_id: int, uow_factory: UnitOfWorkFactory, storage: PhotoStorage
 ) -> ImportReport:
     """Import the export for `user_id`. `UserNotFound` before any write for an unknown user;
     `ImportAborted` (naming the payment) when a payment fails, the earlier ones stay."""
     payments = sorted(_read_rows(export_dir, PAYMENTS_FILE), key=lambda row: int(row["id"]))
     products = sorted(_read_rows(export_dir, PRODUCTS_FILE), key=lambda row: int(row["id"]))
     report = ImportReport()
+    photos = await asyncio.to_thread(_scan_photos, export_dir, report)
 
     async with uow_factory() as uow:
         user = await uow.users.get(user_id)
@@ -306,18 +365,28 @@ async def run_import(
     for payment in payments:
         try:
             async with uow_factory() as uow:
-                await _import_payment(uow, user_id, payment, context, report)
+                await _import_payment(uow, user_id, payment, context, report, photos, storage)
         except Exception as error:
             raise ImportAborted(
                 f"payment {payment.get('id')}: {type(error).__name__}: {error}"
             ) from error
+    # What is left was not claimed by a new payment: no payment (a row deleted in n8n) or one
+    # imported by an earlier run, whose file was stored then.
+    claimed = {
+        int(p["telegramMessageId"]) for p in payments if p.get("telegramMessageId") is not None
+    }
+    for message_id, path in sorted(photos.items()):
+        reason = "payment already imported" if message_id in claimed else "no payment"
+        report.unmatched_files.append(f"{path.name}: {reason}")
     return report
 
 
-async def import_and_print(export_dir: Path, user_id: int, uow_factory: UnitOfWorkFactory) -> int:
+async def import_and_print(
+    export_dir: Path, user_id: int, uow_factory: UnitOfWorkFactory, storage: PhotoStorage
+) -> int:
     """Run the import and print the report; the process exit code."""
     try:
-        report = await run_import(export_dir, user_id, uow_factory)
+        report = await run_import(export_dir, user_id, uow_factory, storage)
     except UserNotFound:
         print(f"error: no user {user_id}: nothing was written", file=sys.stderr)
         return 1
@@ -334,7 +403,10 @@ async def _main(export_dir: Path, user_id: int, settings: Settings) -> int:
     session_factory = create_sessionmaker(engine)
     try:
         return await import_and_print(
-            export_dir, user_id, lambda: SqlAlchemyUnitOfWork(session_factory)
+            export_dir,
+            user_id,
+            lambda: SqlAlchemyUnitOfWork(session_factory),
+            LocalPhotoStorage(settings.storage.receipts_dir),
         )
     finally:
         await engine.dispose()

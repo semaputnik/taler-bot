@@ -138,21 +138,31 @@ already exist (send `/start` to the bot first); the import never creates or allo
 
    The other n8n tables (`product_prices`, `receipt_issues`, `telegram_whitelist`) may be
    present; they are ignored.
+
+   To bring the photos too, download the Google Drive folder `receipts` by hand and put its
+   files into `import/photos/`, next to the JSON files (no sub-folders; the files keep their
+   names, `receipt_<date>_<message id>.<ext>`). Each file is matched to its payment by the
+   message id at the end of the name; the date in the name is ignored. Without `photos/` the
+   import works as before.
 2. Run it in the bot container, with the Telegram id of the user:
 
    ```bash
    docker compose run --rm -v ./import:/import bot python -m src.tools.import_n8n /import --user-id 41512748
    ```
 
-3. Read the summary: counts of added and skipped payees, products, receipts and expenses, then
+3. Read the summary: counts of added and skipped payees, products, receipts and expenses, the
+   number of photos stored (the bot container already mounts the receipts volume, so the
+   command is the same), the photo files that were not imported (no payment has their message
+   id, an unknown file type, or the payment was imported by an earlier run), then
    one line for every field where the port's receipt key, purchase time, payee key, total or
    status differs from the n8n columns (a column n8n left empty is not compared).
 
 Rerunning is safe: a payment or product that was imported is skipped, so after a fresh export
 only the new rows are added. The import stops at the first failing payment and names it; the
 payments before it stay committed, so fix the cause and run it again. An unknown user id exits
-with an error before anything is written. Photos stay in Google Drive (id and link are kept);
-the Photo button of an imported receipt shows the "photo could not be loaded" notice.
+with an error before anything is written. A photo file is stored together with its new receipt only, so a rerun
+never stores a photo twice. The Drive id and link are always kept; a receipt without a file in
+`photos/` has no stored photo, and its Photo button shows the "photo could not be loaded" notice.
 
 ## Building the image locally
 

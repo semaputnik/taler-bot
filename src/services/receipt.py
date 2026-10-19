@@ -82,7 +82,7 @@ class ReceiptService:
                 raise UserNotFound(user_id)
             timezone = user.timezone
 
-        path = _photo_path(photo, timezone)
+        path = photo_path(photo, timezone)
         await self._storage.save(path, data)
 
         try:
@@ -414,7 +414,7 @@ def _stamped(parse: Parse, output: ParserOutput) -> Parse:
     )
 
 
-def _photo_path(photo: NewPhoto, timezone: str) -> str:
+def photo_path(photo: NewPhoto, timezone: str) -> str:
     """`yyyy/mm/receipt_<yyyy-MM-dd_HH-mm-ss>_<message_id>.<ext>` in the user's time zone."""
     local = photo.received_at.astimezone(ZoneInfo(timezone))
     extension = _EXTENSIONS.get(photo.mime_type or "", "jpg")

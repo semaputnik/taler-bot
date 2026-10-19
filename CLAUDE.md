@@ -114,7 +114,7 @@ src/
     llm/                   # ReceiptParser (Protocol), ParserOutput, LLMError, OpenAIReceiptParser (pydantic-ai), RawParse, prompt.md (system prompt)
     storage/               # PhotoStorage (Protocol), LocalPhotoStorage, StorageError
   tools/
-    import_n8n.py          # one-off import of the n8n history (`python -m src.tools.import_n8n <export dir> --user-id <id>`): catalog first, then each payment in its own Unit of Work through `services.receipt.save_with_catalog`; rows carry `source_ref = n8n:<id>`; prints counts and where the port differs from the n8n columns
+    import_n8n.py          # one-off import of the n8n history (`python -m src.tools.import_n8n <export dir> --user-id <id>`): catalog first, then each payment in its own Unit of Work through `services.receipt.save_with_catalog`; rows carry `source_ref = n8n:<id>`; files of an optional `photos/` folder (the downloaded Drive folder) are matched by the message id in their name and stored through `PhotoStorage` under the live layout (`services.receipt.photo_path`); prints counts and where the port differs from the n8n columns
   domain/                  # the model: aggregates with behaviour, value objects
     enums.py
     receipt.py             # Receipt aggregate (+ Photo, Item, Issue, Header inside it)
@@ -538,8 +538,8 @@ retried and must not break the pipeline.
 ### n8n data tables (source for the import)
 
 The import is built: `python -m src.tools.import_n8n <export dir> --user-id <id>` reads a JSON export of
-`receipt_payments` and `store_products` (runbook: [docs/deploy.md](docs/deploy.md)). Receipt photos stay
-in Google Drive by id and link (`receipt_photos.drive_file_id`, `drive_url`).
+`receipt_payments` and `store_products` (runbook: [docs/deploy.md](docs/deploy.md)). Receipt photos keep
+their Google Drive id and link (`receipt_photos.drive_file_id`, `drive_url`); the files of a downloaded Drive folder (`photos/`) are stored too.
 
 | table | purpose | taler-bot table |
 |---|---|---|

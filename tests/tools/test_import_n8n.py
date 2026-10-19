@@ -60,7 +60,7 @@ async def imported_ids(make_uow: MakeUow) -> dict[int, int]:
 async def test_one_run_writes_catalog_receipts_and_expenses(
     make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
 ):
-    report = await run_import(export, user, make_uow)
+    report = await run_import(export, user, make_uow, tmp_storage)
 
     assert (report.payees_added, report.payees_skipped) == (2, 0)
     assert (report.products_added, report.products_skipped) == (10, 0)
@@ -97,17 +97,21 @@ async def test_one_run_writes_catalog_receipts_and_expenses(
     assert [r.receipt_id for r in page.rows if r.status == "duplicate"] == [ids[6]]
 
 
-async def test_report_is_empty_on_the_fixture(make_uow: MakeUow, export: Path, user: int):
-    report = await run_import(export, user, make_uow)
+async def test_report_is_empty_on_the_fixture(
+    make_uow: MakeUow, export: Path, user: int, tmp_storage: LocalPhotoStorage
+):
+    report = await run_import(export, user, make_uow, tmp_storage)
     assert report.differences == []
     assert report.lines()[-1] == "no differences from the n8n columns"
 
 
-async def test_a_second_run_adds_nothing(make_uow: MakeUow, export: Path, user: int):
-    await run_import(export, user, make_uow)
+async def test_a_second_run_adds_nothing(
+    make_uow: MakeUow, export: Path, user: int, tmp_storage: LocalPhotoStorage
+):
+    await run_import(export, user, make_uow, tmp_storage)
     before = await imported_ids(make_uow)
 
-    report = await run_import(export, user, make_uow)
+    report = await run_import(export, user, make_uow, tmp_storage)
 
     assert (report.payees_added, report.payees_skipped) == (0, 2)
     assert (report.products_added, report.products_skipped) == (0, 10)
@@ -117,15 +121,17 @@ async def test_a_second_run_adds_nothing(make_uow: MakeUow, export: Path, user: 
     assert await imported_ids(make_uow) == before
 
 
-async def test_a_rerun_adds_only_the_new_payment(make_uow: MakeUow, export: Path, user: int):
+async def test_a_rerun_adds_only_the_new_payment(
+    make_uow: MakeUow, export: Path, user: int, tmp_storage: LocalPhotoStorage
+):
     full = (export / "receipt_payments.json").read_text()
     rows = json.loads(full)
     (export / "receipt_payments.json").write_text(json.dumps([r for r in rows if r["id"] != 4]))
-    first = await run_import(export, user, make_uow)
+    first = await run_import(export, user, make_uow, tmp_storage)
     assert first.receipts_added == 2
 
     (export / "receipt_payments.json").write_text(full)
-    second = await run_import(export, user, make_uow)
+    second = await run_import(export, user, make_uow, tmp_storage)
 
     assert (second.receipts_added, second.receipts_skipped) == (1, 2)
     assert (second.expenses_added, second.expenses_skipped) == (1, 1)
@@ -135,7 +141,7 @@ async def test_a_rerun_adds_only_the_new_payment(make_uow: MakeUow, export: Path
 async def test_the_card_opens_and_there_is_no_stored_photo(
     make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
 ):
-    await run_import(export, user, make_uow)
+    await run_import(export, user, make_uow, tmp_storage)
     receipt_id = (await imported_ids(make_uow))[3]
     service = receipt_service(make_uow, tmp_storage)
 
@@ -153,7 +159,7 @@ async def test_the_card_opens_and_there_is_no_stored_photo(
 async def test_a_receipt_with_the_same_key_after_the_import_is_a_duplicate(
     make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
 ):
-    await run_import(export, user, make_uow)
+    await run_import(export, user, make_uow, tmp_storage)
     original = (await imported_ids(make_uow))[3]
     parser = StubReceiptParser(output_of(fixture("03")["raw"]))
     service = receipt_service(make_uow, tmp_storage, parser)
@@ -182,11 +188,17 @@ async def test_a_receipt_with_the_same_key_after_the_import_is_a_duplicate(
     ],
 )
 async def test_the_report_names_the_field_that_differs(
-    make_uow: MakeUow, export: Path, user: int, column: str, value, expected: str
+    make_uow: MakeUow,
+    export: Path,
+    user: int,
+    column: str,
+    value,
+    expected: str,
+    tmp_storage: LocalPhotoStorage,
 ):
     edit_payment(export, 3, **{column: value})
 
-    report = await run_import(export, user, make_uow)
+    report = await run_import(export, user, make_uow, tmp_storage)
 
     [line] = [d for d in report.differences if d.startswith("payment 3 ")]
     assert line.startswith(expected)
@@ -194,9 +206,12 @@ async def test_the_report_names_the_field_that_differs(
 
 
 async def test_an_unknown_user_writes_nothing(
-    make_uow: MakeUow, export: Path, capsys: pytest.CaptureFixture[str]
+    make_uow: MakeUow,
+    export: Path,
+    capsys: pytest.CaptureFixture[str],
+    tmp_storage: LocalPhotoStorage,
 ):
-    assert await import_and_print(export, 99, make_uow) == 1
+    assert await import_and_print(export, 99, make_uow, tmp_storage) == 1
 
     assert "no user 99" in capsys.readouterr().err
     async with make_uow() as uow:
@@ -206,14 +221,18 @@ async def test_an_unknown_user_writes_nothing(
 
 
 async def test_a_failing_payment_stops_the_run_and_a_rerun_continues(
-    make_uow: MakeUow, export: Path, user: int, capsys: pytest.CaptureFixture[str]
+    make_uow: MakeUow,
+    export: Path,
+    user: int,
+    capsys: pytest.CaptureFixture[str],
+    tmp_storage: LocalPhotoStorage,
 ):
     edit_payment(export, 4, rawJson="not json")
 
     with pytest.raises(ImportAborted, match="payment 4"):
-        await run_import(export, user, make_uow)
+        await run_import(export, user, make_uow, tmp_storage)
     assert set(await imported_ids(make_uow)) == {3}  # the payment before it is committed
-    assert await import_and_print(export, user, make_uow) == 1
+    assert await import_and_print(export, user, make_uow, tmp_storage) == 1
     assert "payment 4" in capsys.readouterr().err
 
     edit_payment(
@@ -225,7 +244,7 @@ async def test_a_failing_payment_stops_the_run_and_a_rerun_continues(
             if row["id"] == 4
         ),
     )
-    report = await run_import(export, user, make_uow)
+    report = await run_import(export, user, make_uow, tmp_storage)
     assert (report.receipts_added, report.receipts_skipped) == (2, 1)
     assert set(await imported_ids(make_uow)) == {3, 4, 6}
 
@@ -245,7 +264,7 @@ async def test_a_payment_without_raw_json_becomes_a_failed_receipt(
         total=None,
     )
 
-    report = await run_import(export, user, make_uow)
+    report = await run_import(export, user, make_uow, tmp_storage)
 
     assert report.differences == []  # an n8n column left empty is not compared
     card = await receipt_service(make_uow, tmp_storage).card(
@@ -254,7 +273,116 @@ async def test_a_payment_without_raw_json_becomes_a_failed_receipt(
     assert (card.status, card.error_message, card.expense_id) == ("failed", "LLM timeout", None)
 
 
+PAYMENT_3_PATH = "2026/10/receipt_2026-10-12_18-28-34_101.jpg"
+
+
+def put_photo(export: Path, name: str, data: bytes = b"\xff\xd8fake jpeg") -> bytes:
+    folder = export / "photos"
+    folder.mkdir(exist_ok=True)
+    (folder / name).write_bytes(data)
+    return data
+
+
+def stored_files(storage_root: Path) -> dict[str, int]:
+    """Relative path -> mtime of every file under the storage root."""
+    return {
+        str(p.relative_to(storage_root)): p.stat().st_mtime_ns
+        for p in storage_root.rglob("*")
+        if p.is_file()
+    }
+
+
+async def test_a_photo_file_is_stored_under_the_live_layout(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
+):
+    data = put_photo(export, "receipt_2026-10-12_18-28-34_101.jpg")
+
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert report.photos_stored == 1 and report.unmatched_files == []
+    assert report.lines()[4] == "photos: 1 stored"
+    ids = await imported_ids(make_uow)
+    service = receipt_service(make_uow, tmp_storage)
+    assert await service.photo_bytes(user, ids[3]) == data
+    async with make_uow() as uow:
+        photo = (await uow.receipts.get(ids[3])).photo  # type: ignore[union-attr]
+    assert photo.path == PAYMENT_3_PATH
+    assert (photo.mime_type, photo.size_bytes) == ("image/jpeg", len(data))
+    assert (photo.drive_file_id, photo.drive_url) == (
+        "drv3",
+        "https://drive.google.com/file/d/drv3/view",
+    )
+    assert await tmp_storage.read(PAYMENT_3_PATH) == data
+    with pytest.raises(StorageError):
+        await service.photo_bytes(user, ids[4])
+    async with make_uow() as uow:
+        assert (await uow.receipts.get(ids[4])).photo.path is None  # type: ignore[union-attr]
+
+
+async def test_a_png_file_gets_its_mime_type_and_extension(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int
+):
+    put_photo(export, "receipt_2000-01-01_00-00-00_102.PNG", b"png bytes")
+
+    await run_import(export, user, make_uow, tmp_storage)
+
+    ids = await imported_ids(make_uow)
+    async with make_uow() as uow:
+        photo = (await uow.receipts.get(ids[4])).photo  # type: ignore[union-attr]
+    assert photo.mime_type == "image/png"
+    assert photo.path is not None and photo.path.endswith("_102.png")
+    assert await tmp_storage.read(photo.path) == b"png bytes"
+
+
+async def test_without_a_photos_folder_nothing_is_stored(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int, tmp_path: Path
+):
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert report.photos_stored == 0 and report.unmatched_files == []
+    assert stored_files(tmp_path / "receipts") == {}
+
+
+async def test_unmatched_files_are_reported_and_the_run_succeeds(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int, tmp_path: Path
+):
+    put_photo(export, "receipt_2026-10-12_18-28-34_101.jpg")
+    put_photo(export, "receipt_2026-10-01_10-00-00_999.jpg")
+    put_photo(export, "receipt_2026-10-01_10-00-00_998.gif")
+    put_photo(export, "notes.jpg")
+
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert report.photos_stored == 1
+    assert sorted(report.unmatched_files) == [
+        "notes.jpg: no message id in the name",
+        "receipt_2026-10-01_10-00-00_998.gif: unknown file type",
+        "receipt_2026-10-01_10-00-00_999.jpg: no payment",
+    ]
+    assert report.receipts_added == 3
+    assert set(stored_files(tmp_path / "receipts")) == {PAYMENT_3_PATH}
+    assert "3 photo file(s) not imported:" in report.lines()
+
+
+async def test_a_rerun_stores_no_photo_again(
+    make_uow: MakeUow, tmp_storage: LocalPhotoStorage, export: Path, user: int, tmp_path: Path
+):
+    put_photo(export, "receipt_2026-10-12_18-28-34_101.jpg")
+    await run_import(export, user, make_uow, tmp_storage)
+    before = stored_files(tmp_path / "receipts")
+
+    report = await run_import(export, user, make_uow, tmp_storage)
+
+    assert report.photos_stored == 0
+    assert report.receipts_skipped == 3
+    assert stored_files(tmp_path / "receipts") == before
+    assert report.unmatched_files == [
+        "receipt_2026-10-12_18-28-34_101.jpg: payment already imported"
+    ]
+
+
 def test_report_lines_list_the_counts_first():
     report = ImportReport(receipts_added=3, differences=["payment 1 total: n8n 1.00, port 2.00"])
     assert report.lines()[2] == "receipts: 3 added, 0 skipped"
+    assert report.lines()[4] == "photos: 0 stored"
     assert report.lines()[-1] == "  payment 1 total: n8n 1.00, port 2.00"
