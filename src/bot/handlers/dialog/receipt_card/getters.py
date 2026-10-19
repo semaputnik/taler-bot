@@ -19,6 +19,8 @@ from src.bot.handlers.dialog.receipt_card.common import (
 from src.bot.handlers.dialog.receipt_card.model import (
     CategoriesPreview,
     CategoryChoice,
+    FieldChoice,
+    FieldsPreview,
     InputPreview,
     IssuePreview,
     ItemChoice,
@@ -29,7 +31,7 @@ from src.bot.handlers.dialog.receipt_card.model import (
 )
 from src.bot.handlers.dialog.receipt_card.values import ITEM_FIELD_KINDS
 from src.services.container import Services
-from src.services.results import CurrentUser, IssueCard, ItemRow, ReceiptCard
+from src.services.results import CurrentUser, HeaderField, IssueCard, ItemRow, ReceiptCard
 
 _STATUS_KEYS = {
     "pending": "card-status-pending",
@@ -53,6 +55,7 @@ async def main_getter(
         has_items=card.status == "parsed" and card.item_count > 0 and not card.deleted,
         review_count=card.review_count if card.status == "parsed" and not card.deleted else 0,
         can_reparse=card.can_reparse,
+        can_edit=card.can_edit,
         has_expense=card.expense_id is not None and not card.deleted,
     ).to_data()
 
@@ -437,3 +440,70 @@ def _with_error(text: str, card: ReceiptCard, i18n: TranslatorRunner) -> str:
     if not card.error_message:
         return text
     return f"{text}\n\n{i18n.get('card-error', reason=escape(card.error_message))}"
+
+
+def _header_label(field: str, i18n: TranslatorRunner) -> str:
+    return i18n.get(f"field-{field.replace('_', '-')}")
+
+
+async def edit_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The header fields of the receipt, from the card the service already loads."""
+    card = await services.receipts.card(
+        user.id, dialog_manager.dialog_data[DialogDataKeys.RECEIPT_ID]
+    )
+    if not card.can_edit:
+        return FieldsPreview(text=i18n.get("edit-not-possible"), fields=[]).to_data()
+    return FieldsPreview(
+        text=i18n.get("edit-title"),
+        fields=[
+            FieldChoice(id=f.field, text=_header_label(f.field, i18n)) for f in card.header_fields
+        ],
+    ).to_data()
+
+
+async def edit_input_getter(
+    dialog_manager: DialogManager,
+    services: Services,
+    user: CurrentUser,
+    i18n: TranslatorRunner,
+    **_,
+) -> dict:
+    """The prompt for the header field being edited: label, hint, current value, error line."""
+    data = dialog_manager.dialog_data
+    card = await services.receipts.card(user.id, data[DialogDataKeys.RECEIPT_ID])
+    field = next(
+        (f for f in card.header_fields if f.field == data.get(DialogDataKeys.HEADER_FIELD)), None
+    )
+    if field is None:
+        return InputPreview(text=i18n.get("edit-not-possible")).to_data()
+    hint = i18n.get(f"input-hint-{field.input_kind}")
+    lines = [
+        i18n.get(
+            "item-input-prompt",
+            field=_header_label(field.field, i18n),
+            hint=hint,
+            value=_header_value(field, card.currency, i18n, ZoneInfo(user.timezone)),
+        )
+    ]
+    if data.get(DialogDataKeys.INPUT_ERROR):
+        lines += ["", i18n.get("issue-input-error", hint=hint)]
+    return InputPreview(text="\n".join(lines)).to_data()
+
+
+def _header_value(
+    field: HeaderField, currency: str | None, i18n: TranslatorRunner, tz: ZoneInfo
+) -> str:
+    value = field.current_value
+    if value is None:
+        return i18n.get("item-not-specified")
+    if isinstance(value, datetime):
+        return value.astimezone(tz).strftime(render.DATE_FORMAT)
+    if isinstance(value, Decimal):
+        return render.money(value, i18n, currency)
+    return escape(value)

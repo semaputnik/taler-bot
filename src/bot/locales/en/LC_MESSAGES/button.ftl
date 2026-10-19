@@ -9,6 +9,7 @@ button-correct = ✅ Correct
 button-enter-value = ✏️ Enter value
 button-rename = ✏️ Rename
 button-skip = ⏭ Skip
+button-edit = ✏️ Edit
 button-reparse = 🔄 Re-parse
 button-reparse-confirm = 🔄 Yes, read again
 button-close = ✖ Close

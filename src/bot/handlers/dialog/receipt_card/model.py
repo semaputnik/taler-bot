@@ -11,6 +11,7 @@ class MainPreview(BaseModel):
     has_items: bool
     review_count: int
     can_reparse: bool
+    can_edit: bool
     has_expense: bool
 
     def to_data(self) -> dict:
@@ -20,6 +21,7 @@ class MainPreview(BaseModel):
             PreviewDataKeys.HAS_ITEMS: self.has_items,
             PreviewDataKeys.REVIEW_COUNT: self.review_count,
             PreviewDataKeys.CAN_REPARSE: self.can_reparse,
+            PreviewDataKeys.CAN_EDIT: self.can_edit,
             PreviewDataKeys.HAS_EXPENSE: self.has_expense,
         }
 
@@ -104,3 +106,20 @@ class InputPreview(BaseModel):
 
     def to_data(self) -> dict:
         return {PreviewDataKeys.TEXT: self.text}
+
+
+class FieldChoice(BaseModel):
+    """One button of the header field list: `id` is the field's name, `text` its label."""
+
+    id: str
+    text: str
+
+
+class FieldsPreview(BaseModel):
+    """What the `edit` window shows: the title and one choice per header field."""
+
+    text: str
+    fields: list[FieldChoice]
+
+    def to_data(self) -> dict:
+        return {PreviewDataKeys.TEXT: self.text, PreviewDataKeys.FIELDS: self.fields}

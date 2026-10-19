@@ -14,5 +14,7 @@ class ReceiptCardSG(StatesGroup):
     issue_input = State()
     issue_rename = State()
     review_done = State()
+    edit = State()
+    edit_input = State()
     delete_confirm = State()
     reparse_confirm = State()
