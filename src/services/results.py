@@ -77,6 +77,18 @@ class NewPhoto(BaseModel):
     size_bytes: int | None = None
 
 
+class HeaderField(BaseModel):
+    """One editable header field of a receipt, for the card's Edit screen: the field's name,
+    the input kind to ask for (`datetime`, `text`, `currency`, `money` or `last4`) and the value
+    the receipt holds now (a `Decimal`, an aware `datetime` or a `str`; None when empty)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    field: str
+    input_kind: str
+    current_value: Decimal | datetime | str | None
+
+
 class ReceiptCard(BaseModel):
     """What the summary message of a receipt shows."""
 
@@ -102,6 +114,10 @@ class ReceiptCard(BaseModel):
     payment_source_name: str | None  # the expense's card or cash, by its name
     review_count: int  # open issues of severity high or medium: what the review walk visits
     can_reparse: bool  # the photo can be read again: parsed, failed or not_receipt, not deleted
+    can_edit: bool = False  # the header can be edited: parsed and not deleted
+    header_fields: list[
+        HeaderField
+    ] = []  # the editable header fields, in the order of the Edit screen
     error_message: str | None  # why the last read failed; kept on a restored receipt too
     duplicate_of: ReceiptCard | None = None  # set by `ReceiptService.card` for a duplicate
 

@@ -10,6 +10,8 @@ from src.bot.handlers.dialog.common import TransferKeys
 from src.bot.handlers.dialog.receipt_card import click_event
 from src.bot.handlers.dialog.receipt_card.common import DialogDataKeys, PreviewDataKeys
 from src.bot.handlers.dialog.receipt_card.getters import (
+    edit_getter,
+    edit_input_getter,
     expense_categories_getter,
     issue_getter,
     issue_input_getter,
@@ -215,6 +217,32 @@ def create_receipt_card_dialog() -> Dialog:
                 Button(I18nText("button-back"), id="back", on_click=click_event.back_to_main),
             ),
             state=ReceiptCardSG.delete_confirm,
+            parse_mode=ParseMode.HTML,
+        ),
+        Window(
+            Format(f"{{{PreviewDataKeys.TEXT}}}"),
+            Group(
+                Select(
+                    Format("{item.text}"),
+                    id="header_field",
+                    item_id_getter=lambda choice: choice.id,
+                    items=PreviewDataKeys.FIELDS,
+                    on_click=click_event.select_field,
+                ),
+                width=2,
+            ),
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_main),
+            getter=edit_getter,
+            state=ReceiptCardSG.edit,
+            parse_mode=ParseMode.HTML,
+        ),
+        Window(
+            Format(f"{{{PreviewDataKeys.TEXT}}}"),
+            MessageInput(click_event.on_header_value, content_types=ContentType.ANY),
+            Button(I18nText("button-clear"), id="clear", on_click=click_event.clear_header_field),
+            Button(I18nText("button-back"), id="back", on_click=click_event.back_to_edit),
+            getter=edit_input_getter,
+            state=ReceiptCardSG.edit_input,
             parse_mode=ParseMode.HTML,
         ),
         Window(

@@ -17,6 +17,7 @@ class CardWindow(StrEnum):
     TAGS = "tags"
     PHOTO = "photo"
     DELETE_CONFIRM = "delete_confirm"
+    EDIT = "edit"
     REPARSE = "reparse"  # not a window: reads the receipt again, then sends a fresh card
     CLOSE = "close"  # not a window: hides the card's buttons
     DISMISS = "dismiss"  # not a window: deletes the card (one the user opened from a list)
@@ -34,13 +35,14 @@ def receipt_keyboard(
     item_count: int = 0,
     review_count: int = 0,
     can_reparse: bool = False,
+    can_edit: bool = False,
     can_categorise: bool = False,
     dismissible: bool = False,
 ) -> InlineKeyboardMarkup:
     """Buttons under the parse reply: Items (only when the receipt has items), Review (only when
     issues wait for the user), Category and Tags (only when the receipt has an expense), Photo,
     Delete;
-    Re-parse on its own row (only when the receipt can be read again), then Close, which deletes
+    Edit and Re-parse on one row (each only when it applies), then Close, which deletes
     the card when the user asked for it (`dismissible`) and only hides the buttons otherwise."""
     reading = [CardWindow.ITEMS] if item_count > 0 else []
     if review_count > 0:
@@ -55,11 +57,16 @@ def receipt_keyboard(
         )
 
     # Two buttons per row (four in one row are unreadable on a phone). Items and Review share
-    # a row, Category and Tags always share one, Photo and Delete share one; Re-parse and Close
-    # each have their own row.
+    # a row, Category and Tags always share one, Photo and Delete share one; Edit and Re-parse
+    # share one (either alone when only it applies); Close has its own row.
     rows = [[button(window) for window in group] for group in (reading, expense, rest) if group]
-    if can_reparse:
-        rows.append([button(CardWindow.REPARSE)])
+    last = [
+        button(window)
+        for window, shown in ((CardWindow.EDIT, can_edit), (CardWindow.REPARSE, can_reparse))
+        if shown
+    ]
+    if last:
+        rows.append(last)
     rows.append([button(CardWindow.DISMISS if dismissible else CardWindow.CLOSE)])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -71,6 +78,7 @@ _BUTTON_KEYS = {
     CardWindow.REVIEW: "button-review",
     CardWindow.CATEGORY: "button-category",
     CardWindow.TAGS: "button-tags",
+    CardWindow.EDIT: "button-edit",
     CardWindow.REPARSE: "button-reparse",
     CardWindow.CLOSE: "button-close",
     CardWindow.DISMISS: "button-close",

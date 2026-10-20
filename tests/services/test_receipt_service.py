@@ -179,6 +179,67 @@ async def test_edit_header_changes_the_card(service, make_uow):
     assert str(card.total) == "9.99"
 
 
+async def test_edit_header_answers_the_awaiting_issues_on_its_field(service, make_uow):
+    receipt = await parsed_receipt(
+        make_uow,
+        parse(
+            MILK,
+            issues=[
+                ParsedIssue(severity=IssueSeverity.HIGH, field="totals.total", message="a"),
+                ParsedIssue(severity=IssueSeverity.MEDIUM, field="totals.total", message="b"),
+                ParsedIssue(severity=IssueSeverity.MEDIUM, field="payment.method", message="c"),
+            ],
+        ),
+    )
+
+    await service.edit_header(1, receipt.id, "total", "9.99")
+
+    stored = await load(make_uow, receipt.id)
+    assert [e.field for e in stored.edits] == ["total"]
+    assert stored.edits[0].issue_id == stored.issues[0].id
+    assert [i.resolution for i in stored.issues] == [
+        IssueResolution.CORRECTED,
+        IssueResolution.CORRECTED,
+        IssueResolution.OPEN,
+    ]
+
+
+async def test_card_lists_the_editable_header_fields_with_kind_and_value(service, make_uow):
+    receipt = await parsed_receipt(
+        make_uow, parse(MILK, BREAD, payment_method="card", card_brand="VISA", card_last4="1234")
+    )
+
+    card = await service.card(1, receipt.id)
+
+    assert card.can_edit
+    assert [(f.field, f.input_kind) for f in card.header_fields] == [
+        ("purchased_at", "datetime"),
+        ("receipt_number", "text"),
+        ("currency", "currency"),
+        ("subtotal", "money"),
+        ("discount_total", "money"),
+        ("tax_total", "money"),
+        ("total", "money"),
+        ("payment_method", "text"),
+        ("card_brand", "text"),
+        ("card_last4", "last4"),
+    ]
+    values = {f.field: f.current_value for f in card.header_fields}
+    assert values["card_last4"] == "1234"
+    assert values["total"] == Decimal("47.50")
+    assert values["currency"] == "EUR"
+
+
+async def test_a_deleted_receipt_cannot_be_edited(service, make_uow):
+    receipt = await parsed_receipt(make_uow, parse(MILK))
+    await service.soft_delete(1, receipt.id)
+
+    card = await service.card(1, receipt.id)
+
+    assert not card.can_edit
+    assert card.header_fields == []
+
+
 async def test_card_shows_store_name_payment_and_counts(service, make_uow):
     receipt = await parsed_receipt(
         make_uow, parse(MILK, BREAD, payment_method="card", card_brand="VISA", card_last4="1234")
@@ -482,11 +543,11 @@ async def test_review_lists_reviewable_issues_in_walk_order_with_what_can_be_don
 
 async def test_review_shows_the_current_value_with_edits_applied(service, make_uow):
     receipt = await mixed_receipt(make_uow)
-    await service.edit_header(1, receipt.id, "total", "50.00")
+    await service.edit_item(1, receipt.id, "mercadona::pan#1", "line_total", "3.00")
 
-    [total, *_] = await service.review(1, receipt.id)
+    line = next(c for c in await service.review(1, receipt.id) if c.item_name == "Pan")
 
-    assert total.current_value == Decimal("50.00")
+    assert line.current_value == Decimal("3.00")
 
 
 async def test_review_leaves_out_resolved_issues_but_keeps_skipped_ones(service, make_uow):

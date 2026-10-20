@@ -283,6 +283,35 @@ class Receipt:
         )
         self.resolve_issue(issue_id, IssueResolution.CORRECTED, at)
 
+    def edit_header_field(self, field: str, value: Any, at: datetime | None = None) -> None:
+        """Edit a header field; the edit answers every awaiting issue that points at it.
+
+        One edit is recorded, tied to the first such issue; the other issues on the same field
+        are resolved `corrected` by it. With no such issue it is a plain receipt edit.
+        Clearing (value None) is an edit too.
+        """
+        self._ensure_open()
+        awaiting = [
+            i
+            for i in self.issues
+            if i.resolution in _AWAITING_REVIEW and self._targets_header_field(i, field)
+        ]
+        if not awaiting:
+            self.record_edit(Edit(target=EditTarget.RECEIPT, field=field, value=value))
+            return
+        first, *rest = awaiting
+        self.correct_issue(first.id, value, at)
+        for issue in rest:
+            self.resolve_issue(issue.id, IssueResolution.CORRECTED, at)
+
+    def _targets_header_field(self, issue: Issue, field: str) -> bool:
+        correction = self.issue_correction(issue)
+        return (
+            correction is not None
+            and correction.target is EditTarget.RECEIPT
+            and correction.field == field
+        )
+
     # --- status transitions ------------------------------------------------------------
 
     def mark_parsing(self) -> None:

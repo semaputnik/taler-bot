@@ -22,6 +22,7 @@ _WINDOWS = {
     CardWindow.TAGS: ReceiptCardSG.tags,
     CardWindow.PHOTO: ReceiptCardSG.photo,
     CardWindow.DELETE_CONFIRM: ReceiptCardSG.delete_confirm,
+    CardWindow.EDIT: ReceiptCardSG.edit,
     CardWindow.REPARSE: ReceiptCardSG.reparse_confirm,
 }  # CardWindow.CLOSE and CardWindow.DISMISS are not windows
 
@@ -46,6 +47,9 @@ async def open_card(
         return
     if callback_data.window is CardWindow.REPARSE and not card.can_reparse:
         await query.answer(i18n.get("reparse-not-possible"), show_alert=True)
+        return
+    if callback_data.window is CardWindow.EDIT and not card.can_edit:
+        await query.answer(i18n.get("edit-not-possible"), show_alert=True)
         return
     if callback_data.window is CardWindow.CATEGORY and card.expense_id is None:
         await query.answer(i18n.get("category-not-possible"), show_alert=True)
