@@ -13,13 +13,14 @@ from enum import StrEnum
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.domain.catalog import KnownStore
 from src.domain.enums import IssueSeverity, IssueSource, ProductCategory
 from src.domain.parse import Parse, ParsedIssue, ParsedItem
 from src.domain.slug import slug, strip
 from src.exception import InvalidReceiptData
 
 # Bump whenever the prompt, the schema, the model or this module changes (n8n was 2026-10-15.1).
-PARSER_VERSION = "2026-10-19.1"  # product category `produce` renamed `fruit_and_vegetables`
+PARSER_VERSION = "2026-11-08.1"  # known stores and products in the prompt; English names
 
 TOLERANCE = Decimal("0.02")
 
@@ -167,6 +168,7 @@ def normalize(
     known_card_last4: Collection[str],
     parser_version: str,
     model: str | None,
+    known_stores: Collection[KnownStore] = (),
 ) -> Parse:
     """Turn the model's reading of a receipt into a `Parse`.
 
@@ -175,6 +177,9 @@ def normalize(
     `received_at` is the Telegram message time (aware); `known_product_keys` are the user's
     existing catalog keys and `known_card_last4` the card endings of their earlier parsed
     receipts. Money and quantities are `Decimal`; `purchased_at` is aware, in `timezone`.
+    `known_stores` is the catalog the model was shown; the reading's `store.known_name` and
+    `items[].known_name_raw` are trusted only when they name a listed store and a listed
+    product of the receipt's store; anything else gets the slug keys.
 
     Raises `InvalidReceiptData` when the reading cannot be normalized (a number out of range,
     a malformed structure), so a caller has one error to expect.
@@ -188,6 +193,7 @@ def normalize(
             known_card_last4=known_card_last4,
             parser_version=parser_version,
             model=model,
+            known_stores=known_stores,
         )
     except (ArithmeticError, LookupError, TypeError, ValueError, AttributeError) as error:
         raise InvalidReceiptData(f"cannot normalize the reading: {type(error).__name__}") from error
@@ -202,6 +208,7 @@ def _normalize(
     known_card_last4: Collection[str],
     parser_version: str,
     model: str | None,
+    known_stores: Collection[KnownStore],
 ) -> Parse:
     ai = raw
     raw_output = jsonable(dict(raw))
@@ -233,6 +240,12 @@ def _normalize(
     store = ai.get("store") or {}
     store_name = clean(store.get("name")) or clean(store.get("legal_name")) or "Unknown store"
     store_key = slug(LEGAL_SUFFIX.sub(" ", store_name)) or "unknown-store"
+    # The model may name a store it was shown; only a listed name counts, so a payee is never
+    # made up from it. The receipt's store then offers its products for the lines below.
+    named = next((s for s in known_stores if s.name == clean(store.get("known_name"))), None)
+    if named is not None:
+        store_key = named.payee_key
+    known_products = next((s.products for s in known_stores if s.payee_key == store_key), {})
 
     zone = ZoneInfo(timezone)
     if received_at.tzinfo is None:
@@ -335,8 +348,11 @@ def _normalize(
         if unit_price is None and line_total is not None and quantity:
             unit_price = round_to(line_total / quantity, "0.0001")
         # The printed line text comes from the store's POS and is stable across receipts; the LLM's
-        # normalized name is not.
-        product_key = f"{store_key}::{slug(name_raw) or slug(product_name)}"
+        # normalized name is not. A line the model matched to a listed product of this store takes
+        # that product's key, so a small misreading does not make a new product.
+        product_key = known_products.get(clean(it.get("known_name_raw")) or "") or (
+            f"{store_key}::{slug(name_raw) or slug(product_name)}"
+        )
         printed_raw = clean(it.get("name_raw"))
         if printed_raw:
             key_by_raw[printed_raw] = product_key

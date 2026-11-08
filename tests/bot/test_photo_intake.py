@@ -159,9 +159,9 @@ async def test_the_saved_reply_is_sent_before_the_parser_is_called(harness):
     seen: list[int] = []
     original = harness.parser.parse
 
-    async def parse(image, media_type):
+    async def parse(image, media_type, known_stores):
         seen.append(len(harness.sent_messages))  # replies sent when the model is called
-        return await original(image, media_type)
+        return await original(image, media_type, known_stores)
 
     harness.parser.parse = parse
 

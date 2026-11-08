@@ -14,6 +14,7 @@
     "is_receipt": true,
     "store": {
       "name": "Consum",
+      "known_name": null,
       "legal_name": "CONSUM, S.COOP.V.",
       "address": "Avd. Alginet, nº 1",
       "city": "Silla",
@@ -32,6 +33,7 @@
       {
         "name_raw": "AIGUA C/G PELEGRINO",
         "name_normalized": "Aigua amb gas Pellegrino",
+        "known_name_raw": null,
         "category": "drinks",
         "quantity": 2,
         "unit": "pcs",
@@ -46,6 +48,7 @@
       {
         "name_raw": "CERV FREE LIMO.",
         "name_normalized": "Cervesa Free Limo",
+        "known_name_raw": null,
         "category": "drinks",
         "quantity": 6,
         "unit": "pcs",

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -26,6 +27,7 @@ class StubReceiptParser:
 
     `events` records `("start", image)` and `("end", image)` in order, so a test can assert
     that two calls did not overlap. `gates[image]` holds that image's call open until set.
+    `known_stores` keeps what the last call was given.
     """
 
     def __init__(
@@ -42,8 +44,12 @@ class StubReceiptParser:
         self.gates: dict[bytes, asyncio.Event] = {}
         self.events: list[tuple[str, bytes]] = []
         self.started = asyncio.Event()  # set by the first call
+        self.known_stores: Mapping[str, Sequence[str]] | None = None
 
-    async def parse(self, image: bytes, media_type: str) -> ParserOutput:
+    async def parse(
+        self, image: bytes, media_type: str, known_stores: Mapping[str, Sequence[str]]
+    ) -> ParserOutput:
+        self.known_stores = known_stores
         self.events.append(("start", image))
         self.started.set()
         try:

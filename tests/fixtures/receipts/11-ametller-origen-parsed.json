@@ -20,6 +20,7 @@
     "is_receipt": true,
     "store": {
       "name": "Ametller Origen",
+      "known_name": null,
       "legal_name": "Casa Ametller, SL",
       "address": "C/Nicaragua 47-53 - C/Berlin 39-53",
       "city": "Barcelona",
@@ -38,6 +39,7 @@
       {
         "name_raw": "Tomàquet Rosa safata granel",
         "name_normalized": "Tomàquet rosa a granel",
+        "known_name_raw": null,
         "category": "produce",
         "quantity": 1.828,
         "unit": "kg",

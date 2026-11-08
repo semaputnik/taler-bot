@@ -78,6 +78,16 @@ class Product:
     id: int | None = None
 
 
+@dataclass(frozen=True)
+class KnownStore:
+    """A store the user bought from lately, as the model sees it and `normalize` checks it:
+    its name, its key, and its recent products by printed text (`name_raw` -> product key)."""
+
+    payee_key: str
+    name: str
+    products: dict[str, str] = field(default_factory=dict)
+
+
 @dataclass
 class Catalog:
     user_id: int

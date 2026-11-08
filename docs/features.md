@@ -211,7 +211,7 @@ category, tags, and optionally the receipt it came from.
 **Later**
 
 - History filter by tag; statistics by tag.
-- Menus to rename and merge payees and to rename cards (today only from an expense card).
+- Menus to rename payees and to rename cards (today only from an expense card).
 - Attaching a receipt photo to an existing expense; a currency per expense; one-line entry
   (`12.50 Mercadona`); income and refunds.
 - Monthly budgets per expense category with a notice when exceeded; CSV / XLSX export;

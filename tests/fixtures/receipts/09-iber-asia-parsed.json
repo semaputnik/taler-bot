@@ -19,6 +19,7 @@
     "is_receipt": true,
     "store": {
       "name": "IBER ASIA",
+      "known_name": null,
       "legal_name": "IBER ASIA",
       "address": "Carrer Condes de Bell-Lloc 158 BJ",
       "city": "Barcelona",
@@ -37,6 +38,7 @@
       {
         "name_raw": "CUBRETODO 4*5 10MI",
         "name_normalized": "Cubretodo 4 × 5, 10MI",
+        "known_name_raw": null,
         "category": "household",
         "quantity": 6,
         "unit": "pcs",
@@ -51,6 +53,7 @@
       {
         "name_raw": "CINTA EMBALAJE TR",
         "name_normalized": "Cinta de embalaje transparente",
+        "known_name_raw": null,
         "category": "household",
         "quantity": 1,
         "unit": "pcs",
