@@ -1,6 +1,9 @@
 """Cards expire unless the bot sent them by itself (after a parse or an entry); Close deletes
 such a card outright, while a card the bot sent only loses its buttons."""
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import pytest
 from aiogram.methods import EditMessageReplyMarkup
 from aiogram.types import InlineKeyboardMarkup
@@ -17,6 +20,12 @@ async def _allowed(allow_user):
     await allow_user(USER)
 
 
+async def typed_today(make_uow) -> None:
+    """An expense on today's date, so the history (which opens on the current month) lists it."""
+    today = datetime.now(ZoneInfo("Europe/Madrid")).date()
+    await add_manual_expense(make_uow, USER, spent_at=today)
+
+
 async def open_from_history(harness) -> int:
     await harness.send_text("/expenses", user_id=USER)
     await harness.tap(USER, harness.button_texts()[0])
@@ -24,7 +33,7 @@ async def open_from_history(harness) -> int:
 
 
 async def test_a_card_opened_from_a_history_row_is_deleted_at_31_minutes_not_29(harness, make_uow):
-    await add_manual_expense(make_uow, USER)
+    await typed_today(make_uow)
     card = await open_from_history(harness)
 
     await harness.sweep(after_minutes=29)
@@ -70,7 +79,7 @@ async def test_the_receipt_card_after_a_photo_and_the_card_after_an_entry_stay(h
 
 
 async def test_a_window_opened_on_a_tracked_card_extends_it(harness, make_uow):
-    await add_manual_expense(make_uow, USER)
+    await typed_today(make_uow)
     card = await open_from_history(harness)
     await harness.sweep(after_minutes=20)
     await harness.tap(USER, PAYEE)
@@ -83,7 +92,7 @@ async def test_a_window_opened_on_a_tracked_card_extends_it(harness, make_uow):
 
 
 async def test_back_keeps_a_tracked_card_tracked(harness, make_uow):
-    await add_manual_expense(make_uow, USER)
+    await typed_today(make_uow)
     card = await open_from_history(harness)
     await harness.tap(USER, PAYEE)
     await harness.tap(USER, BACK)
@@ -97,7 +106,7 @@ async def test_back_keeps_a_tracked_card_tracked(harness, make_uow):
 
 
 async def test_close_deletes_an_expense_card_opened_from_a_history_row(harness, make_uow):
-    await add_manual_expense(make_uow, USER)
+    await typed_today(make_uow)
     card = await open_from_history(harness)
 
     await harness.tap(USER, CLOSE)
@@ -118,7 +127,7 @@ async def test_close_deletes_a_receipt_card_opened_from_a_history_row(harness, m
 
 
 async def test_close_still_deletes_the_card_after_a_window_was_opened_on_it(harness, make_uow):
-    await add_manual_expense(make_uow, USER)
+    await typed_today(make_uow)
     card = await open_from_history(harness)
     await harness.tap(USER, PAYEE)
     await harness.tap(USER, BACK)
@@ -144,7 +153,7 @@ async def test_close_deletes_a_copy_of_an_older_card_and_leaves_the_original(har
 
 
 async def test_close_on_an_older_dismissible_card_deletes_that_card(harness, make_uow):
-    await add_manual_expense(make_uow, USER)
+    await typed_today(make_uow)
     first = await open_from_history(harness)
     _, first_markup = harness.last_keyboard()
     second = await open_from_history(harness)
@@ -158,7 +167,7 @@ async def test_close_on_an_older_dismissible_card_deletes_that_card(harness, mak
 
 
 async def test_a_card_telegram_refuses_to_delete_loses_its_buttons_instead(harness, make_uow):
-    await add_manual_expense(make_uow, USER)
+    await typed_today(make_uow)
     card = await open_from_history(harness)
     harness.session.undeletable_message_ids.add(card)
 

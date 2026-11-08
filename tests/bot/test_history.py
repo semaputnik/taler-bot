@@ -291,7 +291,11 @@ async def test_duplicate_and_pending_rows_show_their_icons(harness, make_uow):
     year, month = this_month()
     n = next(_ids)
     duplicate = Receipt.start(USER, photo(f"hist{n}"))
-    again = parse(product("mercadona::dup"), receipt_key="mercadona|dup")
+    again = parse(
+        product("mercadona::dup"),
+        receipt_key="mercadona|dup",
+        purchased_at=datetime(year, month, 14, 12, tzinfo=UTC),
+    )
     await seed_catalog(make_uow, again, user_id=USER)
     duplicate.apply_parse(again)
     duplicate.mark_duplicate(original.id)
