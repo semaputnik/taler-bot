@@ -93,6 +93,33 @@ async def test_the_summary_issues_are_the_five_most_severe_in_parse_order(servic
     assert model_lines[:4] == ["high-2", "high-4", "medium-1", "medium-5"]
 
 
+async def test_the_model_sees_the_known_stores_and_a_matched_reading_lands_on_them(
+    service, parser, make_uow, monkeypatch
+):
+    # The fixture's purchase date is fixed, so the window must not depend on today's date.
+    monkeypatch.setattr(receipt_module, "KNOWN_CATALOG_DAYS", 100_000)
+    first = await intake(service, parser, PAID_WITH_CARD, unique="c1")
+    await service.parse(1, first)
+    lemon = next(i for i in await service.items(1, first) if i.printed_name == "CERV FREE LIMO.")
+    await CatalogService(make_uow).rename_product(1, lemon.product_key, "Lemon beer")
+    raw = fixture(PAID_WITH_CARD)["raw"]
+    raw["store"].update(name="Consum (294 - B. Berlin)", known_name="Consum")
+    raw["receipt"]["number"] = "02/000010"
+    raw["items"][1].update(name_raw="CERV FREE LIMO LLA", known_name_raw="CERV FREE LIMO.")
+    second = await intake(service, parser, PAID_WITH_CARD, unique="c2")
+    parser.outputs[b"c2"] = output_of(raw)
+
+    result = await service.parse(1, second)
+
+    assert parser.known_stores == {"Consum": ["AIGUA C/G PELEGRINO", "CERV FREE LIMO."]}
+    assert result.outcome == "parsed"
+    items = await service.items(1, second)
+    assert [i.product_key for i in items] == [i.product_key for i in await service.items(1, first)]
+    assert items[1].readable_name == "Lemon beer"
+    async with make_uow() as uow:
+        assert set((await uow.catalog.get(1)).payees) == {"consum"}
+
+
 async def test_an_image_that_is_not_a_receipt_has_no_items(service, parser, make_uow):
     data = fixture(PAID_WITH_CARD)
     data["raw"].update(is_receipt=False, items=[], issues=[])
@@ -456,12 +483,12 @@ async def test_reparse_many_counts_failures_and_unexpected_errors_and_goes_on(
     await read_with_version(service, parser, monkeypatch, "07", unique="b2")
     original = parser.parse
 
-    async def flaky(image: bytes, media_type: str):
+    async def flaky(image: bytes, media_type: str, known_stores):
         if image == b"b0":
             raise LLMError("down")
         if image == b"b1":
             raise RuntimeError("bug")
-        return await original(image, media_type)
+        return await original(image, media_type, known_stores)
 
     parser.parse = flaky
 

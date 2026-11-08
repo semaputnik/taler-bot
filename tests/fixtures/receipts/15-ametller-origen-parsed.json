@@ -36,6 +36,7 @@
     "is_receipt": true,
     "store": {
       "name": "Ametller Origen",
+      "known_name": null,
       "legal_name": "Casaametller, SL",
       "address": "C/Numància 47-53 - C/Berlín 39-53",
       "city": "Barcelona",
@@ -54,6 +55,7 @@
       {
         "name_raw": "Assortiment panellets coco 90 22",
         "name_normalized": "Coconut panellets assortment",
+        "known_name_raw": null,
         "category": "bakery",
         "quantity": 1,
         "unit": "pcs",
@@ -68,6 +70,7 @@
       {
         "name_raw": "Anet 30g",
         "name_normalized": "Dill 30 g",
+        "known_name_raw": null,
         "category": "produce",
         "quantity": 1,
         "unit": "pcs",
@@ -82,6 +85,7 @@
       {
         "name_raw": "Tomàquet madur safata granel",
         "name_normalized": "Ripe tomato, loose tray",
+        "known_name_raw": null,
         "category": "produce",
         "quantity": 1.135,
         "unit": "kg",

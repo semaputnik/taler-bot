@@ -31,6 +31,7 @@
     "is_receipt": true,
     "store": {
       "name": "Consum",
+      "known_name": null,
       "legal_name": "Consum, S.Coop.V.",
       "address": "Avd. Alginet, nº 1",
       "city": "Silla",
@@ -49,6 +50,7 @@
       {
         "name_raw": "B. ESPIGA DLT OLIVA",
         "name_normalized": "Pa d'espiga d'oliva",
+        "known_name_raw": null,
         "category": "bakery",
         "quantity": 1,
         "unit": "pcs",
@@ -63,6 +65,7 @@
       {
         "name_raw": "OU PAGES 1/2 DOTZ",
         "name_normalized": "Ous Pages, mitja dotzena",
+        "known_name_raw": null,
         "category": "other",
         "quantity": 1,
         "unit": "pcs",
@@ -77,6 +80,7 @@
       {
         "name_raw": "A. BASMA BRILLANT P2",
         "name_normalized": "A. Basma Brillant P2",
+        "known_name_raw": null,
         "category": "other",
         "quantity": 2,
         "unit": "pcs",
@@ -91,6 +95,7 @@
       {
         "name_raw": "A. INT. BRILLANT2X125",
         "name_normalized": "A. Int. Brillant 2 x 125",
+        "known_name_raw": null,
         "category": "other",
         "quantity": 1,
         "unit": "pcs",
@@ -105,6 +110,7 @@
       {
         "name_raw": "QUINOA VERME-BLANCA",
         "name_normalized": "Quinoa vermella i blanca",
+        "known_name_raw": null,
         "category": "pantry",
         "quantity": 1,
         "unit": "pcs",
@@ -119,6 +125,7 @@
       {
         "name_raw": "PENNE RIGATI CAL.500",
         "name_normalized": "Penne rigate 500 g",
+        "known_name_raw": null,
         "category": "pantry",
         "quantity": 1,
         "unit": "pcs",
@@ -133,6 +140,7 @@
       {
         "name_raw": "LLET SENC. CLAS .5L",
         "name_normalized": "Llet sencera clàssica 0,5 l",
+        "known_name_raw": null,
         "category": "dairy",
         "quantity": 1,
         "unit": "pcs",
@@ -147,6 +155,7 @@
       {
         "name_raw": "AIGUA C/G PELEGRINO",
         "name_normalized": "Aigua amb gas San Pellegrino",
+        "known_name_raw": null,
         "category": "drinks",
         "quantity": 6,
         "unit": "pcs",
@@ -161,6 +170,7 @@
       {
         "name_raw": "CERV FREE LIM.0L. A",
         "name_normalized": "Cervesa Free amb llimona, 0,0",
+        "known_name_raw": null,
         "category": "drinks",
         "quantity": 10,
         "unit": "pcs",
@@ -175,6 +185,7 @@
       {
         "name_raw": "B.CONGE CONSUM 400",
         "name_normalized": "Producte congelat Consum 400 g",
+        "known_name_raw": null,
         "category": "frozen",
         "quantity": 1,
         "unit": "pcs",

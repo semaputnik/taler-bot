@@ -1,3 +1,4 @@
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -21,8 +22,13 @@ class ParserOutput:
 
 
 class ReceiptParser(Protocol):
-    async def parse(self, image: bytes, media_type: str) -> ParserOutput:
-        """Read a receipt photo. Raises `LLMError` on any failure of the model call."""
+    async def parse(
+        self, image: bytes, media_type: str, known_stores: Mapping[str, Sequence[str]]
+    ) -> ParserOutput:
+        """Read a receipt photo. `known_stores` maps the name of each store the user bought from
+        lately to the printed texts of its recent products; the model may match the receipt to
+        them (`store.known_name`, `items[].known_name_raw`). Raises `LLMError` on any failure of
+        the model call."""
         ...
 
     async def close(self) -> None:

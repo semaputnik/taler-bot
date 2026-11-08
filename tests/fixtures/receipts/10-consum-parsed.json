@@ -19,6 +19,7 @@
     "is_receipt": true,
     "store": {
       "name": "Consum",
+      "known_name": null,
       "legal_name": "CONSUM, S. COOP. V.",
       "address": "Avd. Alginet, nº 1",
       "city": "Silla",
@@ -37,6 +38,7 @@
       {
         "name_raw": "FARINA BLAT CONSUM",
         "name_normalized": "Farina de blat Consum",
+        "known_name_raw": null,
         "category": "pantry",
         "quantity": 1,
         "unit": "pcs",
@@ -51,6 +53,7 @@
       {
         "name_raw": "SUCRE BLANC ACOR1K",
         "name_normalized": "Sucre blanc Acor 1 kg",
+        "known_name_raw": null,
         "category": "pantry",
         "quantity": 1,
         "unit": "pcs",
@@ -65,6 +68,7 @@
       {
         "name_raw": "LLET SENC.CLAS 1.5L",
         "name_normalized": "Llet sencera clàssica 1,5 l",
+        "known_name_raw": null,
         "category": "dairy",
         "quantity": 1,
         "unit": "pcs",
@@ -79,6 +83,7 @@
       {
         "name_raw": "PAPER FORN.CONSUM30",
         "name_normalized": "Paper de forn Consum",
+        "known_name_raw": null,
         "category": "household",
         "quantity": 1,
         "unit": "pcs",
@@ -93,6 +98,7 @@
       {
         "name_raw": "HIG.RESIT.CONSUM 8R",
         "name_normalized": "Paper higiènic resistent Consum, 8 rotlles",
+        "known_name_raw": null,
         "category": "household",
         "quantity": 1,
         "unit": "pcs",

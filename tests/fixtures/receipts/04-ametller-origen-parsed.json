@@ -16,6 +16,7 @@
     "is_receipt": true,
     "store": {
       "name": "Ametller Origen",
+      "known_name": null,
       "legal_name": "Casaametller, SL",
       "address": "C/Mallorca 47-53 - C/Berlín 39-53",
       "city": "Barcelona",
@@ -34,6 +35,7 @@
       {
         "name_raw": "Salsa brava 230g AMETLLER ORI",
         "name_normalized": "Salsa brava Ametller Origen 230 g",
+        "known_name_raw": null,
         "category": "pantry",
         "quantity": 1,
         "unit": "pcs",
@@ -48,6 +50,7 @@
       {
         "name_raw": "Maionesa trufada Can Bech 110 g",
         "name_normalized": "Maionesa trufada Can Bech 110 g",
+        "known_name_raw": null,
         "category": "pantry",
         "quantity": 1,
         "unit": "pcs",
@@ -62,6 +65,7 @@
       {
         "name_raw": "Infusió de menta Eco 18g AMET",
         "name_normalized": "Infusió de menta ecològica Ametller Origen 18 g",
+        "known_name_raw": null,
         "category": "drinks",
         "quantity": 1,
         "unit": "pcs",
@@ -76,6 +80,7 @@
       {
         "name_raw": "Ous formatge curat sot",
         "name_normalized": "Formatge curat",
+        "known_name_raw": null,
         "category": "dairy",
         "quantity": 0.19,
         "unit": "kg",
@@ -90,6 +95,7 @@
       {
         "name_raw": "Pastrami de vedella 80g AMET",
         "name_normalized": "Pastrami de vedella Ametller Origen 80 g",
+        "known_name_raw": null,
         "category": "meat",
         "quantity": 1,
         "unit": "pcs",
@@ -104,6 +110,7 @@
       {
         "name_raw": "Tomàquet cor de bou EXTRA",
         "name_normalized": "Tomàquet cor de bou",
+        "known_name_raw": null,
         "category": "produce",
         "quantity": 1.154,
         "unit": "kg",
@@ -118,6 +125,7 @@
       {
         "name_raw": "Nigiri salmó flamejat AO-SH 185g",
         "name_normalized": "Nigiri de salmó flamejat AO-SH 185 g",
+        "known_name_raw": null,
         "category": "fish",
         "quantity": 1,
         "unit": "pcs",
@@ -132,6 +140,7 @@
       {
         "name_raw": "Sushi caixa 22 AO-SH 364g 160 ml",
         "name_normalized": "Caixa de sushi AO-SH 364 g, 160 ml",
+        "known_name_raw": null,
         "category": "fish",
         "quantity": 1,
         "unit": "pcs",

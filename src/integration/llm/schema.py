@@ -1,8 +1,9 @@
 """`RawParse`: the model's output contract, mirroring `docs/n8n-reference/receipt_schema.json`.
 
-Field by field, with the same names, nullability and enums. `integration/llm` validates the
-model's answer with `RawParse` and hands `model_dump()` to `domain.normalize`, which takes
-plain data.
+Field by field, with the same names, nullability and enums, plus `store.known_name` and
+`items[].known_name_raw` (what the model matched in the catalog it was shown). `integration/llm`
+validates the model's answer with `RawParse` and hands `model_dump()` to `domain.normalize`,
+which takes plain data.
 """
 
 import warnings
@@ -51,6 +52,7 @@ class Severity(StrEnum):
 
 class RawStore(BaseModel):
     name: str | None  # brand / trading name, e.g. Mercadona
+    known_name: str | None  # the listed store's name exactly as listed, when it is that store
     legal_name: str | None
     address: str | None
     city: str | None
@@ -77,7 +79,8 @@ LEGACY_ITEM_CATEGORIES = {"produce": "fruit_and_vegetables"}
 
 class RawItem(BaseModel):
     name_raw: str  # line text exactly as printed
-    name_normalized: str  # clean readable name, no prices or codes
+    name_normalized: str  # clean readable name in English, no prices or codes
+    known_name_raw: str | None  # a listed product of the store, its text exactly as listed
     category: ItemCategory | None
 
     @field_validator("category", mode="before")

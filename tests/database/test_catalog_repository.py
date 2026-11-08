@@ -1,8 +1,10 @@
 """`CatalogRepository` through the Unit of Work, on real Postgres."""
 
+from datetime import UTC, datetime
+
 import pytest
 
-from src.domain.catalog import Catalog, PaymentSource
+from src.domain.catalog import Catalog, KnownStore, PaymentSource
 from src.domain.enums import PaymentSourceKind, ProductCategory
 from src.domain.receipt import Receipt
 from src.exception import CheckViolationError, ForeignKeyViolationError, UniqueViolationError
@@ -383,3 +385,62 @@ async def test_payment_sources_lists_cash_first_then_cards_by_name_for_one_user(
     assert {o.id for o in options} == {s.id for s in catalog.payment_sources.values()}
     async with make_uow() as uow:
         assert await uow.catalog.payment_sources(3) == []
+
+
+async def bought(make_uow: MakeUow, unique_id: str, *items, user_id: int = 1, **fields) -> Receipt:
+    """A parsed receipt of `user_id` with its catalog, stored."""
+    reading = parse(*items, **{"receipt_key": unique_id, **fields})
+    await seed_catalog(make_uow, reading, user_id=user_id)
+    receipt = Receipt.start(user_id, photo(unique_id))
+    receipt.apply_parse(reading)
+    return await add_receipt(make_uow, receipt)
+
+
+async def test_known_stores_are_the_live_recent_stores_with_their_recent_products(
+    make_uow: MakeUow,
+) -> None:
+    await add_user(make_uow)
+    await add_user(make_uow, 2)
+    await bought(make_uow, "m1", product("mercadona::leche"), product("mercadona::pan"))
+    # A product of the store that no recent line has stays out.
+    await bought(
+        make_uow,
+        "m0",
+        product("mercadona::agua"),
+        purchased_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    # No purchase time: the photo's time counts.
+    await bought(
+        make_uow, "d1", product("dia::arroz"), store_key="dia", store_name="Dia", purchased_at=None
+    )
+    deleted = Receipt.start(1, photo("c1"))
+    reading = parse(
+        product("consum::cerv"), store_key="consum", store_name="Consum", receipt_key="c1"
+    )
+    await seed_catalog(make_uow, reading)
+    deleted.apply_parse(reading)
+    deleted.soft_delete()
+    await add_receipt(make_uow, deleted)
+    await bought(make_uow, "o1", product("lidl::pan"), store_key="lidl", user_id=2)
+
+    async with make_uow() as uow:
+        found = await uow.catalog.known_stores(1, datetime(2026, 1, 1, tzinfo=UTC))
+
+    assert found == [
+        KnownStore(payee_key="dia", name="Dia", products={"ARROZ": "dia::arroz"}),
+        KnownStore(
+            payee_key="mercadona",
+            name="Mercadona",
+            products={"LECHE": "mercadona::leche", "PAN": "mercadona::pan"},
+        ),
+    ]
+
+
+async def test_a_user_with_no_receipts_knows_no_stores(make_uow: MakeUow) -> None:
+    await add_user(make_uow)
+    async with make_uow() as uow:
+        await uow.catalog.save(stocked_catalog())
+        await uow.commit()
+
+    async with make_uow() as uow:
+        assert await uow.catalog.known_stores(1, datetime(2026, 1, 1, tzinfo=UTC)) == []

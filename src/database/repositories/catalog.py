@@ -1,12 +1,16 @@
+from datetime import datetime
+
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.database.mapping.catalog import to_catalog, to_payee_row, to_product_row, to_source_row
 from src.database.models import Payee as PayeeRow
 from src.database.models import PaymentSource as SourceRow
+from src.database.models import Receipt as ReceiptRow
+from src.database.models import ReceiptItem, ReceiptPhoto
 from src.database.models import StoreProduct as ProductRow
 from src.database.read_models import SourceOption
-from src.domain.catalog import Catalog
+from src.domain.catalog import Catalog, KnownStore
 from src.domain.enums import PaymentSourceKind
 
 
@@ -25,6 +29,35 @@ class SqlAlchemyCatalogRepository:
             select(ProductRow).where(ProductRow.user_id == user_id)
         )
         return to_catalog(user_id, payees, sources, products)
+
+    async def known_stores(self, user_id: int, since: datetime) -> list[KnownStore]:
+        rows = await self._session.execute(
+            select(
+                PayeeRow.id,
+                PayeeRow.payee_key,
+                PayeeRow.name,
+                ProductRow.name_raw,
+                ProductRow.product_key,
+            )
+            .distinct()
+            .select_from(ReceiptRow)
+            .join(ReceiptPhoto, ReceiptPhoto.receipt_id == ReceiptRow.id)
+            .join(PayeeRow, PayeeRow.id == ReceiptRow.payee_id)
+            .outerjoin(ReceiptItem, ReceiptItem.receipt_id == ReceiptRow.id)
+            .outerjoin(ProductRow, ProductRow.id == ReceiptItem.store_product_id)
+            .where(
+                ReceiptRow.user_id == user_id,
+                ReceiptRow.deleted_at.is_(None),
+                func.coalesce(ReceiptRow.purchased_at, ReceiptPhoto.received_at) >= since,
+            )
+            .order_by(PayeeRow.name, PayeeRow.id, ProductRow.name_raw, ProductRow.product_key)
+        )
+        stores: dict[int, KnownStore] = {}
+        for payee_id, payee_key, name, name_raw, product_key in rows:
+            store = stores.setdefault(payee_id, KnownStore(payee_key=payee_key, name=name))
+            if name_raw is not None:
+                store.products[name_raw] = product_key
+        return list(stores.values())
 
     async def payment_sources(self, user_id: int) -> list[SourceOption]:
         rows = await self._session.execute(

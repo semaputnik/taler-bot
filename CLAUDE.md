@@ -254,11 +254,21 @@ the history dialog.
 - Long-lived clients (the LLM agent, the HTTP sessions, `PhotoStorage`) are created once
   in `App` and closed in its lifespan, never per update.
 - The pydantic-ai agent uses `output_type` = a pydantic model that mirrors
-  `docs/n8n-reference/receipt_schema.json`. Images go in as `BinaryContent`. The system
-  prompt is `src/integration/llm/prompt.md`, read by `openai_parser.py` through
-  `importlib.resources` so it ships inside the package. It is a verbatim port of
-  `docs/n8n-reference/system_prompt.md`; `tests/integration/llm/test_prompt.py` keeps the two
-  files byte-identical (change both together, and bump `PARSER_VERSION`).
+  `docs/n8n-reference/receipt_schema.json`, plus the nullable `store.known_name` and
+  `items[].known_name_raw`. Images go in as `BinaryContent`. The system prompt is
+  `src/integration/llm/prompt.md`, read by `openai_parser.py` through `importlib.resources` so it
+  ships inside the package. It started as a port of `docs/n8n-reference/system_prompt.md` and is
+  taler-bot's own now (bump `PARSER_VERSION` when it changes); `name_normalized` is in English.
+- **The known catalog in the request.** Step 1 of `ReceiptService._parse` reads
+  `CatalogRepository.known_stores(user_id, since)` (one query): the payees of the user's live
+  receipts of the last 365 days (by `coalesce(purchased_at, received_at)`), each with the
+  products on those receipts' lines (`KnownStore` in `domain/catalog.py`: name, key, printed text
+  -> product key). `ReceiptParser.parse(image, media_type, known_stores)` gets only store names
+  and printed texts; `OpenAIReceiptParser` appends them to the user message as one JSON object
+  (nothing when empty), so the system prompt stays fixed. `normalize(..., known_stores=...)`
+  takes a `known_name` only when it is a listed store (its payee key) and a `known_name_raw`
+  only when it is a listed product of the receipt's store (its product key); anything else gets
+  the slug keys.
 
 ### Dialogs (aiogram-dialog)
 
@@ -510,6 +520,8 @@ Trigger: a Telegram `message` update to the **Casa Receipts bot**.
    - `productKey` = `storeKey::slug(name_raw)`. If `name_raw` starts with the line's quantity
      ("2 AIGUA…"), drop that prefix. The printed POS text is stable; the LLM's
      `name_normalized` is not, so it is never part of the key.
+     *taler-bot:* a store or a line the model matched in the known catalog keeps the catalog's
+     key (see "The known catalog in the request").
    - Unit aliases map to `pcs|kg|g|l|ml` (ud, шт, кг, lt…). `unitPrice` falls back to the
      reference price, then to `lineTotal / quantity`.
    - Workflow sanity checks become issues with `source=workflow`: missing store, total or
@@ -556,8 +568,8 @@ pantry, household, personal_care, baby, pet, other.
 ### Reference files
 
 `docs/n8n-reference/` is a verbatim snapshot of the workflow taken on 2026-10-16:
-`system_prompt.md` (also packaged as `src/integration/llm/prompt.md`, kept identical by a
-test), `receipt_schema.json` and `normalize_receipt.js`. Port the behaviour
+`system_prompt.md` (the origin of `src/integration/llm/prompt.md`, which has moved on since;
+the snapshot stays as history), `receipt_schema.json` and `normalize_receipt.js`. Port the behaviour
 from these files, not from memory. If the n8n workflow changes, refresh the snapshot
 through the n8n MCP server (`get_workflow_details`).
 
@@ -568,8 +580,8 @@ through the n8n MCP server (`get_workflow_details`).
   is data literals that must match what receipts print (for example the unit aliases
   `шт`/`кг` or the legal suffixes `ООО`/`ИП`). The conversation with the user may be in
   Russian, but nothing from it is copied into files untranslated.
-- **Bump `PARSER_VERSION`** (n8n is at `2026-10-15.1`) whenever the prompt, schema, model
-  or normalization changes. Store it on every `receipt_parses` row.
+- **Bump `PARSER_VERSION`** (n8n is at `2026-10-15.1`) whenever the prompt, the request's
+  catalog block, schema, model or normalization changes. Store it on every `receipt_parses` row.
 - Which issue `field` is which editable field (`ISSUE_FIELDS` in `domain/edits.py`) is domain
   knowledge, not bot knowledge: `Receipt.reviewable_issues`, `.issue_correction` and
   `.correct_issue` use it, and the services expose the result as `IssueCard.editable` and

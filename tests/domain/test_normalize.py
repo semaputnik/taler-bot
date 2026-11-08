@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from src.domain.catalog import KnownStore
 from src.domain.enums import IssueSeverity, IssueSource
 from src.domain.normalize import PARSER_VERSION, normalize, slug
 from src.exception import InvalidReceiptData
@@ -453,3 +454,76 @@ def test_the_old_produce_category_name_maps_to_fruit_and_vegetables():
     assert category_of("produce") is ProductCategory.FRUIT_AND_VEGETABLES
     assert category_of("Fruit_And_Vegetables") is ProductCategory.FRUIT_AND_VEGETABLES
     assert category_of("nonsense") is ProductCategory.OTHER
+
+
+# --- the catalog the model was shown (production cases) ----------------------------------------
+
+CONSUM = KnownStore(
+    payee_key="consum",
+    name="Consum",
+    products={
+        "CERV FREE LIMO LLA": "consum::cerv-free-limo-lla",
+        "B.ESPIGA OLI OLIVA": "consum::b-espiga-oli-oliva",
+    },
+)
+MERCADONA = KnownStore(
+    payee_key="mercadona", name="Mercadona", products={"LECHE": "mercadona::leche-entera"}
+)
+
+
+def matched(store_name, known_name, lines, known_stores=(CONSUM, MERCADONA)):
+    """A receipt whose store and lines carry what the model matched in the catalog."""
+    raw = raw_receipt(
+        store=store_name,
+        items=[item(name_raw, known_name_raw=known) for name_raw, known in lines],
+        total=len(lines),
+    )
+    raw["store"]["known_name"] = known_name
+    return normalize(raw, **CONTEXT, known_stores=known_stores)
+
+
+def test_a_known_store_with_the_branch_in_its_printed_name_gets_the_known_key():
+    parse = matched("Consum (294 - B. Berlin)", "Consum", [("CERV FREE LIMO.", None)])
+
+    assert parse.store_key == "consum"
+    assert parse.receipt_key.startswith("consum|")
+
+
+def test_a_line_matched_to_a_known_product_of_the_store_gets_its_key():
+    parse = matched("Consum", "Consum", [("CERV FREE LIMO.", "CERV FREE LIMO LLA")])
+
+    assert parse.items[0].product_key == "consum::cerv-free-limo-lla"
+    assert parse.items[0].printed_name == "CERV FREE LIMO."  # what this receipt printed
+
+
+def test_an_unknown_known_name_is_ignored_and_the_slug_key_is_used():
+    parse = matched("Condis Express", "Condis", [("CERV FREE LIMO.", "CERV FREE LIMO LLA")])
+
+    assert parse.store_key == "condis-express"
+    assert parse.items[0].product_key == "condis-express::cerv-free-limo"
+
+
+def test_an_unknown_known_name_raw_is_ignored_and_the_slug_key_is_used():
+    parse = matched("Consum", "Consum", [("CERV FREE LIMO.", "CERV FREE LLIMON.LLA")])
+
+    assert parse.items[0].product_key == "consum::cerv-free-limo"
+
+
+def test_a_product_of_another_store_is_not_taken():
+    parse = matched("Consum", "Consum", [("LECHE", "LECHE")])
+
+    assert parse.items[0].product_key == "consum::leche"
+
+
+def test_a_store_known_by_its_slug_offers_its_products_without_a_known_name():
+    parse = matched("Consum", None, [("CERV FREE LIMO.", "CERV FREE LIMO LLA")])
+
+    assert parse.store_key == "consum"
+    assert parse.items[0].product_key == "consum::cerv-free-limo-lla"
+
+
+def test_a_known_name_without_a_catalog_is_ignored():
+    parse = matched("Consum (294 - B. Berlin)", "Consum", [("X", "X")], known_stores=())
+
+    assert parse.store_key == "consum-294-b-berlin"
+    assert parse.items[0].product_key == "consum-294-b-berlin::x"

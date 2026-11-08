@@ -32,8 +32,9 @@ def test_fixture_raw_output_validates_and_normalizes_the_same_as_plain_data(path
 
 
 def test_every_schema_field_is_required_in_the_json_schema_the_model_sees():
-    receipt_info = RawParse.model_json_schema()["$defs"]["RawReceiptInfo"]
-    assert set(receipt_info["required"]) == set(receipt_info["properties"])
+    for name, model in RawParse.model_json_schema()["$defs"].items():
+        if "properties" in model:
+            assert set(model["required"]) == set(model["properties"]), name
 
 
 def test_the_item_categories_the_model_may_use_are_the_product_categories():

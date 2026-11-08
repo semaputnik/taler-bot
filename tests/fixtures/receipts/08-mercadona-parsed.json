@@ -19,6 +19,7 @@
     "is_receipt": true,
     "store": {
       "name": "Mercadona",
+      "known_name": null,
       "legal_name": "MERCADONA, S.A.",
       "address": "Cl. Berlín, 48",
       "city": "Barcelona",
@@ -37,6 +38,7 @@
       {
         "name_raw": "RAÏM BLANC SESE PEP",
         "name_normalized": "Raïm blanc sense pinyol",
+        "known_name_raw": null,
         "category": "produce",
         "quantity": 1,
         "unit": "pcs",
@@ -51,6 +53,7 @@
       {
         "name_raw": "LLEVAT FORNER",
         "name_normalized": "Llevat de forner",
+        "known_name_raw": null,
         "category": "pantry",
         "quantity": 1,
         "unit": "pcs",
@@ -65,6 +68,7 @@
       {
         "name_raw": "PROTECTOR LLIT",
         "name_normalized": "Protector de llit",
+        "known_name_raw": null,
         "category": "household",
         "quantity": 1,
         "unit": "pcs",

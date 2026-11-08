@@ -13,6 +13,7 @@ import asyncio
 import logging
 import weakref
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
@@ -51,6 +52,8 @@ logger = logging.getLogger(__name__)
 
 _NAME_FIELDS = frozenset({"items.name_raw", "items.name_normalized"})
 _EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+# How far back the stores and products shown to the model go.
+KNOWN_CATALOG_DAYS = 365
 
 
 class ReceiptService:
@@ -104,7 +107,8 @@ class ReceiptService:
         """Read a receipt's photo with the model and store the parse: the first read of a
         `pending` receipt, or a re-parse of a `failed`, `parsed` or `not_receipt` one.
 
-        1. Unit of Work: load, read the photo and the normalization context, `mark_parsing`.
+        1. Unit of Work: load, read the photo and the normalization context (with the stores and
+           products of the last `KNOWN_CATALOG_DAYS`, shown to the model), `mark_parsing`.
         2. No transaction: read the file, call the model, `normalize`.
         3. Unit of Work: load again, `apply_parse`, mark a duplicate, save with the catalog.
 
@@ -127,6 +131,9 @@ class ReceiptService:
                 raise UserNotFound(user_id)
             known_product_keys = set((await uow.catalog.get(user_id)).products)
             known_card_last4 = await uow.receipts.known_card_last4(user_id)
+            known_stores = await uow.catalog.known_stores(
+                user_id, datetime.now(UTC) - timedelta(days=KNOWN_CATALOG_DAYS)
+            )
             await uow.receipts.save(receipt)
             await uow.commit()
             path, mime_type = receipt.photo.path, receipt.photo.mime_type
@@ -137,7 +144,11 @@ class ReceiptService:
         try:
             try:
                 image = await self._storage.read(path)
-                output = await self._parser.parse(image, mime_type or "image/jpeg")
+                output = await self._parser.parse(
+                    image,
+                    mime_type or "image/jpeg",
+                    known_stores={s.name: list(s.products) for s in known_stores},
+                )
                 parse = _stamped(
                     normalize(
                         output.raw.model_dump(),
@@ -147,6 +158,7 @@ class ReceiptService:
                         known_card_last4=known_card_last4,
                         parser_version=PARSER_VERSION,
                         model=output.model,
+                        known_stores=known_stores,
                     ),
                     output,
                 )
